@@ -1,0 +1,10 @@
+.git
+.venv
+.venv-isolated
+config
+frontend/coverage
+frontend/node_modules
+frontend/playwright-report
+frontend/test-results
+**/__pycache__/
+**/*.py[cod]

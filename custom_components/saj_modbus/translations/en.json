@@ -1,0 +1,10 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SAJ Modbus",
+        "description": "Add the SAJ Modbus integration."
+      }
+    }
+  }
+}

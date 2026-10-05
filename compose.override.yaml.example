@@ -1,0 +1,6 @@
+services:
+  homeassistant:
+    ports: !override
+      - "8124:8123"
+    environment:
+      TZ: Europe/Stockholm

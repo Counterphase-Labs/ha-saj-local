@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: roquerodrigo/workflows/actions/setup-python@c8f4cdbb114d339ae54e35cd460ada75403d0271 # main
+        with:
+          python-version: "3.14"
+          groups: dev lint
+
+      - name: Verify Python
+        run: make python-ci
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify frontend
+        run: make frontend-ci
+
+      - name: Verify HACS archive contents
+        run: make release-check
+
+  mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the Modbus mock image
+        run: make mock-build
+
+  home-assistant-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify clean Home Assistant browser flow
+        run: make test-browser-home-assistant
+
+      - name: Upload browser failure details
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: home-assistant-browser-failure
+          path: |
+            frontend/playwright-report/home-assistant
+            frontend/test-results/home-assistant
+          if-no-files-found: warn
+          retention-days: 7
+
+  lint:
+    uses: roquerodrigo/workflows/.github/workflows/python-lint.yml@c8f4cdbb114d339ae54e35cd460ada75403d0271 # main
+
+  tests:
+    needs: lint
+    uses: roquerodrigo/workflows/.github/workflows/python-test.yml@c8f4cdbb114d339ae54e35cd460ada75403d0271 # main
+
+  validate:
+    needs: lint
+    uses: roquerodrigo/workflows/.github/workflows/home-assistant-validate.yml@c8f4cdbb114d339ae54e35cd460ada75403d0271 # main
+    with:
+      hacs: false
+
+  hacs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate with HACS
+        uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
+        with:
+          category: integration
+          ignore: brands

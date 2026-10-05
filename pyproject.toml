@@ -1,0 +1,121 @@
+[project]
+name = "home-assistant-saj-modbus"
+version = "0.1.0"
+description = "Local Home Assistant integration for SAJ inverters over Modbus"
+requires-python = ">=3.14.2"
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+test = [
+    "pytest==9.0.3",
+    "pytest-asyncio==1.4.0",
+    "pytest-cov==7.1.0",
+]
+dev = [
+    { include-group = "test" },
+    "homeassistant==2026.9.3",
+    "pre-commit==4.6.2",
+    "pytest-homeassistant-custom-component==0.13.366",
+]
+lint = [
+    "complexipy==8.0.1",
+    "import-linter==2.15",
+    "jscpd==5.2.0",
+    "mypy==2.3.1",
+    "ruff==0.16.4",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = [".", "custom_components/saj_modbus", "modbus_mock"]
+addopts = [
+    "--cov=custom_components/saj_modbus",
+    "--cov=modbus_mock/saj_modbus_mock",
+    "--cov-branch",
+    "--cov-report=term-missing",
+    "--cov-fail-under=100",
+]
+
+[tool.mypy]
+python_version = "3.14"
+files = ["custom_components/saj_modbus", "modbus_mock/saj_modbus_mock"]
+ignore_missing_imports = true
+follow_imports = "silent"
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+check_untyped_defs = false
+
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.format]
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "ANN401",
+    "D",
+    "COM812",
+    "ISC001",
+    "CPY001",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["saj", "saj_modbus_mock"]
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+
+[tool.ruff.lint.pyupgrade]
+keep-runtime-typing = true
+
+[tool.ruff.lint.mccabe]
+max-complexity = 20
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",
+    "S105",
+    "S106",
+    "ANN",
+    "ARG001",
+    "PLC0415",
+    "SLF001",
+    "PLR2004",
+]
+
+[tool.complexipy]
+paths = ["custom_components/saj_modbus", "modbus_mock/saj_modbus_mock"]
+max-complexity-allowed = 20
+cache-dir = ".complexipy_cache"
+color = "no"
+
+[tool.importlinter]
+root_packages = ["custom_components.saj_modbus", "saj_modbus_mock"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "SAJ library does not import Home Assistant"
+type = "forbidden"
+source_modules = ["custom_components.saj_modbus.saj"]
+forbidden_modules = ["homeassistant"]
+
+[[tool.importlinter.contracts]]
+name = "Modbus mock is standalone"
+type = "forbidden"
+source_modules = ["saj_modbus_mock"]
+forbidden_modules = ["homeassistant", "custom_components"]

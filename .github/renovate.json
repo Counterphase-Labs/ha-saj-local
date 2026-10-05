@@ -1,0 +1,32 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["before 6am on monday"],
+  "separateMajorMinor": false,
+  "packageRules": [
+    {
+      "groupName": "Everything else",
+      "matchPackageNames": ["*"]
+    },
+    {
+      "groupName": "Integration",
+      "matchManagers": ["pep621", "uv"]
+    },
+    {
+      "groupName": "UI",
+      "matchManagers": ["npm"]
+    },
+    {
+      "groupName": "UI",
+      "matchPackageNames": ["mcr.microsoft.com/playwright"]
+    },
+    {
+      "matchPackageNames": [
+        "homeassistant",
+        "pytest-homeassistant-custom-component",
+        "ghcr.io/home-assistant/home-assistant"
+      ],
+      "enabled": false
+    }
+  ]
+}

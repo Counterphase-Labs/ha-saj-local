@@ -1,0 +1,31 @@
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2026.9.3
+    ports:
+      - "8123:8123"
+    environment:
+      TZ: UTC
+      PYTHONPYCACHEPREFIX: /tmp/saj_modbus_pycache
+    volumes:
+      - ./config:/config
+      - ./custom_components/saj_modbus:/config/custom_components/saj_modbus:ro
+    tmpfs:
+      - /config/custom_components/saj_modbus/__pycache__
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8123/', timeout=5)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  modbus-mock:
+    build:
+      context: ./modbus_mock
+    restart: unless-stopped

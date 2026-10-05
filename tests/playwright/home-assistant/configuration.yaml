@@ -1,0 +1,10 @@
+homeassistant:
+  name: Playwright Home
+  latitude: 59.3293
+  longitude: 18.0686
+  elevation: 28
+  unit_system: metric
+  currency: SEK
+  time_zone: Europe/Stockholm
+
+default_config:

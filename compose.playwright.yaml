@@ -1,0 +1,41 @@
+services:
+  homeassistant:
+    build:
+      context: .
+      dockerfile: Dockerfile.playwright-home-assistant
+    environment:
+      TZ: UTC
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8123/', timeout=5)
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
+    volumes:
+      - homeassistant-config:/config
+
+  playwright:
+    build:
+      context: .
+      dockerfile: Dockerfile.playwright-runner
+    depends_on:
+      homeassistant:
+        condition: service_healthy
+    environment:
+      HOME_ASSISTANT_URL: http://homeassistant:8123
+      PLAYWRIGHT_RESULT_GID: ${PLAYWRIGHT_RESULT_GID:-1000}
+      PLAYWRIGHT_RESULT_UID: ${PLAYWRIGHT_RESULT_UID:-1000}
+    init: true
+    ipc: host
+    volumes:
+      - ./frontend/playwright-report:/workspace/frontend/playwright-report
+      - ./frontend/test-results:/workspace/frontend/test-results
+
+volumes:
+  homeassistant-config:
