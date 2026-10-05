@@ -1,0 +1,10 @@
+device:
+  model: h2
+  serial_number: H2MOCK00000000000002
+simulation:
+  seed: 202
+site:
+  load:
+    peak_w: 4000
+battery:
+  modules: 0

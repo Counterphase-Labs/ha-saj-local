@@ -1,6 +1,5 @@
 .git
 .venv
-.venv-isolated
 config
 frontend/coverage
 frontend/node_modules

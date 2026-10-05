@@ -1,0 +1,7 @@
+device:
+  model: hs3
+  serial_number: HS3MOCK0000000000005
+simulation:
+  seed: 105
+battery:
+  modules: 0

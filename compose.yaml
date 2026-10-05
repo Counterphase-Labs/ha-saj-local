@@ -28,4 +28,17 @@ services:
   modbus-mock:
     build:
       context: ./modbus_mock
+    volumes:
+      - ./modbus_mock/scenarios/hs3-battery.yaml:/config/config.yaml:ro
+    ports:
+      - "5020:502"
+    restart: unless-stopped
+
+  modbus-mock-h2:
+    build:
+      context: ./modbus_mock
+    volumes:
+      - ./modbus_mock/scenarios/h2-battery.yaml:/config/config.yaml:ro
+    ports:
+      - "5021:502"
     restart: unless-stopped

@@ -1,0 +1,13 @@
+device:
+  model: hs3
+  serial_number: HS3MOCK0000000000002
+simulation:
+  seed: 102
+ev_charger:
+  installed: true
+  phases: 3
+  max_power_w: 11000
+  sessions:
+    - plug_in: "18:00"
+      unplug: "07:00"
+      energy_needed_wh: 30000

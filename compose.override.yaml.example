@@ -4,3 +4,7 @@ services:
       - "8124:8123"
     environment:
       TZ: Europe/Stockholm
+
+  modbus-mock:
+    volumes:
+      - ./modbus_mock/scenarios/hs3-ev.yaml:/config/config.yaml:ro

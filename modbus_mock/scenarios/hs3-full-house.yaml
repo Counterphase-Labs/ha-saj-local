@@ -1,0 +1,18 @@
+device:
+  model: hs3
+  serial_number: HS3MOCK0000000000003
+simulation:
+  seed: 103
+battery:
+  modules: 4
+meters:
+  meter_a: true
+  meter_b: true
+ev_charger:
+  installed: true
+  sessions:
+    - plug_in: "17:30"
+      unplug: "06:30"
+      energy_needed_wh: 40000
+parallel:
+  inverters: 2

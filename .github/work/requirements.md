@@ -45,6 +45,10 @@ Platform stability and correctness is paramount.
 - Despite SAJ being implemented as a stand alone library, it will not be used anywhere else outside of the integration.
 
 - 100% unit test coverage for all lines, statements and paths.
+- **CRITICAL**: The 100% coverage MUST come from unit tests alone. Integration tests are NOT an acceptable replacement and MUST NOT count towards the coverage requirement.
+- A unit test exercises a single module in isolation through its own public interface, with plain inputs and every collaborating module replaced by a stub, fake or mock. A test is NOT a unit test if it assembles several real modules together, opens a socket or network connection, starts a server, reads fixture or configuration files from the project, depends on real time, or runs a long simulation to reach its assertion.
+- Unit tests MUST be fast. A unit test that takes more than a few milliseconds is not a unit test.
+- Integration tests MUST ONLY be used as critical path smoke tests, for example: can the service be connected to and does it return a value. They MUST be few, MUST NOT be used to prove application logic or behaviour, and MUST be kept separate from the unit tests.
 - noqa or any other inline test or lint bypass is FORBIDDEN in this project. Exceptions can be granted by the user on a case by case basis.
 - DO NOT write unit tests that test hard coded values, constants or similar. Tests MUST focus on application logic, behaviour and interactions.
 - Development in completely isolated docker environment

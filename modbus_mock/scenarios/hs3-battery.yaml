@@ -1,0 +1,12 @@
+device:
+  model: hs3
+  rated_power_w: 12000
+  serial_number: HS3MOCK0000000000001
+simulation:
+  seed: 101
+site:
+  pv_strings:
+    - peak_power_w: 6500
+    - peak_power_w: 6500
+battery:
+  modules: 2

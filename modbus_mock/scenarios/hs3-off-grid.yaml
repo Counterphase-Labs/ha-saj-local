@@ -1,0 +1,11 @@
+device:
+  model: hs3
+  serial_number: HS3MOCK0000000000004
+simulation:
+  seed: 104
+site:
+  grid_connected: false
+battery:
+  modules: 2
+meters:
+  meter_a: false

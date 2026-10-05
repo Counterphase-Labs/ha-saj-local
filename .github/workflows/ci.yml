@@ -73,6 +73,9 @@ jobs:
       - name: Build the Modbus mock image
         run: make mock-build
 
+      - name: Smoke test the Modbus mock scenarios
+        run: make mock-smoke
+
   home-assistant-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 20

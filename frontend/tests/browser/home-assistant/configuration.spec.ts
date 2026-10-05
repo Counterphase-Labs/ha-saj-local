@@ -1,6 +1,6 @@
 import { type Page } from "@playwright/test";
 
-import { expect, test } from "../support/test";
+import { expect, removingVirtualizedList, test } from "../support/test";
 
 const integrationName = "SAJ Modbus";
 
@@ -57,7 +57,15 @@ const addIntegration = async (
         page.getByRole("button", { name: integrationName }),
     ).toBeVisible();
     browserFailures.length = 0;
-    await page.getByRole("button", { name: integrationName }).click();
+    const brand = page.getByRole("button", { name: integrationName });
+    await removingVirtualizedList(
+        page,
+        browserFailures,
+        page.locator("lit-virtualizer").filter({ has: brand }),
+        async () => {
+            await brand.click();
+        },
+    );
     await page.getByRole("button", { name: /submit/i }).click();
     await page.getByRole("button", { name: "Finish" }).click();
 };

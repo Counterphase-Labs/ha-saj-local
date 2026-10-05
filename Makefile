@@ -1,4 +1,4 @@
-.PHONY: setup up down logs lint copy-paste test test-isolated python-ci frontend-check frontend-build test-browser-controlled test-browser-home-assistant frontend-ci release-check mock-build ci
+.PHONY: setup up down logs lint copy-paste test python-ci frontend-check frontend-build test-browser-controlled test-browser-home-assistant frontend-ci release-check mock-build mock-smoke ci
 
 setup:
 	uv sync --group dev --group lint
@@ -27,10 +27,7 @@ copy-paste:
 test:
 	uv run pytest
 
-test-isolated:
-	UV_PROJECT_ENVIRONMENT=.venv-isolated uv run --only-group test pytest --no-cov tests/saj tests/modbus_mock
-
-python-ci: lint copy-paste test test-isolated
+python-ci: lint copy-paste test
 
 frontend-check:
 	cd frontend && npm run format:check
@@ -62,4 +59,7 @@ mock-build:
 	docker compose build modbus-mock
 	docker compose run --rm --no-deps --entrypoint python modbus-mock -c "import pathlib, sys; sys.exit(any(pathlib.Path('/app').rglob('*.py[cod]')) or any(pathlib.Path('/app').rglob('__pycache__')))"
 
-ci: python-ci frontend-ci release-check mock-build test-browser-home-assistant
+mock-smoke:
+	tests/modbus_mock/smoke.sh
+
+ci: python-ci frontend-ci release-check mock-build mock-smoke test-browser-home-assistant

@@ -2,7 +2,13 @@ FROM python:3.14-slim@sha256:c3e521df8b2b498a7a682e7e18676771cb80c6b75b8699af886
 
 RUN useradd --system --no-create-home mock
 WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --requirement requirements.txt
 COPY saj_modbus_mock ./saj_modbus_mock
+COPY scenarios/hs3-battery.yaml /config/config.yaml
 USER mock
 
+EXPOSE 502
+HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
+  CMD ["python", "-m", "saj_modbus_mock", "healthcheck"]
 CMD ["python", "-m", "saj_modbus_mock"]
