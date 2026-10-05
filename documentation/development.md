@@ -1,4 +1,4 @@
-# Developing the SAJ Modbus Home Assistant Integration
+# Developing the SAJ Local Home Assistant Integration
 
 This guide explains why the project is built the way it is and links to the file that holds each fact. Versions, command lists and register maps live in the code and configuration, not here.
 
@@ -25,8 +25,8 @@ Existing code has no authority over requirements. Where they disagree, the code 
 
 Four parts, kept apart on purpose:
 
-- **SAJ library** (`custom_components/saj_modbus/saj/`): everything about SAJ devices and Modbus. It must not import Home Assistant, so device logic can be tested with plain inputs. It ships inside the integration; the split is a design boundary, not a package.
-- **Home Assistant integration** (the rest of `custom_components/saj_modbus/`): config flow, entities, diagnostics, translations. Keep it thin. Logic that would be true without Home Assistant belongs in the library.
+- **SAJ library** (`custom_components/saj_local/saj/`): everything about SAJ devices and Modbus. It must not import Home Assistant, so device logic can be tested with plain inputs. It ships inside the integration; the split is a design boundary, not a package.
+- **Home Assistant integration** (the rest of `custom_components/saj_local/`): config flow, entities, diagnostics, translations. Keep it thin. Logic that would be true without Home Assistant belongs in the library.
 - **Frontend** (`frontend/`): the Lovelace cards. The build output is written into the integration directory because HACS ships that directory as one archive.
 - **Modbus simulator** (`modbus_mock/`): a separate program that shares no code with the others. See [The Modbus simulator](#the-modbus-simulator).
 

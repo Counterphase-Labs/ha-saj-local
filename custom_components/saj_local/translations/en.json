@@ -1,0 +1,10 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SAJ Local",
+        "description": "Add the SAJ Local integration."
+      }
+    }
+  }
+}

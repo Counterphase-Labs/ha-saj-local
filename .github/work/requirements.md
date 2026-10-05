@@ -10,6 +10,8 @@ Platform stability and correctness is paramount.
 
 ### Main Integration
 
+- Integration domain: `saj_local`; display name: **SAJ Local**.
+
 - Convention over configuration. Configuration options carry sensible defaults
 - Avoid extensive configuration options that result in pages of complex config flows
 - Automatic detection where possible, with override an option. AKA detect system automatically.

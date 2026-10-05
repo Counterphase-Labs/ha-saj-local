@@ -64,7 +64,7 @@ Verify the pairing on PyPI before committing: the `requires_dist` of `pytest-hom
 
 ## Repository Layout
 
-- Integration code: `custom_components/saj_modbus/`
+- Integration code: `custom_components/saj_local/`
 - Tests: `tests/`
 - Development configuration: `config/`
 - Project requirements: `.github/work/requirements.md`

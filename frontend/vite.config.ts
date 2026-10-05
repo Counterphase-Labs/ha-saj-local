@@ -12,11 +12,11 @@ export default defineConfig({
         manifest: "asset-manifest.json",
         outDir: resolve(
             import.meta.dirname,
-            "../custom_components/saj_modbus/frontend",
+            "../custom_components/saj_local/frontend",
         ),
         rollupOptions: {
             output: {
-                entryFileNames: "saj-modbus-card-[hash].js",
+                entryFileNames: "saj-local-card-[hash].js",
             },
         },
     },

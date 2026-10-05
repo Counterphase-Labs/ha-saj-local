@@ -5,7 +5,7 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from .const import DOMAIN, INTEGRATION_TITLE
 
 
-class SajModbusConfigFlow(ConfigFlow, domain=DOMAIN):
+class SajLocalConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(

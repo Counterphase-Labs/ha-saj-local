@@ -3,7 +3,7 @@ set -eu
 
 playwright_repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 playwright_compose_file="$playwright_repository_root/compose.playwright.yaml"
-playwright_project_name="saj-modbus-playwright-$$"
+playwright_project_name="saj-local-playwright-$$"
 playwright_result_directory="$playwright_repository_root/frontend/test-results/home-assistant"
 
 playwright_cleanup() {

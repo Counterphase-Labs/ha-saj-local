@@ -1,7 +1,7 @@
 from homeassistant.config_entries import ConfigEntryState
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.saj_modbus.const import DOMAIN
+from custom_components.saj_local.const import DOMAIN
 
 
 async def test_entry_loads_and_unloads(hass):

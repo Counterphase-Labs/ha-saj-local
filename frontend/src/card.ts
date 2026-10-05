@@ -1,11 +1,11 @@
 import { html, LitElement, type TemplateResult } from "lit";
 
-export interface SajModbusCardConfig {
+export interface SajLocalCardConfig {
     type: string;
     title: string;
 }
 
-export class SajModbusCard extends LitElement {
+export class SajLocalCard extends LitElement {
     static override properties = {
         title: { state: true },
     };
@@ -17,7 +17,7 @@ export class SajModbusCard extends LitElement {
         this.title = "";
     }
 
-    setConfig(config: Partial<SajModbusCardConfig>): void {
+    setConfig(config: Partial<SajLocalCardConfig>): void {
         if (config.title === undefined || config.title === "") {
             throw new Error("The card configuration requires a title");
         }
@@ -29,10 +29,10 @@ export class SajModbusCard extends LitElement {
     }
 }
 
-customElements.define("saj-modbus-card", SajModbusCard);
+customElements.define("saj-local-card", SajLocalCard);
 
 declare global {
     interface HTMLElementTagNameMap {
-        "saj-modbus-card": SajModbusCard;
+        "saj-local-card": SajLocalCard;
     }
 }

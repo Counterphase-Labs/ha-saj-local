@@ -5,13 +5,13 @@ import { expect, test } from "../support/test";
 
 const assetDirectory = resolve(
     import.meta.dirname,
-    "../../../../custom_components/saj_modbus/frontend",
+    "../../../../custom_components/saj_local/frontend",
 );
 
 const cardAsset = (): string => {
     const filename = readdirSync(assetDirectory).find(
         (candidate) =>
-            candidate.startsWith("saj-modbus-card-") &&
+            candidate.startsWith("saj-local-card-") &&
             candidate.endsWith(".js"),
     );
     if (filename === undefined) {
@@ -25,13 +25,11 @@ test("the built card renders its configured title", async ({ page }) => {
     await page.addScriptTag({ path: cardAsset(), type: "module" });
 
     await page.evaluate(async () => {
-        await customElements.whenDefined("saj-modbus-card");
-        const card = document.createElement(
-            "saj-modbus-card",
-        ) as HTMLElement & {
+        await customElements.whenDefined("saj-local-card");
+        const card = document.createElement("saj-local-card") as HTMLElement & {
             setConfig(config: { type: string; title: string }): void;
         };
-        card.setConfig({ type: "custom:saj-modbus-card", title: "Inverter" });
+        card.setConfig({ type: "custom:saj-local-card", title: "Inverter" });
         document.body.append(card);
     });
 

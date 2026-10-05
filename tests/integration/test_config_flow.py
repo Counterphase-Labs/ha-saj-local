@@ -1,7 +1,7 @@
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.saj_modbus.const import DOMAIN
+from custom_components.saj_local.const import DOMAIN
 
 
 async def test_user_flow_shows_form(hass):

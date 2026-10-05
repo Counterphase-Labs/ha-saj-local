@@ -49,11 +49,11 @@ frontend-ci: frontend-check test-browser-controlled
 release-check:
 	@set -eu; \
 	temp_dir=$$(mktemp -d); \
-	archive="$$temp_dir/saj_modbus.zip"; \
+	archive="$$temp_dir/saj_local.zip"; \
 	trap 'rm -r "$$temp_dir"' 0; \
-	(cd custom_components && zip -qr "$$archive" saj_modbus); \
-	unzip -Z1 "$$archive" | grep -Eq '^saj_modbus/frontend/asset-manifest\.json$$'; \
-	unzip -Z1 "$$archive" | grep -Eq '^saj_modbus/frontend/saj-modbus-card-[A-Za-z0-9_-]+\.js$$'
+	(cd custom_components && zip -qr "$$archive" saj_local); \
+	unzip -Z1 "$$archive" | grep -Eq '^saj_local/frontend/asset-manifest\.json$$'; \
+	unzip -Z1 "$$archive" | grep -Eq '^saj_local/frontend/saj-local-card-[A-Za-z0-9_-]+\.js$$'
 
 mock-build:
 	docker compose build modbus-mock

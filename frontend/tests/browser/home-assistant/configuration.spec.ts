@@ -2,7 +2,7 @@ import { type Page } from "@playwright/test";
 
 import { expect, removingVirtualizedList, test } from "../support/test";
 
-const integrationName = "SAJ Modbus";
+const integrationName = "SAJ Local";
 
 const account = {
     name: "Playwright User",

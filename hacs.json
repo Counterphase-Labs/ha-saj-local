@@ -1,5 +1,5 @@
 {
-  "name": "SAJ Modbus",
+  "name": "SAJ Local",
   "homeassistant": "2026.9.3",
   "hacs": "2.0.5"
 }

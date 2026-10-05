@@ -1,11 +1,11 @@
-# SAJ Modbus Home Assistant Integration
+# SAJ Local Home Assistant Integration
 
-![SAJ Modbus](images/header.png)
+![SAJ Local](images/header.png)
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 [![Home Assistant](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdogmatic69%2Fhome-assistant-saj-modbus%2Fmain%2Fhacs.json&query=%24.homeassistant&suffix=%2B&label=Home%20Assistant&logo=homeassistant&logoColor=white&color=41BDF5)](https://www.home-assistant.io)
 [![Release](https://img.shields.io/github/v/release/dogmatic69/home-assistant-saj-modbus)](https://github.com/dogmatic69/home-assistant-saj-modbus/releases)
-[![Active installs](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fanalytics.home-assistant.io%2Fcustom_integrations.json&query=%24.saj_modbus.total&label=active%20installs&logo=homeassistant&logoColor=white&color=41BDF5)](https://analytics.home-assistant.io)
+[![Active installs](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fanalytics.home-assistant.io%2Fcustom_integrations.json&query=%24.saj_local.total&label=active%20installs&logo=homeassistant&logoColor=white&color=41BDF5)](https://analytics.home-assistant.io)
 [![CI](https://github.com/dogmatic69/home-assistant-saj-modbus/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dogmatic69/home-assistant-saj-modbus/actions/workflows/ci.yml)
 [![Licence](https://img.shields.io/github/license/dogmatic69/home-assistant-saj-modbus)](LICENSE)
 
@@ -70,10 +70,10 @@ The goal is wide coverage of common SAJ household inverters, batteries and relat
 
 ## Installation
 
-Not available yet: there is no release. Once there is something to try, it will be installed through [HACS](https://hacs.xyz) as a custom repository: add `https://github.com/dogmatic69/home-assistant-saj-modbus` as an Integration, download it, restart Home Assistant and add **SAJ Modbus** under Settings, Devices & services.
+Not available yet: there is no release. Once there is something to try, it will be installed through [HACS](https://hacs.xyz) as a custom repository: add `https://github.com/dogmatic69/home-assistant-saj-modbus` as an Integration, download it, restart Home Assistant and add **SAJ Local** under Settings, Devices & services.
 
 [![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dogmatic69&repository=home-assistant-saj-modbus&category=integration)
-[![Open your Home Assistant instance and start setting up SAJ Modbus.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=saj_modbus)
+[![Open your Home Assistant instance and start setting up SAJ Local.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=saj_local)
 
 ## How it works
 

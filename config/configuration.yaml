@@ -3,4 +3,4 @@ default_config:
 logger:
   default: info
   logs:
-    custom_components.saj_modbus: debug
+    custom_components.saj_local: debug

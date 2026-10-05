@@ -32,9 +32,9 @@ lint = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = [".", "custom_components/saj_modbus", "modbus_mock"]
+pythonpath = [".", "custom_components/saj_local", "modbus_mock"]
 addopts = [
-    "--cov=custom_components/saj_modbus",
+    "--cov=custom_components/saj_local",
     "--cov=modbus_mock/saj_modbus_mock",
     "--cov-branch",
     "--cov-report=term-missing",
@@ -43,7 +43,7 @@ addopts = [
 
 [tool.mypy]
 python_version = "3.14"
-files = ["custom_components/saj_modbus", "modbus_mock/saj_modbus_mock"]
+files = ["custom_components/saj_local", "modbus_mock/saj_modbus_mock"]
 ignore_missing_imports = true
 follow_imports = "silent"
 strict_optional = true
@@ -101,19 +101,19 @@ max-complexity = 20
 ]
 
 [tool.complexipy]
-paths = ["custom_components/saj_modbus", "modbus_mock/saj_modbus_mock"]
+paths = ["custom_components/saj_local", "modbus_mock/saj_modbus_mock"]
 max-complexity-allowed = 20
 cache-dir = ".complexipy_cache"
 color = "no"
 
 [tool.importlinter]
-root_packages = ["custom_components.saj_modbus", "saj_modbus_mock"]
+root_packages = ["custom_components.saj_local", "saj_modbus_mock"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "SAJ library does not import Home Assistant"
 type = "forbidden"
-source_modules = ["custom_components.saj_modbus.saj"]
+source_modules = ["custom_components.saj_local.saj"]
 forbidden_modules = ["homeassistant"]
 
 [[tool.importlinter.contracts]]

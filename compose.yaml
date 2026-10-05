@@ -5,12 +5,12 @@ services:
       - "8123:8123"
     environment:
       TZ: UTC
-      PYTHONPYCACHEPREFIX: /tmp/saj_modbus_pycache
+      PYTHONPYCACHEPREFIX: /tmp/saj_local_pycache
     volumes:
       - ./config:/config
-      - ./custom_components/saj_modbus:/config/custom_components/saj_modbus:ro
+      - ./custom_components/saj_local:/config/custom_components/saj_local:ro
     tmpfs:
-      - /config/custom_components/saj_modbus/__pycache__
+      - /config/custom_components/saj_local/__pycache__
     healthcheck:
       test:
         - CMD

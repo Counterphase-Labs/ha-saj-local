@@ -11,5 +11,5 @@ RUN npm run build
 FROM ghcr.io/home-assistant/home-assistant:2026.9.3
 
 COPY tests/playwright/home-assistant/configuration.yaml /config/configuration.yaml
-COPY custom_components/saj_modbus /config/custom_components/saj_modbus
-COPY --from=frontend-builder /workspace/custom_components/saj_modbus/frontend /config/custom_components/saj_modbus/frontend
+COPY custom_components/saj_local /config/custom_components/saj_local
+COPY --from=frontend-builder /workspace/custom_components/saj_local/frontend /config/custom_components/saj_local/frontend
