@@ -1,29 +1,100 @@
-# SAJ Modbus
+# SAJ Modbus Home Assistant Integration
 
-A local-only Home Assistant integration for SAJ inverters over Modbus.
+![SAJ Modbus](images/header.png)
 
-This project is unreleased and under development. It currently provides an empty foundation: no device functionality yet.
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
+[![Home Assistant](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdogmatic69%2Fhome-assistant-saj-modbus%2Fmain%2Fhacs.json&query=%24.homeassistant&suffix=%2B&label=Home%20Assistant&logo=homeassistant&logoColor=white&color=41BDF5)](https://www.home-assistant.io)
+[![Release](https://img.shields.io/github/v/release/dogmatic69/home-assistant-saj-modbus)](https://github.com/dogmatic69/home-assistant-saj-modbus/releases)
+[![Active installs](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fanalytics.home-assistant.io%2Fcustom_integrations.json&query=%24.saj_modbus.total&label=active%20installs&logo=homeassistant&logoColor=white&color=41BDF5)](https://analytics.home-assistant.io)
+[![CI](https://github.com/dogmatic69/home-assistant-saj-modbus/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dogmatic69/home-assistant-saj-modbus/actions/workflows/ci.yml)
+[![Licence](https://img.shields.io/github/license/dogmatic69/home-assistant-saj-modbus)](LICENSE)
 
-## Development
+⭐ [Star the project on GitHub](https://github.com/dogmatic69/home-assistant-saj-modbus): your support is a real motivation! 🙏😊
 
-`uv` and `npm` run on the host; Home Assistant, the Modbus mock and the Home Assistant browser tests run in Docker. Run `make setup` once, then `make ci` before sending changes.
+Your SAJ solar system in Home Assistant, read straight from the inverter over your own network. No cloud account, no vendor app in the middle, and a polling approach designed to be gentle on the hardware.
 
-| Target | Description |
-| --- | --- |
-| `setup` | Install Python and frontend dependencies and the Playwright Chromium browser |
-| `up` | Build and start Home Assistant with the integration mounted, alongside the Modbus mock |
-| `down` | Stop the development containers |
-| `logs` | Follow the Home Assistant log |
-| `lint` | Run ruff format check, ruff check, mypy, import-linter and complexipy |
-| `copy-paste` | Detect copied code with jscpd |
-| `test` | Run the Python tests with the 100 percent coverage gate |
-| `test-isolated` | Run the library and mock tests in an environment without Home Assistant |
-| `python-ci` | Run `lint`, `copy-paste`, `test` and `test-isolated` |
-| `frontend-check` | Run the frontend format check, type check, lint and unit tests |
-| `frontend-build` | Build the frontend asset into the integration |
-| `test-browser-controlled` | Build the frontend and run the controlled Playwright suite |
-| `test-browser-home-assistant` | Run the Playwright suite against a clean containerised Home Assistant |
-| `frontend-ci` | Run `frontend-check` and `test-browser-controlled` |
-| `release-check` | Verify the HACS archive contains the built frontend asset |
-| `mock-build` | Build the Modbus mock image |
-| `ci` | Run every check above that CI runs |
+This is an unofficial, community-built integration. It is not made, supported or endorsed by SAJ. See the [disclaimer](#disclaimer).
+
+> **Status: in active development and not yet released.** There is no release: the integration is currently a skeleton, so there is nothing to install and use yet. Everything below describes what it is being built to deliver.
+
+## What it is being built to deliver
+
+### Works the way you expect
+
+- **Sensible by default.** Add your inverter and get a working setup without wading through pages of options.
+- **Finds your system for you.** The inverter, battery and related equipment are detected automatically, with an override when you know better.
+- **Consistent sensor names across SAJ models.** Dashboards and automations are written once and keep working across models.
+- **Survives hardware upgrades.** Moving from an H2 to an HS3, for example, keeps your history continuous where the systems overlap, such as total PV power. Sensors that no longer apply, such as a battery you no longer have, simply go away.
+- **Multiple systems.** Connect more than one SAJ system to the same Home Assistant.
+
+### Gentle on your inverter
+
+- **Careful Modbus access.** Reads are paced so the inverter is never put at risk of overload, with particular care for AIO3 systems.
+- **You choose what is read.** Read only the sensors you want, or exclude the ones you do not.
+- **Update cadences you control.** Set a default refresh rate, poll selected sensors faster or slower, and define more than one cadence.
+
+### Read, and when you want it, write
+
+- **Read-only unless you say otherwise.** Writing registers is opt-in, so nothing changes on your inverter by accident.
+
+### Lovelace cards
+
+- **Dashboard cards** you can add to your own dashboards, both for viewing information and for changing configuration.
+
+### Easy to live with
+
+- **Fully localised.** The interface is built for translation from the start.
+- **Clear errors.** When something goes wrong you are told what and why, rather than left with a silent failure.
+- **Privacy-focused diagnostics.** Debug dumps use Home Assistant's own tools and are built to be safe to share. Optional debug logging is meant to be useful, not noisy.
+- **Fully local.** Everything talks to your inverter over your network. Nothing is sent to a cloud service.
+
+## Supported equipment
+
+The goal is wide coverage of common SAJ household inverters, batteries and related equipment. The SAJ HS3 is the development reference system and the H2 is also targeted.
+
+| Product | Sensors | Controls | PV | Battery | Grid meter | Second meter | EV charger | Parallel inverters | Off-grid |
+| ------- | :-----: | :------: | :-: | :-----: | :--------: | :----------: | :--------: | :----------------: | :------: |
+| HS3 all-in-one | – | – | – | – | – | – | – | – | – |
+| HS2 all-in-one | – | – | – | – | – | – | – | – | – |
+| H2 single-phase, 3–6 kW | – | – | – | – | – | ❌ | ❌ | ❌ | – |
+| H2 single-phase low voltage, 5–12 kW | – | – | – | – | – | – | – | – | – |
+| H2 three-phase | – | – | – | – | – | – | – | – | – |
+| H1 hybrid | – | – | – | – | – | – | – | – | – |
+| AS1 AC-coupled | – | – | ❌ | – | – | – | – | – | – |
+| R6 on-grid | – | – | – | ❌ | – | – | – | – | ❌ |
+| R5 on-grid | – | – | – | ❌ | – | – | – | – | ❌ |
+
+✅ supported, ❌ not supported, – not implemented yet.
+
+**Sensors** covers reading values from the inverter and **Controls** covers changing its settings, which is opt-in. The remaining columns are the equipment and operating modes the integration handles for that product.
+
+## Installation
+
+Not available yet: there is no release. Once there is something to try, it will be installed through [HACS](https://hacs.xyz) as a custom repository: add `https://github.com/dogmatic69/home-assistant-saj-modbus` as an Integration, download it, restart Home Assistant and add **SAJ Modbus** under Settings, Devices & services.
+
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dogmatic69&repository=home-assistant-saj-modbus&category=integration)
+[![Open your Home Assistant instance and start setting up SAJ Modbus.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=saj_modbus)
+
+## How it works
+
+The integration connects to your inverter over Modbus TCP on your local network and reads its registers on a schedule you control. All communication stays between Home Assistant and the inverter.
+
+## Help and feedback
+
+Questions, bug reports and ideas are welcome on the [issue tracker](https://github.com/dogmatic69/home-assistant-saj-modbus/issues).
+
+## Contributing
+
+Developer setup, tooling and project conventions are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Disclaimer
+
+This project is an independent, community-built integration. It is not affiliated with, authorised, sponsored or endorsed by SAJ (Guangzhou Sanjing Electric Co., Ltd.) or any of its subsidiaries or affiliates.
+
+SAJ, the SAJ logo and all related product names, model names and trademarks are the property of their respective owners. They are used here only to identify the equipment this integration works with.
+
+The software is provided as is, without warranty of any kind. You use it at your own risk: the authors accept no liability for damage to equipment, loss of data, loss of warranty or any other consequence of using it. This applies in particular to writing settings to your inverter.
+
+## Licence
+
+[MIT](LICENSE)
