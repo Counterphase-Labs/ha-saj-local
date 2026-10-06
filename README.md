@@ -15,7 +15,7 @@ Your SAJ solar system in Home Assistant, read straight from the inverter over yo
 
 This is an unofficial, community-built integration. It is not made, supported or endorsed by SAJ. See the [disclaimer](#disclaimer).
 
-> **Status: in active development and not yet released.** There is no release: the integration is currently a skeleton, so there is nothing to install and use yet. Everything below describes what it is being built to deliver.
+> **Status: in active development and not yet released.** The first working iteration supports read-only monitoring of one or more SAJ HS3 inverters over local Modbus TCP. There is no published release yet.
 
 ## What it is being built to deliver
 
@@ -54,7 +54,7 @@ The goal is wide coverage of common SAJ household inverters, batteries and relat
 
 | Product | Sensors | Controls | PV | Battery | Grid meter | Second meter | EV charger | Parallel inverters | Off-grid |
 | ------- | :-----: | :------: | :-: | :-----: | :--------: | :----------: | :--------: | :----------------: | :------: |
-| HS3 all-in-one | – | – | – | – | – | – | – | – | – |
+| HS3 all-in-one | ✅ | ❌ | ✅ | ✅ | – | – | – | – | – |
 | HS2 all-in-one | – | – | – | – | – | – | – | – | – |
 | H2 single-phase, 3–6 kW | – | – | – | – | – | ❌ | ❌ | ❌ | – |
 | H2 single-phase low voltage, 5–12 kW | – | – | – | – | – | – | – | – | – |
@@ -66,11 +66,11 @@ The goal is wide coverage of common SAJ household inverters, batteries and relat
 
 ✅ supported, ❌ not supported, – not implemented yet.
 
-**Sensors** covers reading values from the inverter and **Controls** covers changing its settings, which is opt-in. The remaining columns are the equipment and operating modes the integration handles for that product.
+**Sensors** covers reading values from the inverter and **Controls** covers changing its settings. The initial HS3 iteration exposes operating mode, solar power, battery power, battery charge, total grid power and household load. The remaining columns are optional equipment and operating modes.
 
 ## Installation
 
-Not available yet: there is no release. Once there is something to try, it will be installed through [HACS](https://hacs.xyz) as a custom repository: add `https://github.com/dogmatic69/home-assistant-saj-modbus` as an Integration, download it, restart Home Assistant and add **SAJ Local** under Settings, Devices & services.
+There is no published release yet. The development integration can be added through Home Assistant using the inverter's host, Modbus TCP port (default `502`) and unit ID (default `1`). It detects the supported HS3 profile and uses Home Assistant's sensor controls to disable readings that are not needed.
 
 [![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dogmatic69&repository=home-assistant-saj-modbus&category=integration)
 [![Open your Home Assistant instance and start setting up SAJ Local.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=saj_local)

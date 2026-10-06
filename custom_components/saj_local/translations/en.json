@@ -2,9 +2,121 @@
   "config": {
     "step": {
       "user": {
-        "title": "SAJ Local",
-        "description": "Add the SAJ Local integration."
+        "title": "Connect to SAJ HS3",
+        "description": "Enter the local Modbus TCP endpoint and polling interval.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "unit_id": "Unit ID",
+          "scan_interval": "Seconds between updates"
+        }
       }
+    },
+    "error": {
+      "already_configured": "This endpoint is already configured.",
+      "invalid_host": "Enter a host name or IP address.",
+      "invalid_unit_id": "Enter a whole-number unit ID from 1 to 247.",
+      "cannot_connect": "Could not connect or read the inverter. Check the endpoint and try again.",
+      "unsupported_device": "The connected SAJ device type is not supported.",
+      "invalid_device_data": "The inverter returned invalid identity or telemetry data.",
+      "timeout": "The inverter did not respond in time. Check the endpoint and try again.",
+      "read_rejected": "The inverter rejected a required register read. Check that this is a supported HS3 device.",
+      "invalid_port": "Enter a whole-number port from 1 to 65535.",
+      "invalid_endpoint": "Enter a valid port and unit ID.",
+      "invalid_scan_interval": "Enter a whole-number polling interval of at least 30 seconds."
+    },
+    "abort": {
+      "already_configured": "This inverter is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Connection and polling",
+        "description": "Enter the local Modbus TCP endpoint and polling interval. Settings are saved after the endpoint is validated.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "unit_id": "Unit ID",
+          "scan_interval": "Seconds between updates"
+        }
+      },
+      "confirm_replacement": {
+        "title": "Confirm HS3 replacement",
+        "description": "Replace the hardware for this existing installation with HS3 serial {serial}? All six sensor entities and their historical data remain with this installation."
+      }
+    },
+    "error": {
+      "already_configured": "Another SAJ Local entry already owns this endpoint or inverter serial.",
+      "invalid_host": "Enter a host name or IP address.",
+      "invalid_port": "Enter a whole-number port from 1 to 65535.",
+      "invalid_unit_id": "Enter a whole-number unit ID from 1 to 247.",
+      "invalid_endpoint": "Enter a valid port and unit ID.",
+      "invalid_scan_interval": "Enter a whole-number polling interval of at least 30 seconds.",
+      "cannot_connect": "Could not connect or read the inverter. Check the endpoint and try again.",
+      "unsupported_device": "The connected SAJ device type is not supported.",
+      "invalid_device_data": "The inverter returned invalid identity or telemetry data.",
+      "timeout": "The inverter did not respond in time. Check the endpoint and try again.",
+      "read_rejected": "The inverter rejected a required register read. Check that this is a supported HS3 device."
+    },
+    "abort": {
+      "changes_saved": "SAJ Local settings were saved.",
+      "already_configured": "Another SAJ Local entry now owns this endpoint or inverter serial.",
+      "replacement_not_pending": "No validated hardware replacement is awaiting confirmation."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "operating_mode": {
+        "name": "Operating mode",
+        "state": {
+          "initialisation": "Initialisation",
+          "standby": "Standby",
+          "operating": "Operating",
+          "off_grid": "Off-grid",
+          "grid_connected_load_bypass": "Grid-connected load / bypass",
+          "fault": "Fault",
+          "upgrade": "Upgrade",
+          "debugging": "Debugging",
+          "self_check": "Self-check",
+          "reset": "Reset"
+        }
+      },
+      "pv_power": {
+        "name": "Solar power"
+      },
+      "battery_power": {
+        "name": "Battery power"
+      },
+      "battery_soc": {
+        "name": "Battery charge"
+      },
+      "grid_power": {
+        "name": "Grid power"
+      },
+      "load_power": {
+        "name": "Household load"
+      }
+    }
+  },
+  "exceptions": {
+    "unsupported_device": {
+      "message": "The connected device type is not supported."
+    },
+    "invalid_device_data": {
+      "message": "The inverter returned invalid identity or telemetry data."
+    },
+    "cannot_connect": {
+      "message": "Communication with the inverter failed. Check the endpoint, unit ID and connection."
+    },
+    "timeout": {
+      "message": "The inverter did not respond before the request timed out. Check its power, network and unit ID."
+    },
+    "read_rejected": {
+      "message": "The inverter rejected a required register read. Check the selected device type and register access."
+    },
+    "identity_mismatch": {
+      "message": "The endpoint now identifies a different inverter. Check the configured endpoint."
     }
   }
 }

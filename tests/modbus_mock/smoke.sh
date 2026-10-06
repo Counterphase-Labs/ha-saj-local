@@ -7,6 +7,9 @@ smoke_project_name="saj-modbus-mock-smoke-$$"
 smoke_container=""
 smoke_wait_seconds=60
 
+export SAJ_MOCK_HOST_PORT=0
+export SAJ_MOCK_H2_HOST_PORT=0
+
 smoke_cleanup() {
     smoke_exit_status=$?
     trap - EXIT HUP INT TERM

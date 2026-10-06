@@ -83,7 +83,7 @@ The rules are in the Non Functional section of `requirements.md`. The reasons:
 Development runs in containers so Home Assistant is a known, pinned release with a clean configuration.
 
 - [compose.yaml](../compose.yaml): the interactive environment, Home Assistant plus the simulators. The integration is mounted read-only so the container never writes into the source tree.
-- [compose.playwright.yaml](../compose.playwright.yaml): a throwaway Home Assistant for the browser tests. It shares no state with the interactive one.
+- [compose.playwright.yaml](../compose.playwright.yaml): a throwaway Home Assistant and HS3 simulator for the critical setup and sensor-value browser smoke test. It shares no state with the interactive environment.
 - `compose.override.yaml`: your machine's ports, time zone and scenarios. Ignored by git; `compose.override.yaml.example` shows the shape. Do not edit `compose.yaml` for local needs, because the smoke test starts it too.
 
 Under `config/`, only `configuration.yaml` is tracked. The rest is local Home Assistant state.

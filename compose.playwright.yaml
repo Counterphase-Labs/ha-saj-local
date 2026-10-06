@@ -20,12 +20,57 @@ services:
     volumes:
       - homeassistant-config:/config
 
+  modbus-mock:
+    build:
+      context: ./modbus_mock
+    volumes:
+      - ./modbus_mock/scenarios/hs3-battery.yaml:/config/config.yaml:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import socket;
+          connection = socket.create_connection(('127.0.0.1', 502), timeout=2);
+          connection.close()
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  modbus-observer:
+    image: python:3.14-slim
+    command: [python, /observer/modbus_observer.py]
+    depends_on:
+      modbus-mock:
+        condition: service_healthy
+    volumes:
+      - ./tests/playwright/modbus_observer.py:/observer/modbus_observer.py:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import socket, urllib.request;
+          host = socket.gethostbyname(socket.gethostname());
+          urllib.request.urlopen(f'http://{host}:8000/stats', timeout=2)
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 2s
+
   playwright:
     build:
       context: .
       dockerfile: Dockerfile.playwright-runner
     depends_on:
       homeassistant:
+        condition: service_healthy
+      modbus-mock:
+        condition: service_healthy
+      modbus-observer:
         condition: service_healthy
     environment:
       HOME_ASSISTANT_URL: http://homeassistant:8123

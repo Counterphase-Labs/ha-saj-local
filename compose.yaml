@@ -31,7 +31,7 @@ services:
     volumes:
       - ./modbus_mock/scenarios/hs3-battery.yaml:/config/config.yaml:ro
     ports:
-      - "5020:502"
+      - "${SAJ_MOCK_HOST_PORT:-5020}:502"
     restart: unless-stopped
 
   modbus-mock-h2:
@@ -40,5 +40,5 @@ services:
     volumes:
       - ./modbus_mock/scenarios/h2-battery.yaml:/config/config.yaml:ro
     ports:
-      - "5021:502"
+      - "${SAJ_MOCK_H2_HOST_PORT:-5021}:502"
     restart: unless-stopped

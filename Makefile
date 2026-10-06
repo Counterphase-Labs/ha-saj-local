@@ -1,4 +1,4 @@
-.PHONY: setup up down logs lint copy-paste test python-ci frontend-check frontend-build test-browser-controlled test-browser-home-assistant frontend-ci release-check mock-build mock-smoke ci
+.PHONY: setup up down logs lint copy-paste test test-isolated python-ci frontend-check frontend-build test-browser-controlled test-browser-home-assistant frontend-ci release-check mock-build mock-smoke ci
 
 setup:
 	uv sync --group dev --group lint
@@ -27,7 +27,10 @@ copy-paste:
 test:
 	uv run pytest
 
-python-ci: lint copy-paste test
+test-isolated:
+	UV_PROJECT_ENVIRONMENT=.venv-isolated uv run --only-group test pytest --no-cov tests/saj tests/modbus_mock
+
+python-ci: lint copy-paste test test-isolated
 
 frontend-check:
 	cd frontend && npm run format:check
