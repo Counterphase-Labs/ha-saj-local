@@ -10,13 +10,29 @@ from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 import custom_components.saj_local as integration
-from custom_components.saj_local import SajRuntimeData
+from custom_components.saj_local import SajRuntimeData, errors
 from custom_components.saj_local.const import DOMAIN
+from custom_components.saj_local.saj import errors as saj_errors
 from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessage
-from custom_components.saj_local.saj.hs3 import Hs3Device, UnsupportedDeviceError
+from custom_components.saj_local.saj.device import Device
+from custom_components.saj_local.saj.profiles import Profile
 
 SERIAL = "HS3-TEST-001"
-DEVICE = Hs3Device(SERIAL, 0x1610, 12000)
+PROFILE = Profile(
+    key="alpha",
+    display_name="Alpha",
+    device_types=frozenset({0x1610}),
+    measurement_keys=frozenset(),
+    hand_verified=True,
+)
+OTHER_PROFILE = Profile(
+    key="beta",
+    display_name="Beta",
+    device_types=frozenset({0x0010}),
+    measurement_keys=frozenset(),
+    hand_verified=False,
+)
+DEVICE = Device(SERIAL, 0x1610, 12000, PROFILE, detected=True)
 
 
 class FakeClient:
@@ -37,7 +53,8 @@ class FakeClient:
 class FakeCoordinator:
     instances: ClassVar[list[FakeCoordinator]] = []
 
-    def __init__(self, *_args, **_kwargs) -> None:
+    def __init__(self, *_args, **kwargs) -> None:
+        self.entry = kwargs.get("entry")
         self.refreshed = False
         self.shutdown = False
         self.instances.append(self)
@@ -85,10 +102,12 @@ def _hass():
     return SimpleNamespace(config_entries=FakeConfigEntries())
 
 
-def _entry(host: str = "inverter", serial: str = SERIAL) -> FakeEntry:
+def _entry(
+    host: str = "inverter", serial: str = SERIAL, model: str = "automatic"
+) -> FakeEntry:
     return FakeEntry(
         unique_id=serial,
-        data={"host": host, "port": 502, "unit_id": 1},
+        data={"host": host, "port": 502, "unit_id": 1, "model": model},
     )
 
 
@@ -96,7 +115,7 @@ def _patch_success(monkeypatch) -> None:
     monkeypatch.setattr(integration, "ModbusTcpClient", FakeClient)
     monkeypatch.setattr(integration, "SajCoordinator", FakeCoordinator)
 
-    async def identify(client):
+    async def identify(client, selection):
         return DEVICE
 
     monkeypatch.setattr(integration, "identify", identify)
@@ -126,12 +145,32 @@ async def test_entry_loads_into_runtime_and_unloads_owned_resources(monkeypatch)
     assert FakeClient.instances[0].closed
 
 
+@pytest.mark.parametrize("selection", ["automatic", "alpha", "beta"])
+async def test_entry_load_identifies_with_the_stored_model_selection(
+    monkeypatch, selection
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    selections = []
+
+    async def identify(client, selection):
+        selections.append(selection)
+        return DEVICE
+
+    monkeypatch.setattr(integration, "identify", identify)
+    entry = _entry(model=selection)
+
+    assert await integration.async_setup_entry(hass, entry)
+    assert selections == [selection]
+    assert FakeCoordinator.instances[0].entry is entry
+
+
 async def test_multiple_entries_own_independent_runtime_resources(monkeypatch):
     hass = _hass()
     _patch_success(monkeypatch)
 
-    async def identify_by_endpoint(client):
-        return Hs3Device(f"SERIAL-{client.host}", 0x1610, 12000)
+    async def identify_by_endpoint(client, selection):
+        return Device(f"SERIAL-{client.host}", 0x1610, 12000, PROFILE, detected=True)
 
     async def forward(_entry, _platforms):
         return
@@ -152,47 +191,41 @@ async def test_multiple_entries_own_independent_runtime_resources(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("failure", "expected_error", "reason"),
+    ("failure", "expected_error"),
     [
-        (UnsupportedDeviceError("unsupported"), ConfigEntryError, "unsupported_device"),
+        (saj_errors.UnsupportedDeviceError(0x1234), ConfigEntryError),
         (
-            ModbusError(ModbusErrorMessage.CONNECTION_TIMEOUT),
-            ConfigEntryNotReady,
-            "timeout",
+            saj_errors.ModelMismatchError(selected=PROFILE, detected=OTHER_PROFILE),
+            ConfigEntryError,
         ),
-        (
-            ModbusError(ModbusErrorMessage.REQUEST_TIMEOUT),
-            ConfigEntryNotReady,
-            "timeout",
-        ),
-        (
-            ModbusError("Modbus exception response", exception_code=6),
-            ConfigEntryNotReady,
-            "read_rejected",
-        ),
-        (
-            ModbusError(ModbusErrorMessage.MISMATCHED_HEADER),
-            ConfigEntryNotReady,
-            "cannot_connect",
-        ),
-        (ValueError("invalid data"), ConfigEntryError, "invalid_device_data"),
+        (saj_errors.UnknownModelError("gamma"), ConfigEntryError),
+        (ValueError("invalid data"), ConfigEntryError),
+        (ModbusError(ModbusErrorMessage.MISMATCHED_HEADER), ConfigEntryNotReady),
     ],
 )
-async def test_setup_closes_client_and_classifies_device_failure(
-    monkeypatch, failure, expected_error, reason
+async def test_setup_closes_client_and_applies_translation_to_device_failure(
+    monkeypatch, failure, expected_error
 ):
     hass = _hass()
     _patch_success(monkeypatch)
 
-    async def fail(client):
+    async def fail(client, selection):
         raise failure
 
+    def translate(error):
+        assert error is failure
+        return errors.Translation(key="stubbed", placeholders={"detail": "value"})
+
     monkeypatch.setattr(integration, "identify", fail)
+    monkeypatch.setattr(integration, "translate_error", translate)
     entry = _entry()
 
     with pytest.raises(expected_error) as error:
         await integration.async_setup_entry(hass, entry)
-    assert error.value.translation_key == reason
+    assert type(error.value) is expected_error
+    assert error.value.translation_domain == DOMAIN
+    assert error.value.translation_key == "stubbed"
+    assert error.value.translation_placeholders == {"detail": "value"}
     assert error.value.__cause__ is failure
     assert FakeClient.instances[0].closed
 
@@ -201,8 +234,8 @@ async def test_setup_rejects_replacement_serial_and_closes_client(monkeypatch):
     hass = _hass()
     _patch_success(monkeypatch)
 
-    async def other_identity(client):
-        return Hs3Device("OTHER-SERIAL", 0x1610, 12000)
+    async def other_identity(client, selection):
+        return Device("OTHER-SERIAL", 0x1610, 12000, PROFILE, detected=True)
 
     monkeypatch.setattr(integration, "identify", other_identity)
     entry = _entry()
@@ -248,7 +281,7 @@ async def test_setup_closes_client_on_cancellation(monkeypatch):
     hass = _hass()
     _patch_success(monkeypatch)
 
-    async def cancelled(client):
+    async def cancelled(client, selection):
         raise asyncio.CancelledError
 
     monkeypatch.setattr(integration, "identify", cancelled)
@@ -263,7 +296,7 @@ async def test_setup_closes_client_on_unexpected_exception(monkeypatch):
     hass = _hass()
     _patch_success(monkeypatch)
 
-    async def crash(client):
+    async def crash(client, selection):
         raise RuntimeError
 
     monkeypatch.setattr(integration, "identify", crash)

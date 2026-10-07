@@ -15,7 +15,7 @@ Your SAJ solar system in Home Assistant, read straight from the inverter over yo
 
 This is an unofficial, community-built integration. It is not made, supported or endorsed by SAJ. See the [disclaimer](#disclaimer).
 
-> **Status: in active development and not yet released.** The first working iteration supports read-only monitoring of one or more SAJ HS3 inverters over local Modbus TCP. There is no published release yet.
+> **Status: in active development and not yet released.** The first working iteration supports read-only monitoring of one or more SAJ HS3 or H2 inverters over local Modbus TCP. There is no published release yet.
 
 ## What it is being built to deliver
 
@@ -50,13 +50,14 @@ This is an unofficial, community-built integration. It is not made, supported or
 
 ## Supported equipment
 
-The goal is wide coverage of common SAJ household inverters, batteries and related equipment. The SAJ HS3 is the development reference system and the H2 is also targeted.
+The goal is wide coverage of common SAJ household inverters, batteries and related equipment. The SAJ HS3 is the development reference system and the H2 is supported at the same level.
 
 | Product | Sensors | Controls | PV | Battery | Grid meter | Second meter | EV charger | Parallel inverters | Off-grid |
 | ------- | :-----: | :------: | :-: | :-----: | :--------: | :----------: | :--------: | :----------------: | :------: |
 | HS3 all-in-one | ✅ | ❌ | ✅ | ✅ | – | – | – | – | – |
 | HS2 all-in-one | – | – | – | – | – | – | – | – | – |
-| H2 single-phase, 3–6 kW | – | – | – | – | – | ❌ | ❌ | ❌ | – |
+| H2 single-phase, 3–6 kW | ✅ | ❌ | ✅ | ✅ | – | ❌ | ❌ | ❌ | – |
+| H2 single-phase, 5–10 kW | ✅ | ❌ | ✅ | ✅ | – | – | – | – | – |
 | H2 single-phase low voltage, 5–12 kW | – | – | – | – | – | – | – | – | – |
 | H2 three-phase | – | – | – | – | – | – | – | – | – |
 | H1 hybrid | – | – | – | – | – | – | – | – | – |
@@ -66,11 +67,21 @@ The goal is wide coverage of common SAJ household inverters, batteries and relat
 
 ✅ supported, ❌ not supported, – not implemented yet.
 
-**Sensors** covers reading values from the inverter and **Controls** covers changing its settings. The initial HS3 iteration exposes operating mode, solar power, battery power, battery charge, total grid power and household load. The remaining columns are optional equipment and operating modes.
+**Sensors** covers reading values from the inverter and **Controls** covers changing its settings. The initial iteration exposes operating mode, solar power, battery power, battery charge, total grid power and household load on both the HS3 and the H2. The remaining columns are optional equipment and operating modes.
+
+The HS3 register behaviour has been verified by hand. The H2 behaviour comes from SAJ protocol documentation and field observations of H2-family units, and has not been hand-verified on an H2 by this project.
 
 ## Installation
 
-There is no published release yet. The development integration can be added through Home Assistant using the inverter's host, Modbus TCP port (default `502`) and unit ID (default `1`). It detects the supported HS3 profile and uses Home Assistant's sensor controls to disable readings that are not needed.
+There is no published release yet. The development integration can be added through Home Assistant using the inverter's host, Modbus TCP port (default `502`) and unit ID (default `1`). The **Model** field defaults to Automatic, which identifies an HS3 or an H2 from the device itself. Choose a model manually only when the inverter is not recognised: a selection that contradicts a recognised device is rejected, and a selection applied to an unrecognised device is saved only after its required registers answer and you confirm it. Home Assistant's sensor controls disable readings that are not needed.
+
+Moving an installation between an H2 and an HS3 is done through Configure. Confirm the replacement and the device, entities, names and history stay with the installation.
+
+### Limitations
+
+- Automatic detection recognises the HS3 and the single-phase H2 only. Other H2-family units, such as the three-phase H2, report other device types and need the model chosen manually, with readings that may be wrong because they cannot be verified.
+- AS2, HS2 and other SAJ products are not recognised.
+- The sign of total grid power is published as the inverter reports it and is not labelled as import or export.
 
 [![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dogmatic69&repository=home-assistant-saj-modbus&category=integration)
 [![Open your Home Assistant instance and start setting up SAJ Local.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=saj_local)

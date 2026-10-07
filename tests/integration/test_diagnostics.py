@@ -3,7 +3,17 @@ from types import SimpleNamespace
 import pytest
 
 from custom_components.saj_local.diagnostics import async_get_config_entry_diagnostics
-from custom_components.saj_local.saj.hs3 import Hs3Device, Hs3Telemetry
+from custom_components.saj_local.saj.device import Device
+from custom_components.saj_local.saj.profiles import Profile
+from custom_components.saj_local.saj.telemetry import Telemetry
+
+PROFILE = Profile(
+    key="alpha",
+    display_name="Alpha",
+    device_types=frozenset({0x0001}),
+    measurement_keys=frozenset(),
+    hand_verified=False,
+)
 
 
 class FakeClient:
@@ -29,20 +39,25 @@ class FakeCoordinator:
 @pytest.mark.parametrize(
     ("contexts", "telemetry", "expected_sensors", "unknown_mode"),
     [
-        ({"pv_power", "grid_power"}, Hs3Telemetry(2), ["grid_power", "pv_power"], None),
-        (set(), Hs3Telemetry(31), [], 31),
-        ({"battery_soc"}, Hs3Telemetry(), ["battery_soc"], None),
+        (
+            {"pv_power", "grid_power"},
+            Telemetry(values={"operating_mode": 2}),
+            ["grid_power", "pv_power"],
+            None,
+        ),
+        (set(), Telemetry(values={"operating_mode": 31}), [], 31),
+        ({"battery_soc"}, Telemetry(values={}), ["battery_soc"], None),
     ],
 )
 async def test_diagnostics_report_status_and_omit_endpoint_identity(
     contexts, telemetry, expected_sensors, unknown_mode
 ):
     entry = SimpleNamespace(
-        data={"host": "private-host", "port": 502, "unit_id": 1},
+        data={"host": "private-host", "port": 502, "unit_id": 1, "model": "automatic"},
         options={"scan_interval": 60},
         unique_id="PRIVATE-SERIAL",
         runtime_data=SimpleNamespace(
-            device=Hs3Device("PRIVATE-SERIAL", 0x1610, 12000),
+            device=Device("PRIVATE-SERIAL", 0x1610, 12000, PROFILE, detected=True),
             client=FakeClient(),
             coordinator=FakeCoordinator(contexts, telemetry),
         ),
@@ -50,7 +65,10 @@ async def test_diagnostics_report_status_and_omit_endpoint_identity(
 
     result = await async_get_config_entry_diagnostics(None, entry)
 
-    assert result["profile"] == "HS3"
+    assert result["model_selection"] == "automatic"
+    assert result["profile"] == "alpha"
+    assert result["profile_detected"] is True
+    assert result["profile_hand_verified"] is False
     assert result["device_type"] == 0x1610
     assert result["rated_power_w"] == 12000
     assert result["poll_interval_seconds"] == 60
@@ -63,3 +81,25 @@ async def test_diagnostics_report_status_and_omit_endpoint_identity(
         assert result["unknown_operating_mode"] == unknown_mode
     else:
         assert "unknown_operating_mode" not in result
+
+
+@pytest.mark.parametrize(
+    ("selection", "detected"), [("alpha", False), ("automatic", True)]
+)
+async def test_diagnostics_report_selection_and_whether_profile_was_assumed(
+    selection, detected
+):
+    entry = SimpleNamespace(
+        data={"host": "private-host", "port": 502, "unit_id": 1, "model": selection},
+        options={},
+        runtime_data=SimpleNamespace(
+            device=Device("PRIVATE-SERIAL", 0x1610, 12000, PROFILE, detected=detected),
+            client=FakeClient(),
+            coordinator=FakeCoordinator(set(), None),
+        ),
+    )
+
+    result = await async_get_config_entry_diagnostics(None, entry)
+
+    assert result["model_selection"] == selection
+    assert result["profile_detected"] is detected

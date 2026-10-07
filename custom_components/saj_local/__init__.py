@@ -5,18 +5,19 @@ from typing import TYPE_CHECKING
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 
-from .config_flow import CONF_SCAN_INTERVAL, CONF_UNIT_ID
 from .const import (
+    CONF_MODEL,
+    CONF_UNIT_ID,
     DEFAULT_PORT,
-    DEFAULT_SCAN_INTERVAL,
     DEFAULT_UNIT_ID,
     DOMAIN,
     PLATFORMS,
     REQUEST_TIMEOUT,
 )
 from .coordinator import SajCoordinator
-from .saj.client import ModbusError, ModbusErrorMessage, ModbusTcpClient
-from .saj.hs3 import Hs3Device, UnsupportedDeviceError, identify
+from .errors import HANDLED_ERRORS, translate_error
+from .saj.client import ModbusError, ModbusTcpClient
+from .saj.device import Device, identify
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -26,11 +27,12 @@ if TYPE_CHECKING:
 @dataclass
 class SajRuntimeData:
     client: ModbusTcpClient
-    device: Hs3Device
+    device: Device
     coordinator: SajCoordinator
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    model_selection = entry.data[CONF_MODEL]
     client = ModbusTcpClient(
         host=entry.data[CONF_HOST],
         port=entry.data.get(CONF_PORT, DEFAULT_PORT),
@@ -38,39 +40,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         timeout=REQUEST_TIMEOUT,
     )
     try:
-        device = await identify(client=client)
+        device = await identify(client=client, selection=model_selection)
         _validate_identity(device=device, serial=entry.unique_id)
         coordinator = SajCoordinator(
             hass=hass,
             client=client,
             device=device,
-            entry_id=entry.entry_id,
-            interval=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+            entry=entry,
         )
         await coordinator.async_config_entry_first_refresh()
-    except UnsupportedDeviceError as err:
+    except HANDLED_ERRORS as err:
         await client.close()
-        raise ConfigEntryError(
-            translation_domain=DOMAIN, translation_key="unsupported_device"
-        ) from err
-    except ValueError as err:
-        await client.close()
-        raise ConfigEntryError(
-            translation_domain=DOMAIN, translation_key="invalid_device_data"
-        ) from err
-    except ModbusError as err:
-        await client.close()
-        if err.exception_code is not None:
-            translation_key = "read_rejected"
-        elif str(err) in {
-            ModbusErrorMessage.CONNECTION_TIMEOUT,
-            ModbusErrorMessage.REQUEST_TIMEOUT,
-        }:
-            translation_key = "timeout"
-        else:
-            translation_key = "cannot_connect"
-        raise ConfigEntryNotReady(
-            translation_domain=DOMAIN, translation_key=translation_key
+        translation = translate_error(error=err)
+        failure = (
+            ConfigEntryNotReady if isinstance(err, ModbusError) else ConfigEntryError
+        )
+        raise failure(
+            translation_domain=DOMAIN,
+            translation_key=translation.key,
+            translation_placeholders=translation.placeholders,
         ) from err
     except asyncio.CancelledError:
         await client.close()
@@ -107,7 +95,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-def _validate_identity(*, device: Hs3Device, serial: str | None) -> None:
+def _validate_identity(*, device: Device, serial: str | None) -> None:
     if device.serial != serial:
         raise ConfigEntryError(
             translation_domain=DOMAIN, translation_key="identity_mismatch"

@@ -2,14 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "Connect to SAJ HS3",
-        "description": "Enter the local Modbus TCP endpoint and polling interval.",
+        "title": "Connect to a SAJ inverter",
+        "description": "Enter the local Modbus TCP endpoint, polling interval and model. Leave the model on Automatic unless the inverter is not recognised.",
         "data": {
           "host": "Host",
           "port": "Port",
           "unit_id": "Unit ID",
-          "scan_interval": "Seconds between updates"
+          "scan_interval": "Seconds between updates",
+          "model": "Model"
         }
+      },
+      "confirm_model": {
+        "title": "Confirm model",
+        "description": "The device reports type {device_type}, which is not recognised as {model}, so it could not be verified as that model. Its required registers answered, but readings may be wrong if it is a different model. Use {model} anyway?"
       }
     },
     "error": {
@@ -17,33 +22,41 @@
       "invalid_host": "Enter a host name or IP address.",
       "invalid_unit_id": "Enter a whole-number unit ID from 1 to 247.",
       "cannot_connect": "Could not connect or read the inverter. Check the endpoint and try again.",
-      "unsupported_device": "The connected SAJ device type is not supported.",
+      "unsupported_device": "The device reports type {device_type}, which is not recognised automatically. Choose its model manually.",
       "invalid_device_data": "The inverter returned invalid identity or telemetry data.",
       "timeout": "The inverter did not respond in time. Check the endpoint and try again.",
-      "read_rejected": "The inverter rejected a required register read. Check that this is a supported HS3 device.",
+      "read_rejected": "The inverter rejected a required register read. Check that this is a supported SAJ device and model.",
       "invalid_port": "Enter a whole-number port from 1 to 65535.",
       "invalid_endpoint": "Enter a valid port and unit ID.",
-      "invalid_scan_interval": "Enter a whole-number polling interval of at least 30 seconds."
+      "invalid_scan_interval": "Enter a whole-number polling interval of at least 30 seconds.",
+      "model_mismatch": "This device identifies as {detected_model}, not {selected_model}. Choose {detected_model} or Automatic.",
+      "unknown_model": "The model {selection} is not a known model. Choose Automatic or one of the listed models."
     },
     "abort": {
-      "already_configured": "This inverter is already configured."
+      "already_configured": "This inverter is already configured.",
+      "confirmation_not_pending": "No validated change is awaiting confirmation."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Connection and polling",
-        "description": "Enter the local Modbus TCP endpoint and polling interval. Settings are saved after the endpoint is validated.",
+        "description": "Enter the local Modbus TCP endpoint, polling interval and model. Settings are saved after the endpoint is validated.",
         "data": {
           "host": "Host",
           "port": "Port",
           "unit_id": "Unit ID",
-          "scan_interval": "Seconds between updates"
+          "scan_interval": "Seconds between updates",
+          "model": "Model"
         }
       },
       "confirm_replacement": {
-        "title": "Confirm HS3 replacement",
-        "description": "Replace the hardware for this existing installation with HS3 serial {serial}? All six sensor entities and their historical data remain with this installation."
+        "title": "Confirm inverter replacement",
+        "description": "Replace the hardware for this existing installation with the {model} with serial {serial}? Your sensor entities and their historical data remain with this installation."
+      },
+      "confirm_model": {
+        "title": "Confirm model",
+        "description": "The device reports type {device_type}, which is not recognised as {model}, so it could not be verified as that model. Its required registers answered, but readings may be wrong if it is a different model. Use {model} anyway?"
       }
     },
     "error": {
@@ -54,15 +67,17 @@
       "invalid_endpoint": "Enter a valid port and unit ID.",
       "invalid_scan_interval": "Enter a whole-number polling interval of at least 30 seconds.",
       "cannot_connect": "Could not connect or read the inverter. Check the endpoint and try again.",
-      "unsupported_device": "The connected SAJ device type is not supported.",
+      "unsupported_device": "The device reports type {device_type}, which is not recognised automatically. Choose its model manually.",
       "invalid_device_data": "The inverter returned invalid identity or telemetry data.",
       "timeout": "The inverter did not respond in time. Check the endpoint and try again.",
-      "read_rejected": "The inverter rejected a required register read. Check that this is a supported HS3 device."
+      "read_rejected": "The inverter rejected a required register read. Check that this is a supported SAJ device and model.",
+      "model_mismatch": "This device identifies as {detected_model}, not {selected_model}. Choose {detected_model} or Automatic.",
+      "unknown_model": "The model {selection} is not a known model. Choose Automatic or one of the listed models."
     },
     "abort": {
       "changes_saved": "SAJ Local settings were saved.",
       "already_configured": "Another SAJ Local entry now owns this endpoint or inverter serial.",
-      "replacement_not_pending": "No validated hardware replacement is awaiting confirmation."
+      "confirmation_not_pending": "No validated change is awaiting confirmation."
     }
   },
   "entity": {
@@ -101,7 +116,7 @@
   },
   "exceptions": {
     "unsupported_device": {
-      "message": "The connected device type is not supported."
+      "message": "The connected device reports type {device_type}, which is not recognised. Choose its model in Configure."
     },
     "invalid_device_data": {
       "message": "The inverter returned invalid identity or telemetry data."
@@ -117,6 +132,21 @@
     },
     "identity_mismatch": {
       "message": "The endpoint now identifies a different inverter. Check the configured endpoint."
+    },
+    "model_mismatch": {
+      "message": "The connected device identifies as {detected_model}, not {selected_model}. Choose {detected_model} or Automatic in Configure."
+    },
+    "unknown_model": {
+      "message": "The saved model {selection} is not a known model. Choose Automatic or a listed model in Configure."
+    }
+  },
+  "selector": {
+    "model": {
+      "options": {
+        "automatic": "Automatic",
+        "hs3": "HS3",
+        "h2": "H2"
+      }
     }
   }
 }

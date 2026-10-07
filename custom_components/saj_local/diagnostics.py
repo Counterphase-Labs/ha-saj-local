@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Any
 
-from .const import DEFAULT_SCAN_INTERVAL
-from .saj.hs3 import MODE_NAMES
+from .const import CONF_MODEL, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+from .saj.telemetry import OPERATING_MODE, OPERATING_MODE_NAMES
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -15,18 +15,25 @@ async def async_get_config_entry_diagnostics(
     runtime = entry.runtime_data
     coordinator = runtime.coordinator
     data = {
-        "profile": "HS3",
+        "model_selection": entry.data[CONF_MODEL],
+        "profile": runtime.device.profile.key,
+        "profile_detected": runtime.device.detected,
+        "profile_hand_verified": runtime.device.profile.hand_verified,
         "device_type": runtime.device.device_type,
         "rated_power_w": runtime.device.rated_power,
         "poll_interval_seconds": entry.options.get(
-            "scan_interval", DEFAULT_SCAN_INTERVAL
+            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
         ),
         "enabled_sensors": sorted(coordinator.enabled_sensor_keys),
         "connected": runtime.client.is_connected(),
         "last_update_success": coordinator.last_update_success,
         "last_error": coordinator.last_error,
     }
-    mode = coordinator.data.operating_mode if coordinator.data is not None else None
-    if mode is not None and mode not in MODE_NAMES:
+    mode = (
+        coordinator.data.get(key=OPERATING_MODE)
+        if coordinator.data is not None
+        else None
+    )
+    if mode is not None and mode not in OPERATING_MODE_NAMES:
         data["unknown_operating_mode"] = mode
     return data

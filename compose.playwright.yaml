@@ -1,3 +1,20 @@
+x-modbus-mock: &modbus-mock
+  build:
+    context: ./modbus_mock
+  healthcheck:
+    test:
+      - CMD
+      - python
+      - -c
+      - >-
+        import socket;
+        connection = socket.create_connection(('127.0.0.1', 502), timeout=2);
+        connection.close()
+    interval: 2s
+    timeout: 3s
+    retries: 20
+    start_period: 5s
+
 services:
   homeassistant:
     build:
@@ -21,45 +38,14 @@ services:
       - homeassistant-config:/config
 
   modbus-mock:
-    build:
-      context: ./modbus_mock
+    <<: *modbus-mock
     volumes:
       - ./modbus_mock/scenarios/hs3-battery.yaml:/config/config.yaml:ro
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - >-
-          import socket;
-          connection = socket.create_connection(('127.0.0.1', 502), timeout=2);
-          connection.close()
-      interval: 2s
-      timeout: 3s
-      retries: 20
-      start_period: 5s
 
-  modbus-observer:
-    image: python:3.14-slim
-    command: [python, /observer/modbus_observer.py]
-    depends_on:
-      modbus-mock:
-        condition: service_healthy
+  modbus-mock-h2:
+    <<: *modbus-mock
     volumes:
-      - ./tests/playwright/modbus_observer.py:/observer/modbus_observer.py:ro
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - >-
-          import socket, urllib.request;
-          host = socket.gethostbyname(socket.gethostname());
-          urllib.request.urlopen(f'http://{host}:8000/stats', timeout=2)
-      interval: 2s
-      timeout: 3s
-      retries: 20
-      start_period: 2s
+      - ./modbus_mock/scenarios/h2-battery.yaml:/config/config.yaml:ro
 
   playwright:
     build:
@@ -70,7 +56,7 @@ services:
         condition: service_healthy
       modbus-mock:
         condition: service_healthy
-      modbus-observer:
+      modbus-mock-h2:
         condition: service_healthy
     environment:
       HOME_ASSISTANT_URL: http://homeassistant:8123

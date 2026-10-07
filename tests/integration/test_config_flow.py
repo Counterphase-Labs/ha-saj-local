@@ -12,15 +12,37 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 from custom_components.saj_local import config_flow
+from custom_components.saj_local.errors import Translation
+from custom_components.saj_local.saj import errors as saj_errors
 from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessage
-from custom_components.saj_local.saj.hs3 import (
-    Hs3Device,
-    Hs3Telemetry,
-    UnsupportedDeviceError,
-)
+from custom_components.saj_local.saj.device import Device
+from custom_components.saj_local.saj.profiles import Profile
 
-SERIAL = "HS3-TEST-001"
-INPUT = {"host": "inverter", "port": 502, "unit_id": 1, "scan_interval": 30}
+SERIAL = "TEST-001"
+REPLACEMENT_SERIAL = "TEST-REPLACEMENT"
+UNRECOGNISED_TYPE = 0x7777
+ALPHA = Profile(
+    key="alpha",
+    display_name="Alpha",
+    device_types=frozenset({0x0001}),
+    measurement_keys=frozenset(),
+    hand_verified=True,
+)
+BETA = Profile(
+    key="beta",
+    display_name="Beta",
+    device_types=frozenset({0x0002}),
+    measurement_keys=frozenset(),
+    hand_verified=False,
+)
+INPUT = {
+    "host": "inverter",
+    "port": 502,
+    "unit_id": 1,
+    "scan_interval": 30,
+    "model": "automatic",
+}
+SAVED_DATA = {"host": "inverter", "port": 502, "unit_id": 1, "model": "automatic"}
 
 
 class FlowAbortError(Exception):
@@ -99,19 +121,36 @@ class FakeConfigEntries:
         return True
 
 
-async def _identify(client) -> Hs3Device:
-    del client
-    return Hs3Device(SERIAL, 0x1610, 12000)
+def _device(
+    *,
+    serial: str = SERIAL,
+    profile: Profile = ALPHA,
+    detected: bool = True,
+    device_type: int = 0x0001,
+) -> Device:
+    return Device(serial, device_type, 12000, profile, detected=detected)
 
 
-async def _telemetry(client) -> Hs3Telemetry:
-    del client
-    return Hs3Telemetry()
+def _identifying(device: Device):
+    async def identify(client, selection):
+        del client
+        identify.selections.append(selection)
+        return device
+
+    identify.selections = []
+    return identify
 
 
-async def _identify_replacement(client) -> Hs3Device:
-    del client
-    return Hs3Device("HS3-REPLACEMENT", 0x1610, 15000)
+def _failing_identify(error: BaseException):
+    async def identify(client, selection):
+        del client, selection
+        raise error
+
+    return identify
+
+
+async def _telemetry(client, device) -> None:
+    del client, device
 
 
 @pytest.fixture(autouse=True)
@@ -122,24 +161,25 @@ def reset_flow_client_instances(monkeypatch):
     monkeypatch.setattr(
         config_flow.selector, "NumberSelectorMode", FakeNumberSelectorMode
     )
+    monkeypatch.setattr(config_flow, "PROFILES", (ALPHA, BETA))
+    monkeypatch.setattr(config_flow, "ModbusTcpClient", FlowClient)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_device()))
+    monkeypatch.setattr(config_flow, "read_telemetry", _telemetry)
+
+
+def _form(**kwargs):
+    return {"type": "form", **kwargs}
+
+
+def _abort(*, reason):
+    return {"type": "abort", "reason": reason}
 
 
 def _flow(monkeypatch, *, entries=()):
     instance = object.__new__(config_flow.SajLocalConfigFlow)
     instance.hass = SimpleNamespace(config_entries=FakeConfigEntries(entries))
-    monkeypatch.setattr(config_flow, "ModbusTcpClient", FlowClient)
-    monkeypatch.setattr(config_flow, "identify", _identify)
-    monkeypatch.setattr(config_flow, "read_telemetry", _telemetry)
-    monkeypatch.setattr(
-        instance,
-        "async_show_form",
-        lambda *, step_id, data_schema, errors: {
-            "type": "form",
-            "step_id": step_id,
-            "data_schema": data_schema,
-            "errors": errors,
-        },
-    )
+    monkeypatch.setattr(instance, "async_show_form", _form)
+    monkeypatch.setattr(instance, "async_abort", _abort)
     monkeypatch.setattr(
         instance,
         "async_set_unique_id",
@@ -163,19 +203,53 @@ async def _set_unique_id(instance, unique_id: str) -> None:
     instance.selected_unique_id = unique_id
 
 
-async def test_user_step_shows_endpoint_form_and_defaults(monkeypatch):
+def _field_names(schema) -> list[str]:
+    return [marker.schema for marker in schema.schema]
+
+
+def _marker(schema, name: str):
+    return next(marker for marker in schema.schema if marker.schema == name)
+
+
+async def test_user_step_shows_the_five_fields_with_automatic_model_default(
+    monkeypatch,
+):
     instance = _flow(monkeypatch)
 
     result = await instance.async_step_user()
 
-    assert result["type"] == "form"
     assert result["step_id"] == "user"
+    assert _field_names(result["data_schema"]) == [
+        "host",
+        "port",
+        "unit_id",
+        "scan_interval",
+        "model",
+    ]
     assert result["data_schema"]({"host": "inverter"}) == INPUT
     assert result["errors"] == {}
 
 
-async def test_user_step_validates_endpoint_and_creates_serial_identity(monkeypatch):
+async def test_model_dropdown_offers_automatic_then_every_library_profile(
+    monkeypatch,
+):
     instance = _flow(monkeypatch)
+
+    schema = (await instance.async_step_user())["data_schema"]
+    model_selector = schema.schema[_marker(schema, "model")]
+
+    assert model_selector.config["options"] == ["automatic", "alpha", "beta"]
+    assert model_selector.config["mode"] == "dropdown"
+    assert model_selector.config["translation_key"] == "model"
+
+
+@pytest.mark.parametrize(("profile", "device_type"), [(ALPHA, 0x0001), (BETA, 0x0002)])
+async def test_user_step_creates_entry_on_automatic_through_one_path(
+    monkeypatch, profile, device_type
+):
+    instance = _flow(monkeypatch)
+    identify = _identifying(_device(profile=profile, device_type=device_type))
+    monkeypatch.setattr(config_flow, "identify", identify)
     submitted = {**INPUT, "unit_id": 5.0}
 
     result = await instance.async_step_user(submitted)
@@ -183,9 +257,10 @@ async def test_user_step_validates_endpoint_and_creates_serial_identity(monkeypa
     assert result == {
         "type": "create_entry",
         "title": f"SAJ {SERIAL}",
-        "data": {"host": "inverter", "port": 502, "unit_id": 5},
+        "data": {**SAVED_DATA, "unit_id": 5},
         "options": {"scan_interval": 30},
     }
+    assert identify.selections == ["automatic"]
     assert instance.selected_unique_id == SERIAL
     assert FlowClient.instances[0].parameters == {
         "host": "inverter",
@@ -194,6 +269,20 @@ async def test_user_step_validates_endpoint_and_creates_serial_identity(monkeypa
         "timeout": config_flow.REQUEST_TIMEOUT,
     }
     assert FlowClient.instances[0].closed
+
+
+async def test_user_step_stores_explicit_selection_and_never_the_detected_model(
+    monkeypatch,
+):
+    instance = _flow(monkeypatch)
+    identify = _identifying(_device(profile=BETA, device_type=0x0002))
+    monkeypatch.setattr(config_flow, "identify", identify)
+
+    result = await instance.async_step_user({**INPUT, "model": "beta"})
+
+    assert result["data"]["model"] == "beta"
+    assert set(result["data"]) == {"host", "port", "unit_id", "model"}
+    assert identify.selections == ["beta"]
 
 
 async def test_user_step_rejects_duplicate_endpoint_before_connecting(monkeypatch):
@@ -209,20 +298,19 @@ async def test_user_step_rejects_duplicate_endpoint_before_connecting(monkeypatc
 async def test_user_step_rechecks_endpoint_after_validation_before_create(monkeypatch):
     other = SimpleNamespace(
         entry_id="entry-b",
-        unique_id="HS3-OTHER",
+        unique_id="OTHER",
         data={"host": "other", "port": 502, "unit_id": 1},
     )
     instance = _flow(monkeypatch, entries=[other])
 
-    async def identify_and_claim_endpoint(client):
-        del client
+    async def identify_and_claim_endpoint(client, selection):
+        del client, selection
         other.data = {"host": "inverter", "port": 502, "unit_id": 1}
-        return Hs3Device("HS3-DIFFERENT-SERIAL", 0x1610, 12000)
+        return _device(serial="DIFFERENT")
 
     monkeypatch.setattr(config_flow, "identify", identify_and_claim_endpoint)
     result = await instance.async_step_user(INPUT)
 
-    assert result["type"] == "form"
     assert result["errors"] == {"base": "already_configured"}
     assert FlowClient.instances[-1].closed
     assert not hasattr(instance, "selected_unique_id")
@@ -251,15 +339,9 @@ async def test_endpoint_schema_uses_box_number_selector_with_integer_range(monke
     instance = _flow(monkeypatch)
     result = await instance.async_step_user()
     schema = result["data_schema"]
-    unit_marker = next(
-        key for key in schema.schema if getattr(key, "schema", None) == "unit_id"
-    )
-    port_marker = next(
-        key for key in schema.schema if getattr(key, "schema", None) == "port"
-    )
-    interval_marker = next(
-        key for key in schema.schema if getattr(key, "schema", None) == "scan_interval"
-    )
+    unit_marker = _marker(schema, "unit_id")
+    port_marker = _marker(schema, "port")
+    interval_marker = _marker(schema, "scan_interval")
     unit_selector = schema.schema[unit_marker]
 
     assert isinstance(unit_selector, FakeNumberSelector)
@@ -301,48 +383,164 @@ async def test_user_step_aborts_duplicate_serial_after_validation(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("error", "reason"),
+    ("error", "concerns_model", "field"),
     [
-        (UnsupportedDeviceError("unsupported"), "unsupported_device"),
-        (ValueError("bad identity"), "invalid_device_data"),
-        (ModbusError("communication error"), "cannot_connect"),
-        (ModbusError("Connection timed out"), "timeout"),
-        (ModbusError("Modbus exception response", exception_code=6), "read_rejected"),
+        (saj_errors.UnsupportedDeviceError(UNRECOGNISED_TYPE), True, "model"),
+        (saj_errors.ModelMismatchError(selected=ALPHA, detected=BETA), True, "model"),
+        (saj_errors.UnknownModelError("gamma"), True, "model"),
+        (ValueError("bad identity"), False, "base"),
+        (ModbusError("communication error"), False, "base"),
     ],
 )
-async def test_user_step_reports_classified_validation_failure(
-    monkeypatch, error, reason
+async def test_user_step_attaches_translated_validation_failure_to_its_field(
+    monkeypatch, error, concerns_model, field
 ):
     instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _failing_identify(error))
 
-    async def fail_identify(client):
-        del client
-        raise error
+    def translate(error):
+        return Translation(
+            key="stubbed",
+            concerns_model=concerns_model,
+            placeholders={"detail": "value"},
+        )
 
-    monkeypatch.setattr(config_flow, "identify", fail_identify)
+    monkeypatch.setattr(config_flow, "translate_error", translate)
+
     result = await instance.async_step_user(INPUT)
 
-    assert result["errors"] == {"base": reason}
+    assert result["errors"] == {field: "stubbed"}
+    assert result["description_placeholders"] == {"detail": "value"}
+    assert FlowClient.instances[-1].closed
+    assert not hasattr(instance, "selected_unique_id")
+
+
+async def test_failed_submission_redisplays_submitted_values(monkeypatch):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _failing_identify(saj_errors.UnsupportedDeviceError(UNRECOGNISED_TYPE)),
+    )
+    submitted = {**INPUT, "host": "typed-host", "port": 1502, "model": "beta"}
+
+    result = await instance.async_step_user(submitted)
+
+    assert _marker(result["data_schema"], "host").default() == "typed-host"
+    assert _marker(result["data_schema"], "port").default() == 1502
+    assert _marker(result["data_schema"], "model").default() == "beta"
+
+
+def _assumed_device(*, serial: str = SERIAL) -> Device:
+    return _device(
+        serial=serial, profile=BETA, detected=False, device_type=UNRECOGNISED_TYPE
+    )
+
+
+async def test_assumed_profile_requires_model_confirmation_before_creating(
+    monkeypatch,
+):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
+
+    form = await instance.async_step_user({**INPUT, "model": "beta"})
+
+    assert form["step_id"] == "confirm_model"
+    assert form["description_placeholders"] == {
+        "model": "Beta",
+        "device_type": "0x7777",
+    }
+    assert not hasattr(instance, "selected_unique_id")
     assert FlowClient.instances[-1].closed
 
 
-async def test_options_step_uses_default_and_stores_interval(monkeypatch):
-    entry = _saved_entry()
-    entry.options = {}
-    instance = _options_flow(monkeypatch, entry=entry)
+async def test_confirmed_model_creates_entry_with_the_selection(monkeypatch):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
+    await instance.async_step_user({**INPUT, "model": "beta"})
 
-    form = await instance.async_step_init()
-    assert form["data_schema"]({"scan_interval": 30}) == {
-        "host": "inverter",
-        "port": 502,
-        "unit_id": 1,
-        "scan_interval": 30,
+    result = await instance.async_step_confirm_model({})
+
+    assert result == {
+        "type": "create_entry",
+        "title": f"SAJ {SERIAL}",
+        "data": {**SAVED_DATA, "model": "beta"},
+        "options": {"scan_interval": 30},
     }
-    assert await instance.async_step_init(
-        {"host": "inverter", "port": 502, "unit_id": 1, "scan_interval": 60}
-    ) == {"type": "abort", "reason": "changes_saved"}
-    assert entry.options == {"scan_interval": 60}
-    assert entry.update_count == 1
+    assert instance.selected_unique_id == SERIAL
+
+
+@pytest.mark.parametrize(
+    "error",
+    [ModbusError("Modbus exception response", exception_code=2), ValueError("x")],
+)
+async def test_assumed_profile_with_failed_reads_reports_read_error(monkeypatch, error):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
+    monkeypatch.setattr(
+        config_flow,
+        "translate_error",
+        lambda error: Translation(key=f"stubbed-{type(error).__name__}"),
+    )
+
+    async def failing_read(client, device):
+        del client, device
+        raise error
+
+    monkeypatch.setattr(config_flow, "read_telemetry", failing_read)
+    result = await instance.async_step_user({**INPUT, "model": "beta"})
+
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"base": f"stubbed-{type(error).__name__}"}
+    assert not hasattr(instance, "selected_unique_id")
+
+
+async def test_model_confirmation_without_pending_change_aborts(monkeypatch):
+    instance = _flow(monkeypatch)
+
+    assert await instance.async_step_confirm_model({}) == _abort(
+        reason="confirmation_not_pending"
+    )
+
+
+async def test_model_confirmation_prompt_repeats_pending_details(monkeypatch):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
+    await instance.async_step_user({**INPUT, "model": "beta"})
+
+    prompt = await instance.async_step_confirm_model()
+
+    assert prompt["step_id"] == "confirm_model"
+    assert prompt["description_placeholders"]["model"] == "Beta"
+    assert not hasattr(instance, "selected_unique_id")
+
+
+async def test_model_confirmation_aborts_when_endpoint_was_claimed_meanwhile(
+    monkeypatch,
+):
+    other = SimpleNamespace(
+        entry_id="entry-b", unique_id="OTHER", data={"host": "other"}
+    )
+    instance = _flow(monkeypatch, entries=[other])
+    monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
+    await instance.async_step_user({**INPUT, "model": "beta"})
+    other.data = {"host": "inverter", "port": 502, "unit_id": 1}
+
+    result = await instance.async_step_confirm_model({})
+
+    assert result == _abort(reason="already_configured")
+    assert not hasattr(instance, "selected_unique_id")
+
+
+def _saved_entry(*, entry_id="entry-a", serial=SERIAL, model="automatic"):
+    return SimpleNamespace(
+        entry_id=entry_id,
+        unique_id=serial,
+        title=f"SAJ {serial}",
+        data={**SAVED_DATA, "model": model},
+        options={"scan_interval": 45},
+        update_count=0,
+    )
 
 
 def _options_flow(monkeypatch, *, entry, entries=None):
@@ -355,60 +553,57 @@ def _options_flow(monkeypatch, *, entry, entries=None):
         "config_entry",
         property(lambda _instance: entry),
     )
-    monkeypatch.setattr(config_flow, "ModbusTcpClient", FlowClient)
-    monkeypatch.setattr(config_flow, "identify", _identify)
-    monkeypatch.setattr(config_flow, "read_telemetry", _telemetry)
-    monkeypatch.setattr(
-        instance,
-        "async_show_form",
-        lambda *, step_id, data_schema, **kwargs: {
-            "type": "form",
-            "step_id": step_id,
-            "data_schema": data_schema,
-            **kwargs,
-        },
-    )
-    monkeypatch.setattr(
-        instance, "async_abort", lambda *, reason: {"type": "abort", "reason": reason}
-    )
+    monkeypatch.setattr(instance, "async_show_form", _form)
+    monkeypatch.setattr(instance, "async_abort", _abort)
     return instance
 
 
-def _saved_entry(*, entry_id="entry-a", serial=SERIAL):
-    return SimpleNamespace(
-        entry_id=entry_id,
-        unique_id=serial,
-        title=f"SAJ {serial}",
-        data={"host": "inverter", "port": 502, "unit_id": 1},
-        options={"scan_interval": 45},
-        update_count=0,
-    )
+def _submission(**changes):
+    return {**INPUT, "scan_interval": 45, **changes}
 
 
-async def test_options_form_prefills_connection_and_cadence_as_numeric_boxes(
-    monkeypatch,
-):
-    entry = _saved_entry()
+def _unchanged(entry, *, data=None, options=None, serial=SERIAL):
+    assert entry.data == (data or SAVED_DATA)
+    assert entry.options == (options or {"scan_interval": 45})
+    assert entry.unique_id == serial
+    assert entry.update_count == 0
+
+
+async def test_options_form_prefills_the_five_fields_from_saved_state(monkeypatch):
+    entry = _saved_entry(model="beta")
     flow = _options_flow(monkeypatch, entry=entry)
 
     form = await flow.async_step_init()
-    validated = form["data_schema"](
-        {
-            "host": "inverter",
-            "port": 502,
-            "unit_id": 1,
-            "scan_interval": 45,
-        }
-    )
-    markers = {marker.schema: marker for marker in form["data_schema"].schema}
+    schema = form["data_schema"]
 
-    assert set(markers) == {"host", "port", "unit_id", "scan_interval"}
-    assert validated["scan_interval"] == 45
-    assert markers["port"].default() == 502
-    assert markers["unit_id"].default() == 1
-    assert markers["scan_interval"].default() == 45
-    assert form["data_schema"].schema[markers["unit_id"]].config["mode"] == "box"
-    assert form["data_schema"].schema[markers["scan_interval"]].config["mode"] == "box"
+    assert _field_names(schema) == [
+        "host",
+        "port",
+        "unit_id",
+        "scan_interval",
+        "model",
+    ]
+    assert _marker(schema, "port").default() == 502
+    assert _marker(schema, "unit_id").default() == 1
+    assert _marker(schema, "scan_interval").default() == 45
+    assert _marker(schema, "model").default() == "beta"
+    assert schema.schema[_marker(schema, "unit_id")].config["mode"] == "box"
+    assert schema.schema[_marker(schema, "scan_interval")].config["mode"] == "box"
+
+
+async def test_options_step_uses_default_interval_when_none_saved(monkeypatch):
+    entry = _saved_entry()
+    entry.options = {}
+    instance = _options_flow(monkeypatch, entry=entry)
+
+    form = await instance.async_step_init()
+    assert form["data_schema"]({"scan_interval": 30})["scan_interval"] == 30
+    assert _marker(form["data_schema"], "scan_interval").default() == 30
+    assert await instance.async_step_init(_submission(scan_interval=60)) == _abort(
+        reason="changes_saved"
+    )
+    assert entry.options == {"scan_interval": 60}
+    assert entry.update_count == 1
 
 
 @pytest.mark.parametrize(
@@ -429,73 +624,41 @@ async def test_options_step_rejects_invalid_numeric_fields(
 ):
     entry = _saved_entry()
     flow = _options_flow(monkeypatch, entry=entry)
-    submitted = {
-        "host": "inverter",
-        "port": 502,
-        "unit_id": 1,
-        "scan_interval": 45,
-        **changes,
-    }
 
-    result = await flow.async_step_init(submitted)
+    result = await flow.async_step_init(_submission(**changes))
 
     assert result["errors"] == {"base": reason}
-    assert entry.data == {"host": "inverter", "port": 502, "unit_id": 1}
-    assert entry.options == {"scan_interval": 45}
-    assert entry.update_count == 0
+    _unchanged(entry)
     assert FlowClient.instances == []
 
 
-async def test_interval_only_edit_validates_endpoint_before_saving(monkeypatch):
-    entry = _saved_entry()
-    original_data = dict(entry.data)
-    flow = _options_flow(monkeypatch, entry=entry)
-
-    result = await flow.async_step_init(
-        {"host": "inverter", "port": 502, "unit_id": 1, "scan_interval": 90}
-    )
-
-    assert result == {"type": "abort", "reason": "changes_saved"}
-    assert entry.data == original_data
-    assert entry.options == {"scan_interval": 90}
-    assert entry.unique_id == SERIAL
-    assert entry.update_count == 1
-    assert len(FlowClient.instances) == 1
-    assert FlowClient.instances[0].closed
-
-
-async def test_unchanged_endpoint_and_interval_validates_and_saves_once(monkeypatch):
-    entry = _saved_entry()
-    flow = _options_flow(monkeypatch, entry=entry)
-
-    result = await flow.async_step_init(
-        {"host": "inverter", "port": 502, "unit_id": 1, "scan_interval": 45}
-    )
-
-    assert result == {"type": "abort", "reason": "changes_saved"}
-    assert entry.data == {"host": "inverter", "port": 502, "unit_id": 1}
-    assert entry.options == {"scan_interval": 45}
-    assert entry.unique_id == SERIAL
-    assert entry.update_count == 1
-    assert len(FlowClient.instances) == 1
-    assert FlowClient.instances[0].closed
-
-
-async def test_connection_edit_validates_same_serial_and_keeps_entry_identity(
-    monkeypatch,
+@pytest.mark.parametrize(
+    ("changes", "expected_data", "expected_interval"),
+    [
+        ({"scan_interval": 90}, SAVED_DATA, 90),
+        ({}, SAVED_DATA, 45),
+        (
+            {"host": "new-inverter", "scan_interval": 60},
+            {**SAVED_DATA, "host": "new-inverter"},
+            60,
+        ),
+        ({"model": "alpha"}, {**SAVED_DATA, "model": "alpha"}, 45),
+    ],
+)
+async def test_validated_edit_saves_once_and_keeps_entry_identity(
+    monkeypatch, changes, expected_data, expected_interval
 ):
     entry = _saved_entry()
     flow = _options_flow(monkeypatch, entry=entry)
-    result = await flow.async_step_init(
-        {"host": "new-inverter", "port": 502, "unit_id": 1, "scan_interval": 60}
-    )
 
-    assert result == {"type": "abort", "reason": "changes_saved"}
-    assert FlowClient.instances[0].parameters["host"] == "new-inverter"
+    result = await flow.async_step_init(_submission(**changes))
+
+    assert result == _abort(reason="changes_saved")
+    assert len(FlowClient.instances) == 1
     assert FlowClient.instances[0].closed
     assert entry.entry_id == "entry-a"
-    assert entry.data == {"host": "new-inverter", "port": 502, "unit_id": 1}
-    assert entry.options == {"scan_interval": 60}
+    assert entry.data == expected_data
+    assert entry.options == {"scan_interval": expected_interval}
     assert entry.unique_id == SERIAL
     assert entry.update_count == 1
 
@@ -513,31 +676,23 @@ async def test_same_endpoint_validation_uses_session_through_client_cleanup(
 ):
     entry, session, flow = _options_flow_with_validation_session(monkeypatch)
 
-    async def identify(client):
-        del client
+    async def identify(client, selection):
+        del client, selection
         assert session.active
         session.events.append("identify")
-        return Hs3Device(SERIAL, 0x1610, 12000)
+        return _device()
 
-    async def read(client):
-        del client
+    async def read(client, device):
+        del client, device
         assert session.active
         session.events.append("telemetry")
-        return Hs3Telemetry()
 
     monkeypatch.setattr(config_flow, "identify", identify)
     monkeypatch.setattr(config_flow, "read_telemetry", read)
 
     await session.lock.acquire()
     validation = asyncio.create_task(
-        flow.async_step_init(
-            {
-                "host": "INVERTER",
-                "port": 502,
-                "unit_id": 1,
-                "scan_interval": 60,
-            }
-        )
+        flow.async_step_init(_submission(host="INVERTER", scan_interval=60))
     )
     await session.requested.wait()
     assert FlowClient.instances == []
@@ -545,7 +700,7 @@ async def test_same_endpoint_validation_uses_session_through_client_cleanup(
     session.lock.release()
     result = await validation
 
-    assert result == {"type": "abort", "reason": "changes_saved"}
+    assert result == _abort(reason="changes_saved")
     assert FlowClient.instances[-1].closed
     assert FlowClient.instances[-1].created_inside_session
     assert FlowClient.instances[-1].closed_inside_session
@@ -567,30 +722,23 @@ async def test_different_endpoint_validation_bypasses_session_while_poll_is_acti
     entry, session, flow = _options_flow_with_validation_session(monkeypatch)
     probe_started = asyncio.Event()
 
-    async def identify(client):
-        del client
+    async def identify(client, selection):
+        del client, selection
         probe_started.set()
-        return Hs3Device(SERIAL, 0x1610, 12000)
+        return _device()
 
     monkeypatch.setattr(config_flow, "identify", identify)
 
     await session.lock.acquire()
     validation = asyncio.create_task(
-        flow.async_step_init(
-            {
-                "host": "new-inverter",
-                "port": 502,
-                "unit_id": 1,
-                "scan_interval": 60,
-            }
-        )
+        flow.async_step_init(_submission(host="new-inverter", scan_interval=60))
     )
     await probe_started.wait()
     result = await validation
     assert session.lock.locked()
     session.lock.release()
 
-    assert result == {"type": "abort", "reason": "changes_saved"}
+    assert result == _abort(reason="changes_saved")
     assert FlowClient.instances[-1].closed
     assert not FlowClient.instances[-1].created_inside_session
     assert not FlowClient.instances[-1].closed_inside_session
@@ -602,139 +750,263 @@ async def test_same_endpoint_validation_without_runtime_uses_owned_client(monkey
     entry = _saved_entry()
     flow = _options_flow(monkeypatch, entry=entry)
 
-    result = await flow.async_step_init(
-        {
-            "host": "inverter",
-            "port": 502,
-            "unit_id": 1,
-            "scan_interval": 60,
-        }
-    )
+    result = await flow.async_step_init(_submission(scan_interval=60))
 
-    assert result == {"type": "abort", "reason": "changes_saved"}
+    assert result == _abort(reason="changes_saved")
     assert FlowClient.instances[-1].closed
     assert entry.update_count == 1
 
 
 @pytest.mark.parametrize(
-    ("new_host", "new_port"), [("inverter", 502), ("new-inverter", 502)]
+    ("new_profile", "new_type"),
+    [(ALPHA, 0x0001), (BETA, 0x0002)],
 )
-async def test_different_serial_requires_confirmation_before_any_saved_change(
-    monkeypatch, new_host, new_port
+@pytest.mark.parametrize("new_host", ["inverter", "new-inverter"])
+async def test_replacement_across_models_asks_confirmation_before_any_change(
+    monkeypatch, new_profile, new_type, new_host
 ):
     entry = _saved_entry()
-    original_data = dict(entry.data)
-    original_options = dict(entry.options)
     flow = _options_flow(monkeypatch, entry=entry)
-
-    monkeypatch.setattr(config_flow, "identify", _identify_replacement)
-    form = await flow.async_step_init(
-        {
-            "host": new_host,
-            "port": new_port,
-            "unit_id": 1,
-            "scan_interval": 75,
-        }
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _identifying(
+            _device(
+                serial=REPLACEMENT_SERIAL, profile=new_profile, device_type=new_type
+            )
+        ),
     )
 
+    form = await flow.async_step_init(_submission(host=new_host, scan_interval=75))
+
     assert form["step_id"] == "confirm_replacement"
-    assert form["description_placeholders"] == {"serial": "HS3-REPLACEMENT"}
-    assert entry.data == original_data
-    assert entry.options == original_options
-    assert entry.unique_id == SERIAL
-    assert entry.update_count == 0
+    assert form["description_placeholders"] == {
+        "model": new_profile.display_name,
+        "serial": REPLACEMENT_SERIAL,
+    }
+    _unchanged(entry)
     assert FlowClient.instances[-1].closed
+
+    result = await flow.async_step_confirm_replacement({})
+
+    assert result == _abort(reason="changes_saved")
+    assert entry.entry_id == "entry-a"
+    assert entry.unique_id == REPLACEMENT_SERIAL
+    assert entry.title == f"SAJ {SERIAL}"
+    assert entry.data == {**SAVED_DATA, "host": new_host}
+    assert entry.options == {"scan_interval": 75}
+    assert entry.update_count == 1
+
+
+async def test_options_unknown_model_selection_reports_error_and_keeps_saved_state(
+    monkeypatch,
+):
+    entry = _saved_entry()
+    flow = _options_flow(monkeypatch, entry=entry)
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _failing_identify(saj_errors.UnknownModelError("gamma")),
+    )
+
+    result = await flow.async_step_init(_submission(model="gamma"))
+
+    assert result["errors"] == {"model": "unknown_model"}
+    assert result["description_placeholders"] == {"selection": "gamma"}
+    _unchanged(entry)
+    assert FlowClient.instances[-1].closed
+
+
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    [
+        (
+            ModbusError(ModbusErrorMessage.EXCEPTION_RESPONSE, exception_code=2),
+            "read_rejected",
+        ),
+        (ValueError("undecodable"), "invalid_device_data"),
+    ],
+)
+async def test_options_assumed_profile_with_failed_reads_keeps_saved_state(
+    monkeypatch, error, reason
+):
+    entry = _saved_entry()
+    flow = _options_flow(monkeypatch, entry=entry)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
+
+    async def failing_read(client, device):
+        del client, device
+        raise error
+
+    monkeypatch.setattr(config_flow, "read_telemetry", failing_read)
+
+    result = await flow.async_step_init(_submission(model="beta"))
+
+    assert result["step_id"] == "init"
+    assert result["errors"] == {"base": reason}
+    _unchanged(entry)
+    assert FlowClient.instances[-1].closed
+
+
+async def test_replacement_prompt_shown_again_until_submitted(monkeypatch):
+    entry = _saved_entry()
+    flow = _options_flow(monkeypatch, entry=entry)
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _identifying(_device(serial=REPLACEMENT_SERIAL, profile=BETA)),
+    )
+    await flow.async_step_init(_submission())
+
+    prompt = await flow.async_step_confirm_replacement()
+
+    assert prompt["step_id"] == "confirm_replacement"
+    _unchanged(entry)
 
 
 async def test_duplicate_serial_is_rejected_before_replacement_confirmation(
     monkeypatch,
 ):
     entry = _saved_entry()
-    other = _saved_entry(entry_id="entry-b", serial="HS3-REPLACEMENT")
+    other = _saved_entry(entry_id="entry-b", serial=REPLACEMENT_SERIAL)
+    other.data = {**SAVED_DATA, "host": "other"}
     flow = _options_flow(monkeypatch, entry=entry, entries=[entry, other])
-    monkeypatch.setattr(config_flow, "identify", _identify_replacement)
-
-    result = await flow.async_step_init(
-        {
-            "host": "new-inverter",
-            "port": 502,
-            "unit_id": 1,
-            "scan_interval": 60,
-        }
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _identifying(_device(serial=REPLACEMENT_SERIAL)),
     )
+
+    result = await flow.async_step_init(_submission(host="new-inverter"))
 
     assert result["errors"] == {"base": "already_configured"}
-    assert entry.unique_id == SERIAL
-    assert entry.data == {"host": "inverter", "port": 502, "unit_id": 1}
-    assert entry.options == {"scan_interval": 45}
-    assert entry.update_count == 0
+    _unchanged(entry)
 
 
-async def test_confirmation_prompt_and_missing_pending_replacement(monkeypatch):
+@pytest.mark.parametrize("step", ["confirm_model", "confirm_replacement"])
+async def test_confirmation_steps_without_pending_change_abort(monkeypatch, step):
     entry = _saved_entry()
     flow = _options_flow(monkeypatch, entry=entry)
 
-    prompt = await flow.async_step_confirm_replacement()
-    aborted = await flow.async_step_confirm_replacement({})
+    result = await getattr(flow, f"async_step_{step}")({})
 
-    assert prompt["step_id"] == "confirm_replacement"
-    assert prompt["description_placeholders"] == {"serial": ""}
-    assert aborted == {"type": "abort", "reason": "replacement_not_pending"}
-    assert entry.update_count == 0
+    assert result == _abort(reason="confirmation_not_pending")
+    _unchanged(entry)
 
 
-async def test_confirmed_replacement_updates_serial_and_connection_once(monkeypatch):
+@pytest.mark.parametrize(
+    ("selection", "profile", "device_type", "reason"),
+    [
+        ("alpha", BETA, 0x0002, "model_mismatch"),
+        ("automatic", None, UNRECOGNISED_TYPE, "unsupported_device"),
+    ],
+)
+async def test_options_step_rejects_model_errors_without_saving(
+    monkeypatch, selection, profile, device_type, reason
+):
     entry = _saved_entry()
     flow = _options_flow(monkeypatch, entry=entry)
-    monkeypatch.setattr(config_flow, "identify", _identify_replacement)
-    await flow.async_step_init(
-        {
-            "host": "new-inverter",
-            "port": 1502,
-            "unit_id": 2,
-            "scan_interval": 75,
-        }
+    error = (
+        saj_errors.ModelMismatchError(selected=ALPHA, detected=profile)
+        if profile
+        else saj_errors.UnsupportedDeviceError(device_type)
+    )
+    monkeypatch.setattr(config_flow, "identify", _failing_identify(error))
+
+    result = await flow.async_step_init(_submission(model=selection))
+
+    assert result["errors"] == {"model": reason}
+    assert result["description_placeholders"]
+    assert _marker(result["data_schema"], "model").default() == selection
+    _unchanged(entry)
+    assert FlowClient.instances[-1].closed
+
+
+@pytest.mark.parametrize("serial", [SERIAL, REPLACEMENT_SERIAL])
+async def test_assumed_model_is_saved_only_after_confirmation(monkeypatch, serial):
+    entry = _saved_entry()
+    flow = _options_flow(monkeypatch, entry=entry)
+    monkeypatch.setattr(
+        config_flow, "identify", _identifying(_assumed_device(serial=serial))
     )
 
-    result = await flow.async_step_confirm_replacement({})
+    form = await flow.async_step_init(_submission(model="beta"))
 
-    assert result == {"type": "abort", "reason": "changes_saved"}
-    assert entry.entry_id == "entry-a"
-    assert entry.unique_id == "HS3-REPLACEMENT"
-    assert entry.title == f"SAJ {SERIAL}"
-    assert entry.data == {"host": "new-inverter", "port": 1502, "unit_id": 2}
-    assert entry.options == {"scan_interval": 75}
+    assert form["step_id"] == "confirm_model"
+    assert form["description_placeholders"] == {
+        "model": "Beta",
+        "device_type": "0x7777",
+    }
+    _unchanged(entry)
+    if serial != SERIAL:
+        replacement = await flow.async_step_confirm_model({})
+        assert replacement["step_id"] == "confirm_replacement"
+        _unchanged(entry)
+        result = await flow.async_step_confirm_replacement({})
+    else:
+        result = await flow.async_step_confirm_model({})
+
+    assert result == _abort(reason="changes_saved")
+    assert entry.data == {**SAVED_DATA, "model": "beta"}
+    assert entry.unique_id == serial
     assert entry.update_count == 1
 
 
+async def test_replacement_confirmation_cannot_skip_model_confirmation(monkeypatch):
+    entry = _saved_entry()
+    flow = _options_flow(monkeypatch, entry=entry)
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _identifying(_assumed_device(serial=REPLACEMENT_SERIAL)),
+    )
+    await flow.async_step_init(_submission(model="beta"))
+
+    form = await flow.async_step_confirm_replacement({})
+
+    assert form["step_id"] == "confirm_model"
+    _unchanged(entry)
+
+
+async def test_model_prompt_is_shown_again_until_submitted(monkeypatch):
+    entry = _saved_entry()
+    flow = _options_flow(monkeypatch, entry=entry)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
+    await flow.async_step_init(_submission(model="beta"))
+
+    prompt = await flow.async_step_confirm_model()
+
+    assert prompt["step_id"] == "confirm_model"
+    _unchanged(entry)
+
+
 @pytest.mark.parametrize("ownership_change", ["endpoint", "serial"])
-async def test_replacement_rechecks_other_entry_ownership_before_saving(
-    monkeypatch, ownership_change
+@pytest.mark.parametrize("confirmation", ["replacement", "model"])
+async def test_confirmation_rechecks_other_entry_ownership_before_saving(
+    monkeypatch, ownership_change, confirmation
 ):
     entry = _saved_entry()
-    other = _saved_entry(entry_id="entry-b", serial="HS3-OTHER")
+    other = _saved_entry(entry_id="entry-b", serial="OTHER")
+    other.data = {**SAVED_DATA, "host": "other"}
     flow = _options_flow(monkeypatch, entry=entry, entries=[entry, other])
-    monkeypatch.setattr(config_flow, "identify", _identify_replacement)
+    device = (
+        _device(serial=REPLACEMENT_SERIAL, profile=BETA)
+        if confirmation == "replacement"
+        else _assumed_device()
+    )
+    monkeypatch.setattr(config_flow, "identify", _identifying(device))
     await flow.async_step_init(
-        {
-            "host": "new-inverter",
-            "port": 1502,
-            "unit_id": 2,
-            "scan_interval": 75,
-        }
+        _submission(host="new-inverter", port=1502, unit_id=2, scan_interval=75)
     )
     if ownership_change == "endpoint":
-        other.data = {"host": "new-inverter", "port": 1502, "unit_id": 2}
+        other.data = {**SAVED_DATA, "host": "new-inverter", "port": 1502, "unit_id": 2}
     else:
-        other.unique_id = "HS3-REPLACEMENT"
+        other.unique_id = device.serial
 
-    result = await flow.async_step_confirm_replacement({})
+    result = await getattr(flow, f"async_step_confirm_{confirmation}")({})
 
-    assert result == {"type": "abort", "reason": "already_configured"}
-    assert entry.unique_id == SERIAL
-    assert entry.data == {"host": "inverter", "port": 502, "unit_id": 1}
-    assert entry.options == {"scan_interval": 45}
-    assert entry.update_count == 0
+    assert result == _abort(reason="already_configured")
+    _unchanged(entry)
 
 
 async def test_changed_endpoint_validation_failure_leaves_saved_state_unchanged(
@@ -742,77 +1014,62 @@ async def test_changed_endpoint_validation_failure_leaves_saved_state_unchanged(
 ):
     entry = _saved_entry()
     flow = _options_flow(monkeypatch, entry=entry)
-
-    async def reject(client):
-        del client
-        raise ModbusError(ModbusErrorMessage.CONNECTION_TIMEOUT)
-
-    monkeypatch.setattr(config_flow, "identify", reject)
-    result = await flow.async_step_init(
-        {"host": "new-inverter", "port": 502, "unit_id": 1, "scan_interval": 60}
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _failing_identify(ModbusError(ModbusErrorMessage.CONNECTION_TIMEOUT)),
     )
 
+    result = await flow.async_step_init(_submission(host="new-inverter"))
+
     assert result["errors"] == {"base": "timeout"}
-    assert entry.data == {"host": "inverter", "port": 502, "unit_id": 1}
-    assert entry.options == {"scan_interval": 45}
-    assert entry.unique_id == SERIAL
-    assert entry.update_count == 0
+    _unchanged(entry)
     assert FlowClient.instances[-1].closed
 
 
 async def test_changed_endpoint_rejects_other_entry_before_connecting(monkeypatch):
     entry = _saved_entry()
-    other = _saved_entry(entry_id="entry-b", serial="HS3-OTHER")
-    other.data = {"host": "new-inverter", "port": 502, "unit_id": 1}
+    other = _saved_entry(entry_id="entry-b", serial="OTHER")
+    other.data = {**SAVED_DATA, "host": "new-inverter"}
     flow = _options_flow(monkeypatch, entry=entry, entries=[entry, other])
 
-    result = await flow.async_step_init(
-        {"host": "new-inverter", "port": 502, "unit_id": 1, "scan_interval": 60}
-    )
+    result = await flow.async_step_init(_submission(host="new-inverter"))
 
     assert result["errors"] == {"base": "already_configured"}
     assert FlowClient.instances == []
-    assert entry.update_count == 0
+    _unchanged(entry)
 
 
 async def test_connection_edit_rechecks_endpoint_ownership_after_validation(
     monkeypatch,
 ):
     entry = _saved_entry()
-    other = _saved_entry(entry_id="entry-b", serial="HS3-OTHER")
+    other = _saved_entry(entry_id="entry-b", serial="OTHER")
+    other.data = {**SAVED_DATA, "host": "other"}
     flow = _options_flow(monkeypatch, entry=entry, entries=[entry, other])
 
-    async def identify_and_claim_endpoint(client):
-        del client
-        other.data = {"host": "new-inverter", "port": 502, "unit_id": 1}
-        return Hs3Device(SERIAL, 0x1610, 12000)
+    async def identify_and_claim_endpoint(client, selection):
+        del client, selection
+        other.data = {**SAVED_DATA, "host": "new-inverter"}
+        return _device()
 
     monkeypatch.setattr(config_flow, "identify", identify_and_claim_endpoint)
-    result = await flow.async_step_init(
-        {"host": "new-inverter", "port": 502, "unit_id": 1, "scan_interval": 60}
-    )
+    result = await flow.async_step_init(_submission(host="new-inverter"))
 
     assert result["errors"] == {"base": "already_configured"}
     assert FlowClient.instances[-1].closed
-    assert entry.data == {"host": "inverter", "port": 502, "unit_id": 1}
-    assert entry.options == {"scan_interval": 45}
-    assert entry.unique_id == SERIAL
-    assert entry.update_count == 0
+    _unchanged(entry)
 
 
 async def test_cancelled_endpoint_validation_closes_temporary_client(monkeypatch):
     entry = _saved_entry()
     flow = _options_flow(monkeypatch, entry=entry)
+    monkeypatch.setattr(
+        config_flow, "identify", _failing_identify(asyncio.CancelledError())
+    )
 
-    async def cancel(client):
-        del client
-        raise asyncio.CancelledError
-
-    monkeypatch.setattr(config_flow, "identify", cancel)
     with pytest.raises(asyncio.CancelledError):
-        await flow.async_step_init(
-            {"host": "new-inverter", "port": 502, "unit_id": 1, "scan_interval": 60}
-        )
+        await flow.async_step_init(_submission(host="new-inverter"))
     assert FlowClient.instances[-1].closed
     assert entry.update_count == 0
 

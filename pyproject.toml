@@ -117,6 +117,17 @@ source_modules = ["custom_components.saj_local.saj"]
 forbidden_modules = ["homeassistant"]
 
 [[tool.importlinter.contracts]]
+name = "Only the integration error mapping imports library errors"
+type = "forbidden"
+source_modules = ["custom_components.saj_local", "custom_components.saj_local.*"]
+forbidden_modules = ["custom_components.saj_local.saj.errors"]
+as_packages = false
+allow_indirect_imports = true
+ignore_imports = [
+    "custom_components.saj_local.errors -> custom_components.saj_local.saj.errors",
+]
+
+[[tool.importlinter.contracts]]
 name = "Modbus mock is standalone"
 type = "forbidden"
 source_modules = ["saj_modbus_mock"]

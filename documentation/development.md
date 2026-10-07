@@ -32,6 +32,16 @@ Four parts, kept apart on purpose:
 
 The import contracts under `[tool.importlinter]` in `pyproject.toml` enforce these boundaries in the lint step.
 
+### Device profiles
+
+The library holds no per-model code. A model is a `Profile` declaration in `saj/profiles.py`: its device type codes, the semantic keys it supports and whether its register contract is hand-verified. One identity reader and one telemetry reader serve every profile, and one pure function resolves the model from the reported device type and the user's selection.
+
+Keep it that way: a model that uses the same registers is a new `Profile` value and nothing else. A branch on a specific profile, in the library or in the integration, is a defect. The integration builds its Model dropdown from the library's profile list and never names a model.
+
+A recognised device type is authoritative, so no selection can make the library treat a recognised device as another model. The detected model is never stored; it is derived from the device each time, and only the user's selection is saved. Setup and Configure share one validation routine so both enforce the same outcomes.
+
+The library's model errors live in `saj/errors.py`, and an import-linter contract allows only the integration's `errors.py` to import that module. It is the single place that turns those errors into translation keys and placeholders, so a new error needs an edit there and nowhere else.
+
 ### Stable names
 
 Sensor names are a contract with every dashboard and automation a user writes. The library presents one set of names, units and formats across SAJ models, so a hardware upgrade keeps history wherever the old and new systems overlap. Map a new device onto the existing vocabulary before inventing names.
@@ -83,7 +93,7 @@ The rules are in the Non Functional section of `requirements.md`. The reasons:
 Development runs in containers so Home Assistant is a known, pinned release with a clean configuration.
 
 - [compose.yaml](../compose.yaml): the interactive environment, Home Assistant plus the simulators. The integration is mounted read-only so the container never writes into the source tree.
-- [compose.playwright.yaml](../compose.playwright.yaml): a throwaway Home Assistant and HS3 simulator for the critical setup and sensor-value browser smoke test. It shares no state with the interactive environment.
+- [compose.playwright.yaml](../compose.playwright.yaml): a throwaway Home Assistant with an HS3 simulator and an H2 simulator, for the browser smoke test that proves each endpoint can be added, loads and reports sensor values. It shares no state with the interactive environment.
 - `compose.override.yaml`: your machine's ports, time zone and scenarios. Ignored by git; `compose.override.yaml.example` shows the shape. Do not edit `compose.yaml` for local needs, because the smoke test starts it too.
 
 Under `config/`, only `configuration.yaml` is tracked. The rest is local Home Assistant state.

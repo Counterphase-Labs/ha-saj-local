@@ -12,12 +12,22 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import SajCoordinator
-from .saj.hs3 import MODE_NAMES
+from .saj.telemetry import (
+    BATTERY_POWER,
+    BATTERY_SOC,
+    GRID_POWER,
+    LOAD_POWER,
+    OPERATING_MODE,
+    OPERATING_MODE_NAMES,
+    PV_POWER,
+)
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+    from .saj.device import Device
 
 
 @dataclass(frozen=True)
@@ -28,21 +38,21 @@ class SensorDescription:
 
 
 _DESCRIPTIONS = (
-    SensorDescription(key="operating_mode", device_class=SensorDeviceClass.ENUM),
+    SensorDescription(key=OPERATING_MODE, device_class=SensorDeviceClass.ENUM),
     SensorDescription(
-        key="pv_power", device_class=SensorDeviceClass.POWER, unit=UnitOfPower.WATT
+        key=PV_POWER, device_class=SensorDeviceClass.POWER, unit=UnitOfPower.WATT
     ),
     SensorDescription(
-        key="battery_power", device_class=SensorDeviceClass.POWER, unit=UnitOfPower.WATT
+        key=BATTERY_POWER, device_class=SensorDeviceClass.POWER, unit=UnitOfPower.WATT
     ),
     SensorDescription(
-        key="battery_soc", device_class=SensorDeviceClass.BATTERY, unit=PERCENTAGE
+        key=BATTERY_SOC, device_class=SensorDeviceClass.BATTERY, unit=PERCENTAGE
     ),
     SensorDescription(
-        key="grid_power", device_class=SensorDeviceClass.POWER, unit=UnitOfPower.WATT
+        key=GRID_POWER, device_class=SensorDeviceClass.POWER, unit=UnitOfPower.WATT
     ),
     SensorDescription(
-        key="load_power", device_class=SensorDeviceClass.POWER, unit=UnitOfPower.WATT
+        key=LOAD_POWER, device_class=SensorDeviceClass.POWER, unit=UnitOfPower.WATT
     ),
 )
 
@@ -54,10 +64,17 @@ async def async_setup_entry(
 ) -> None:
     del hass
     coordinator: SajCoordinator = entry.runtime_data.coordinator
+    supported_keys = coordinator.device.profile.measurement_keys
     async_add_entities(
         SajSensor(coordinator=coordinator, description=description)
         for description in _DESCRIPTIONS
+        if description.key in supported_keys
     )
+
+
+def _model_name(*, device: Device) -> str:
+    qualifier = "" if device.detected else ", unverified"
+    return f"{device.profile.display_name} ({device.rated_power} W{qualifier})"
 
 
 class SajSensor(CoordinatorEntity[SajCoordinator], SensorEntity):
@@ -76,17 +93,17 @@ class SajSensor(CoordinatorEntity[SajCoordinator], SensorEntity):
             identifiers={(DOMAIN, coordinator.entry_id)},
             name="SAJ",
             manufacturer="SAJ",
-            model=f"HS3 ({coordinator.device.rated_power} W)",
+            model=_model_name(device=coordinator.device),
             serial_number=coordinator.device.serial,
         )
-        if description.key == "operating_mode":
-            self._attr_options = list(MODE_NAMES.values())
+        if description.key == OPERATING_MODE:
+            self._attr_options = list(OPERATING_MODE_NAMES.values())
         elif description.device_class is not None:
             self._attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
     def native_value(self) -> int | float | str | None:
-        value = getattr(self.coordinator.data, self.key)
-        if self.key == "operating_mode" and value is not None:
-            return MODE_NAMES.get(value)
+        value = self.coordinator.data.get(key=self.key)
+        if self.key == OPERATING_MODE and value is not None:
+            return OPERATING_MODE_NAMES.get(int(value))
         return value

@@ -6,9 +6,46 @@ from homeassistant.const import PERCENTAGE, UnitOfPower
 
 from custom_components.saj_local import sensor
 from custom_components.saj_local.const import DOMAIN
-from custom_components.saj_local.saj.hs3 import Hs3Device, Hs3Telemetry
+from custom_components.saj_local.saj.device import Device
+from custom_components.saj_local.saj.profiles import Profile
+from custom_components.saj_local.saj.telemetry import Telemetry
 
-DEVICE = Hs3Device("HS3-TEST-001", 0x1610, 12000)
+ALL_KEYS = frozenset(
+    {
+        "operating_mode",
+        "pv_power",
+        "battery_power",
+        "battery_soc",
+        "grid_power",
+        "load_power",
+    }
+)
+
+
+def _profile(
+    *, display_name: str = "Alpha", keys: frozenset[str] = ALL_KEYS
+) -> Profile:
+    return Profile(
+        key=display_name.lower(),
+        display_name=display_name,
+        device_types=frozenset({1}),
+        measurement_keys=keys,
+        hand_verified=True,
+    )
+
+
+def _device(profile: Profile | None = None, *, detected: bool = True) -> Device:
+    return Device(
+        serial="TEST-001",
+        device_type=1,
+        rated_power=12000,
+        profile=profile or _profile(),
+        detected=detected,
+    )
+
+
+def _telemetry(**values) -> Telemetry:
+    return Telemetry(values=values)
 
 
 @pytest.fixture(autouse=True)
@@ -21,8 +58,8 @@ def _stub_coordinator_entity_constructor(monkeypatch):
 
 
 class FakeCoordinator:
-    def __init__(self, data: Hs3Telemetry) -> None:
-        self.device = DEVICE
+    def __init__(self, data: Telemetry, device: Device | None = None) -> None:
+        self.device = device or _device()
         self.data = data
         self.entry_id = "logical-installation-123"
 
@@ -31,8 +68,30 @@ class FakeCoordinator:
         return lambda: None
 
 
+@pytest.mark.parametrize(
+    ("supported", "display_name"),
+    [
+        (ALL_KEYS, "Alpha"),
+        (frozenset({"pv_power", "battery_soc"}), "Beta"),
+        (frozenset(), "Gamma"),
+    ],
+)
+async def test_platform_creates_one_entity_per_key_supported_by_the_profile(
+    supported, display_name
+):
+    device = _device(_profile(display_name=display_name, keys=supported))
+    coordinator = FakeCoordinator(_telemetry(), device)
+    entry = SimpleNamespace(runtime_data=SimpleNamespace(coordinator=coordinator))
+    entities = []
+
+    await sensor.async_setup_entry(None, entry, entities.extend)
+
+    assert {entity.key for entity in entities} == supported
+    assert {entity.coordinator_context for entity in entities} == supported
+
+
 async def test_platform_creates_six_entities_from_entry_runtime():
-    coordinator = FakeCoordinator(Hs3Telemetry(2, 2000, -100, 50, 0, 1500))
+    coordinator = FakeCoordinator(_telemetry())
     entry = SimpleNamespace(runtime_data=SimpleNamespace(coordinator=coordinator))
     entities = []
 
@@ -53,7 +112,7 @@ async def test_platform_creates_six_entities_from_entry_runtime():
 
 
 def test_power_sensors_expose_native_power_measurements():
-    coordinator = FakeCoordinator(Hs3Telemetry(pv_power=2000, battery_power=-500))
+    coordinator = FakeCoordinator(_telemetry(pv_power=2000, battery_power=-500))
     solar = sensor.SajSensor(
         coordinator,
         sensor.SensorDescription("pv_power", SensorDeviceClass.POWER, UnitOfPower.WATT),
@@ -72,7 +131,7 @@ def test_power_sensors_expose_native_power_measurements():
 
 
 def test_battery_charge_uses_percent_and_battery_class():
-    coordinator = FakeCoordinator(Hs3Telemetry(battery_soc=84.25))
+    coordinator = FakeCoordinator(_telemetry(battery_soc=84.25))
     entity = sensor.SajSensor(
         coordinator,
         sensor.SensorDescription("battery_soc", SensorDeviceClass.BATTERY, PERCENTAGE),
@@ -84,7 +143,7 @@ def test_battery_charge_uses_percent_and_battery_class():
 
 
 def test_operating_mode_is_an_enum_with_translated_state_key():
-    coordinator = FakeCoordinator(Hs3Telemetry(operating_mode=2))
+    coordinator = FakeCoordinator(_telemetry(operating_mode=2))
     entity = sensor.SajSensor(
         coordinator, sensor.SensorDescription("operating_mode", SensorDeviceClass.ENUM)
     )
@@ -96,7 +155,7 @@ def test_operating_mode_is_an_enum_with_translated_state_key():
 
 
 def test_unknown_mode_has_unknown_sensor_state_and_stable_device_identity():
-    coordinator = FakeCoordinator(Hs3Telemetry(operating_mode=27))
+    coordinator = FakeCoordinator(_telemetry(operating_mode=27))
     entity = sensor.SajSensor(
         coordinator, sensor.SensorDescription("operating_mode", SensorDeviceClass.ENUM)
     )
@@ -107,12 +166,52 @@ def test_unknown_mode_has_unknown_sensor_state_and_stable_device_identity():
         (DOMAIN, "logical-installation-123")
     }
     assert entity._attr_device_info["name"] == "SAJ"
-    assert entity._attr_device_info["model"] == "HS3 (12000 W)"
+    assert entity._attr_device_info["model"] == "Alpha (12000 W)"
+    assert entity._attr_device_info["serial_number"] == "TEST-001"
 
 
 def test_non_measurement_description_has_no_state_class():
     entity = sensor.SajSensor(
-        FakeCoordinator(Hs3Telemetry()), sensor.SensorDescription("custom")
+        FakeCoordinator(_telemetry()), sensor.SensorDescription("custom")
     )
 
     assert not hasattr(entity, "_attr_state_class")
+
+
+@pytest.mark.parametrize(
+    ("display_name", "detected", "expected"),
+    [
+        ("Alpha", True, "Alpha (12000 W)"),
+        ("Beta", True, "Beta (12000 W)"),
+        ("Beta", False, "Beta (12000 W, unverified)"),
+    ],
+)
+def test_device_model_names_the_effective_profile_and_whether_it_was_detected(
+    display_name, detected, expected
+):
+    device = _device(_profile(display_name=display_name), detected=detected)
+    entity = sensor.SajSensor(
+        FakeCoordinator(_telemetry(), device),
+        sensor.SensorDescription("pv_power", SensorDeviceClass.POWER, UnitOfPower.WATT),
+    )
+
+    assert entity._attr_device_info["model"] == expected
+
+
+def test_unique_ids_and_device_identity_are_independent_of_the_profile():
+    description = sensor.SensorDescription(
+        "pv_power", SensorDeviceClass.POWER, UnitOfPower.WATT
+    )
+    entities = [
+        sensor.SajSensor(
+            FakeCoordinator(_telemetry(), _device(_profile(display_name=name))),
+            description,
+        )
+        for name in ("Alpha", "Beta")
+    ]
+
+    assert len({entity._attr_unique_id for entity in entities}) == 1
+    assert (
+        len({frozenset(entity._attr_device_info["identifiers"]) for entity in entities})
+        == 1
+    )

@@ -9,33 +9,30 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, SENSOR_KEYS
-from .saj.client import ModbusError, ModbusErrorMessage, ModbusTcpClient
-from .saj.hs3 import (
-    Hs3Device,
-    Hs3Telemetry,
-    UnsupportedDeviceError,
-    identify,
-    read_telemetry,
-)
+from .const import CONF_MODEL, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .errors import HANDLED_ERRORS, has_safe_message, translate_error
+from .saj.client import ModbusError, ModbusTcpClient
+from .saj.device import Device, identify
+from .saj.telemetry import Telemetry, read_telemetry
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class SajCoordinator(DataUpdateCoordinator[Hs3Telemetry]):
+class SajCoordinator(DataUpdateCoordinator[Telemetry]):
     def __init__(
         self,
         hass: HomeAssistant,
         client: ModbusTcpClient,
-        device: Hs3Device,
-        entry_id: str,
-        interval: int = DEFAULT_SCAN_INTERVAL,
+        device: Device,
+        entry: ConfigEntry,
     ) -> None:
+        interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         super().__init__(
             hass=hass,
             logger=_LOGGER,
@@ -44,8 +41,9 @@ class SajCoordinator(DataUpdateCoordinator[Hs3Telemetry]):
         )
         self.client = client
         self.device = device
+        self.model_selection = entry.data[CONF_MODEL]
         self.interval = interval
-        self.entry_id = entry_id
+        self.entry_id = entry.entry_id
         self.last_error: dict[str, int | str | None] | None = None
         self._cycle_lock = asyncio.Lock()
         self._initial_refresh = True
@@ -56,7 +54,7 @@ class SajCoordinator(DataUpdateCoordinator[Hs3Telemetry]):
         async with self._cycle_lock:
             yield
 
-    async def _async_update_data(self) -> Hs3Telemetry:
+    async def _async_update_data(self) -> Telemetry:
         async with self._cycle_lock:
             self._update_task = asyncio.current_task()
             try:
@@ -64,24 +62,22 @@ class SajCoordinator(DataUpdateCoordinator[Hs3Telemetry]):
                     if not self.client.is_connected():
                         await self.client.close()
                         await self.client.connect()
-                        current = await identify(client=self.client)
+                        current = await identify(
+                            client=self.client, selection=self.model_selection
+                        )
                         if current.serial != self.device.serial:
                             _raise_identity_changed()
                     enabled = self._enabled_keys()
-                    snapshot = await read_telemetry(client=self.client, enabled=enabled)
-                except (
-                    ModbusError,
-                    IdentityChangedError,
-                    TimeoutError,
-                    OSError,
-                    ValueError,
-                    UnsupportedDeviceError,
-                ) as err:
+                    snapshot = await read_telemetry(
+                        client=self.client, device=self.device, enabled=enabled
+                    )
+                except UPDATE_ERRORS as err:
                     await self.client.close()
                     error = {
                         "type": type(err).__name__,
                         "reason": str(err)
-                        if isinstance(err, ModbusError | IdentityChangedError)
+                        if isinstance(err, IdentityChangedError)
+                        or has_safe_message(error=err)
                         else "Device read failed",
                         "exception_code": err.exception_code
                         if isinstance(err, ModbusError)
@@ -113,7 +109,7 @@ class SajCoordinator(DataUpdateCoordinator[Hs3Telemetry]):
 
     def _enabled_keys(self) -> set[str]:
         if self._initial_refresh:
-            return set(SENSOR_KEYS)
+            return set(self.device.profile.measurement_keys)
         return {str(context) for context in self.async_contexts()}
 
     @property
@@ -131,27 +127,22 @@ class IdentityChangedError(Exception):
         super().__init__(message)
 
 
+UPDATE_ERRORS: tuple[type[Exception], ...] = (
+    *HANDLED_ERRORS,
+    IdentityChangedError,
+    TimeoutError,
+    OSError,
+)
+
+
 def _raise_update_failed(error: Exception) -> NoReturn:
-    if isinstance(error, TimeoutError) or (
-        isinstance(error, ModbusError)
-        and str(error)
-        in {
-            ModbusErrorMessage.CONNECTION_TIMEOUT,
-            ModbusErrorMessage.REQUEST_TIMEOUT,
-        }
-    ):
-        key = "timeout"
-    elif isinstance(error, ModbusError) and error.exception_code is not None:
-        key = "read_rejected"
-    elif isinstance(error, UnsupportedDeviceError):
-        key = "unsupported_device"
-    elif isinstance(error, IdentityChangedError):
-        key = "identity_mismatch"
-    elif isinstance(error, ValueError):
-        key = "invalid_device_data"
-    else:
-        key = "cannot_connect"
+    if isinstance(error, IdentityChangedError):
+        raise UpdateFailed(
+            translation_domain=DOMAIN, translation_key="identity_mismatch"
+        ) from error
+    translation = translate_error(error=error)
     raise UpdateFailed(
         translation_domain=DOMAIN,
-        translation_key=key,
+        translation_key=translation.key,
+        translation_placeholders=translation.placeholders,
     ) from error

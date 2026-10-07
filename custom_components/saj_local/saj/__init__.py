@@ -1,11 +1,19 @@
 from .client import ModbusError, ModbusTcpClient
-from .hs3 import Hs3Device, Hs3Telemetry, UnsupportedDeviceError, decode_hs3
+from .device import Device, identify
+from .device_type import format_device_type
+from .profiles import AUTOMATIC, PROFILES, Profile, resolve_profile
+from .telemetry import Telemetry, read_telemetry
 
 __all__ = [
-    "Hs3Device",
-    "Hs3Telemetry",
+    "AUTOMATIC",
+    "PROFILES",
+    "Device",
     "ModbusError",
     "ModbusTcpClient",
-    "UnsupportedDeviceError",
-    "decode_hs3",
+    "Profile",
+    "Telemetry",
+    "format_device_type",
+    "identify",
+    "read_telemetry",
+    "resolve_profile",
 ]
