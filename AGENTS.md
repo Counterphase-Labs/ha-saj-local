@@ -24,9 +24,17 @@ If discussing project requirements, design decisions and similar, what is curren
 
 .github/work/requirements.md is the authoritative source for project requirements. If a plan would deviate from these requirements to be more robust or better suited at the goals, it must be flagged to the user for approval.
 
-## Reporting Problems And Requesting Decisions
+Similarly, anything within modbus_mock is not authoritative and must not dictate project requirements or design decisions related to modbus.
 
-When reporting a problem or asking the user to make a decision, use this format for each problem, in this order and with nothing else:
+`modbus_mock` on the other hand, must not be designed around the integration. It must be built firmly around documented SAJ controller behaviour and specifications.
+
+## Feedback
+
+If the user asks for feedback on an implementation, fully understand the requirements and associate plan. Critically evaluate the implementation against the requirements and provide clear, concise, and actionable feedback.
+
+## Requesting Decisions
+
+When asking the user to make a decision, use this format for each problem, in this order and with nothing else:
 
 1. **Problem statement:** State what is wrong in one or two sentences, with the governing requirement and the code reference.
 2. **Options:** Use a Markdown table with exactly these columns: `Option`, `Pros`, and `Cons`. Name each option and state what it changes in the `Option` column. Put each pro and each con on its own table row; repeat the option name when an option has more than one pro or con. Give at least two distinct, substantive options, with brief table cells. Keep requirement and code references in the problem statement, outside the table. Include leaving the behaviour alone only when it is viable.
@@ -34,6 +42,7 @@ When reporting a problem or asking the user to make a decision, use this format 
 
 Rules:
 
+- If the requirements and / or plan is clear on direction, do not offer a decision between following the plan or not following the plan. Material problems with the plan should be bought up for discussion explicitly.
 - State plainly whether something is broken, working or unknown. Do not make the user infer a verdict from evidence.
 - Do not report behaviour that is working as required unless the user asked about it, and then answer in one line.
 - Do not include diagnostic evidence, tool output, file dumps or narration of the investigation. Cite the requirement and the code reference that support the conclusion.
