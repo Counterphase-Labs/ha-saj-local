@@ -62,6 +62,9 @@ class FakeCoordinator:
         self.device = device or _device()
         self.data = data
         self.entry_id = "logical-installation-123"
+        self.last_update_success = True
+        self.unavailable_keys = frozenset()
+        self.last_read = frozenset()
 
     def async_add_listener(self, _listener, context=None):
         del context
@@ -215,3 +218,95 @@ def test_unique_ids_and_device_identity_are_independent_of_the_profile():
         len({frozenset(entity._attr_device_info["identifiers"]) for entity in entities})
         == 1
     )
+
+
+@pytest.fixture
+def writes(monkeypatch):
+    recorded = []
+    monkeypatch.setattr(
+        sensor.SajSensor,
+        "async_write_ha_state",
+        lambda self: recorded.append(self.key),
+    )
+    return recorded
+
+
+def _entity(coordinator, key="pv_power"):
+    return sensor.SajSensor(coordinator, sensor.SensorDescription(key))
+
+
+@pytest.mark.parametrize(
+    ("installation_up", "unavailable", "expected"),
+    [
+        (True, frozenset(), True),
+        (True, frozenset({"grid_power"}), True),
+        (True, frozenset({"pv_power"}), False),
+        (False, frozenset(), False),
+        (False, frozenset({"pv_power"}), False),
+    ],
+)
+def test_availability_combines_the_installation_and_the_sensor_itself(
+    *, installation_up, unavailable, expected
+):
+    coordinator = FakeCoordinator(_telemetry())
+    coordinator.last_update_success = installation_up
+    coordinator.unavailable_keys = unavailable
+
+    assert _entity(coordinator).available is expected
+
+
+def test_a_sensor_writes_its_state_in_a_cycle_that_read_it(writes):
+    coordinator = FakeCoordinator(_telemetry(pv_power=1))
+    coordinator.last_read = frozenset({"pv_power"})
+    entity = _entity(coordinator)
+
+    entity._handle_coordinator_update()
+
+    assert writes == ["pv_power"]
+
+
+async def test_a_sensor_not_read_keeps_its_state_while_availability_is_unchanged(
+    writes,
+):
+    coordinator = FakeCoordinator(_telemetry(pv_power=1))
+    entity = _entity(coordinator)
+    await entity.async_added_to_hass()
+    coordinator.last_read = frozenset({"grid_power"})
+
+    entity._handle_coordinator_update()
+    entity._handle_coordinator_update()
+
+    assert writes == []
+
+
+async def test_a_sensor_not_read_writes_once_per_availability_change(writes):
+    coordinator = FakeCoordinator(_telemetry(pv_power=1))
+    entity = _entity(coordinator)
+    await entity.async_added_to_hass()
+
+    coordinator.last_update_success = False
+    entity._handle_coordinator_update()
+    entity._handle_coordinator_update()
+    coordinator.last_update_success = True
+    entity._handle_coordinator_update()
+    coordinator.unavailable_keys = frozenset({"pv_power"})
+    entity._handle_coordinator_update()
+    coordinator.unavailable_keys = frozenset()
+    entity._handle_coordinator_update()
+    entity._handle_coordinator_update()
+
+    assert writes == ["pv_power"] * 4
+
+
+async def test_the_platform_adds_entities_without_attaching_them_to_a_subentry():
+    coordinator = FakeCoordinator(_telemetry())
+    entry = SimpleNamespace(runtime_data=SimpleNamespace(coordinator=coordinator))
+    calls = []
+
+    def add_entities(entities, *args, **kwargs):
+        calls.append((list(entities), args, kwargs))
+
+    await sensor.async_setup_entry(None, entry, add_entities)
+
+    assert len(calls) == 1
+    assert calls[0][1:] == ((), {})

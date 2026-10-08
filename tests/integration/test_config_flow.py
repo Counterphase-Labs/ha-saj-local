@@ -17,6 +17,7 @@ from custom_components.saj_local.saj import errors as saj_errors
 from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessage
 from custom_components.saj_local.saj.device import Device
 from custom_components.saj_local.saj.profiles import Profile
+from custom_components.saj_local.saj.telemetry import Readout
 
 SERIAL = "TEST-001"
 REPLACEMENT_SERIAL = "TEST-REPLACEMENT"
@@ -49,8 +50,17 @@ class FlowAbortError(Exception):
     pass
 
 
+class InstallationClient:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
 class FakeValidationSession:
     def __init__(self) -> None:
+        self.client = InstallationClient()
         self.lock = asyncio.Lock()
         self.requested = asyncio.Event()
         self.active = False
@@ -63,12 +73,12 @@ class FakeValidationSession:
         return self._session()
 
     @asynccontextmanager
-    async def _session(self) -> AsyncIterator[None]:
+    async def _session(self) -> AsyncIterator[InstallationClient]:
         await self.lock.acquire()
         self.active = True
         self.events.append("session_enter")
         try:
-            yield
+            yield self.client
         finally:
             self.events.append("session_exit")
             self.active = False
@@ -149,8 +159,9 @@ def _failing_identify(error: BaseException):
     return identify
 
 
-async def _telemetry(client, device) -> None:
+async def _telemetry(client, device) -> Readout:
     del client, device
+    return Readout(values={}, refusals={})
 
 
 @pytest.fixture(autouse=True)
@@ -177,7 +188,7 @@ def _abort(*, reason):
 
 def _flow(monkeypatch, *, entries=()):
     instance = object.__new__(config_flow.SajLocalConfigFlow)
-    instance.hass = SimpleNamespace(config_entries=FakeConfigEntries(entries))
+    instance.hass = SimpleNamespace(config_entries=FakeConfigEntries(entries), data={})
     monkeypatch.setattr(instance, "async_show_form", _form)
     monkeypatch.setattr(instance, "async_abort", _abort)
     monkeypatch.setattr(
@@ -226,7 +237,10 @@ async def test_user_step_shows_the_five_fields_with_automatic_model_default(
         "scan_interval",
         "model",
     ]
-    assert result["data_schema"]({"host": "inverter"}) == INPUT
+    assert result["data_schema"]({"host": "inverter"}) == {
+        **INPUT,
+        "scan_interval": 60,
+    }
     assert result["errors"] == {}
 
 
@@ -262,12 +276,17 @@ async def test_user_step_creates_entry_on_automatic_through_one_path(
     }
     assert identify.selections == ["automatic"]
     assert instance.selected_unique_id == SERIAL
-    assert FlowClient.instances[0].parameters == {
+    parameters = dict(FlowClient.instances[0].parameters)
+    environment = parameters.pop("environment")
+    assert parameters == {
         "host": "inverter",
         "port": 502,
         "unit_id": 5,
         "timeout": config_flow.REQUEST_TIMEOUT,
     }
+    assert (
+        environment.budget is instance.hass.data["saj_local"][("inverter", 502)].budget
+    )
     assert FlowClient.instances[0].closed
 
 
@@ -358,7 +377,7 @@ async def test_endpoint_schema_uses_box_number_selector_with_integer_range(monke
         "max": 65535,
     }
     assert schema.schema[interval_marker].config == {
-        "min": 30,
+        "min": 10,
         "step": 1,
         "mode": "box",
     }
@@ -546,7 +565,8 @@ def _saved_entry(*, entry_id="entry-a", serial=SERIAL, model="automatic"):
 def _options_flow(monkeypatch, *, entry, entries=None):
     instance = object.__new__(config_flow.SajOptionsFlow)
     instance.hass = SimpleNamespace(
-        config_entries=FakeConfigEntries(entries if entries is not None else [entry])
+        config_entries=FakeConfigEntries(entries if entries is not None else [entry]),
+        data={},
     )
     monkeypatch.setattr(
         config_flow.SajOptionsFlow,
@@ -598,7 +618,7 @@ async def test_options_step_uses_default_interval_when_none_saved(monkeypatch):
 
     form = await instance.async_step_init()
     assert form["data_schema"]({"scan_interval": 30})["scan_interval"] == 30
-    assert _marker(form["data_schema"], "scan_interval").default() == 30
+    assert _marker(form["data_schema"], "scan_interval").default() == 60
     assert await instance.async_step_init(_submission(scan_interval=60)) == _abort(
         reason="changes_saved"
     )
@@ -616,7 +636,7 @@ async def test_options_step_uses_default_interval_when_none_saved(monkeypatch):
         ({"unit_id": 1.5}, "invalid_unit_id"),
         ({"scan_interval": "invalid"}, "invalid_scan_interval"),
         ({"scan_interval": 30.5}, "invalid_scan_interval"),
-        ({"scan_interval": 29}, "invalid_scan_interval"),
+        ({"scan_interval": 9}, "invalid_scan_interval"),
     ],
 )
 async def test_options_step_rejects_invalid_numeric_fields(
@@ -671,21 +691,24 @@ def _options_flow_with_validation_session(monkeypatch):
     return entry, session, _options_flow(monkeypatch, entry=entry)
 
 
-async def test_same_endpoint_validation_uses_session_through_client_cleanup(
+async def test_same_endpoint_validation_probes_over_the_installation_client(
     monkeypatch,
 ):
     entry, session, flow = _options_flow_with_validation_session(monkeypatch)
 
     async def identify(client, selection):
-        del client, selection
+        del selection
+        assert client is session.client
         assert session.active
         session.events.append("identify")
         return _device()
 
     async def read(client, device):
-        del client, device
+        del device
+        assert client is session.client
         assert session.active
         session.events.append("telemetry")
+        return Readout(values={}, refusals={})
 
     monkeypatch.setattr(config_flow, "identify", identify)
     monkeypatch.setattr(config_flow, "read_telemetry", read)
@@ -695,25 +718,38 @@ async def test_same_endpoint_validation_uses_session_through_client_cleanup(
         flow.async_step_init(_submission(host="INVERTER", scan_interval=60))
     )
     await session.requested.wait()
-    assert FlowClient.instances == []
     assert not session.active
     session.lock.release()
     result = await validation
 
     assert result == _abort(reason="changes_saved")
-    assert FlowClient.instances[-1].closed
-    assert FlowClient.instances[-1].created_inside_session
-    assert FlowClient.instances[-1].closed_inside_session
+    assert FlowClient.instances == []
+    assert not session.client.closed
     assert session.events == [
         "session_enter",
-        "client_create",
         "identify",
         "telemetry",
-        "client_close",
         "session_exit",
     ]
-    assert not session.active
     assert entry.update_count == 1
+
+
+async def test_refused_required_register_fails_validation_without_saving(
+    monkeypatch,
+):
+    entry, session, flow = _options_flow_with_validation_session(monkeypatch)
+
+    async def refused(client, device):
+        del client, device
+        return Readout(values={}, refusals={"pv_power": 2})
+
+    monkeypatch.setattr(config_flow, "read_telemetry", refused)
+
+    result = await flow.async_step_init(_submission(scan_interval=60))
+
+    assert result["errors"] == {"base": "read_rejected"}
+    _unchanged(entry)
+    assert not session.client.closed
 
 
 async def test_different_endpoint_validation_bypasses_session_while_poll_is_active(
@@ -1079,3 +1115,516 @@ def test_options_flow_factory_returns_integration_flow():
         config_flow.SajLocalConfigFlow.async_get_options_flow(None),
         config_flow.SajOptionsFlow,
     )
+
+
+@pytest.mark.parametrize(
+    ("interval", "accepted"),
+    [(9, False), (9.5, False), (10, True), (10.5, False), (60, True)],
+)
+async def test_user_step_enforces_the_shared_minimum_interval(
+    monkeypatch, interval, *, accepted
+):
+    instance = _flow(monkeypatch)
+
+    result = await instance.async_step_user({**INPUT, "scan_interval": interval})
+
+    if accepted:
+        assert result["options"] == {"scan_interval": interval}
+    else:
+        assert result["errors"] == {"base": "invalid_scan_interval"}
+        assert FlowClient.instances == []
+
+
+ENTRY_ID = "entry-a"
+
+
+def _registered(key, *, name=None, original_name="Original", domain="sensor"):
+    return SimpleNamespace(
+        unique_id=f"{ENTRY_ID}_{key}",
+        domain=domain,
+        name=name,
+        original_name=original_name,
+    )
+
+
+REGISTERED = [
+    _registered("pv_power", original_name="Solar power"),
+    _registered("grid_power", original_name="Grid power"),
+    _registered("battery_soc", name="My battery", original_name="Battery charge"),
+]
+
+
+def _group(subentry_id, keys, *, interval=10, title="Group"):
+    return SimpleNamespace(
+        subentry_id=subentry_id,
+        subentry_type="polling_group",
+        title=title,
+        data={"scan_interval": interval, "sensors": list(keys)},
+    )
+
+
+def _group_flow(monkeypatch, *, subentries=(), registered=REGISTERED, editing=None):
+    entry = SimpleNamespace(
+        entry_id=ENTRY_ID,
+        subentries={subentry.subentry_id: subentry for subentry in subentries},
+    )
+    flow = object.__new__(config_flow.SajPollingGroupFlow)
+    flow.updates = []
+    flow.hass = SimpleNamespace(
+        config_entries=SimpleNamespace(
+            async_get_known_entry=lambda _entry_id: entry,
+            async_update_subentry=lambda **changes: flow.updates.append(changes),
+        )
+    )
+    flow.handler = (ENTRY_ID, "polling_group")
+    flow.context = {"source": "user"}
+    if editing is not None:
+        flow.context = {"source": "reconfigure", "subentry_id": editing}
+    flow.registered = list(registered)
+    monkeypatch.setattr(config_flow.er, "async_get", lambda _hass: "registry")
+    monkeypatch.setattr(
+        config_flow.er,
+        "async_entries_for_config_entry",
+        lambda registry, entry_id: (
+            flow.registered if (registry, entry_id) == ("registry", ENTRY_ID) else []
+        ),
+    )
+    monkeypatch.setattr(flow, "async_show_form", _form)
+    monkeypatch.setattr(flow, "async_abort", _abort)
+    monkeypatch.setattr(
+        flow,
+        "async_create_entry",
+        lambda *, title, data: {"type": "create_entry", "title": title, "data": data},
+    )
+    return flow, entry
+
+
+def _offered(form):
+    schema = form["data_schema"]
+    selector = schema.schema[_marker(schema, "sensors")]
+    return {option["value"]: option["label"] for option in selector.config["options"]}
+
+
+def _group_input(**changes):
+    return {
+        "name": "Power",
+        "scan_interval": 10,
+        "sensors": ["pv_power"],
+        **changes,
+    }
+
+
+async def test_the_polling_group_type_is_declared_by_the_config_flow():
+    types = config_flow.SajLocalConfigFlow.async_get_supported_subentry_types(None)
+
+    assert types == {"polling_group": config_flow.SajPollingGroupFlow}
+
+
+async def test_add_and_edit_show_the_same_three_field_form(monkeypatch):
+    add, _ = _group_flow(monkeypatch)
+    edit, _ = _group_flow(
+        monkeypatch, subentries=[_group("g1", ["pv_power"])], editing="g1"
+    )
+
+    added = await add.async_step_user()
+    edited = await edit.async_step_reconfigure()
+
+    assert _field_names(added["data_schema"]) == ["name", "scan_interval", "sensors"]
+    assert _field_names(edited["data_schema"]) == _field_names(added["data_schema"])
+    assert added["step_id"] == "user"
+    assert edited["step_id"] == "reconfigure"
+    assert added["errors"] == edited["errors"] == {}
+
+
+async def test_a_new_group_starts_at_the_shortest_interval_with_nothing_selected(
+    monkeypatch,
+):
+    flow, _ = _group_flow(monkeypatch)
+
+    schema = (await flow.async_step_user())["data_schema"]
+
+    assert _marker(schema, "scan_interval").default() == config_flow.MIN_INTERVAL
+    assert _marker(schema, "sensors").default() == []
+
+
+async def test_the_form_requires_a_name_and_trims_it(monkeypatch):
+    flow, _ = _group_flow(monkeypatch)
+    schema = (await flow.async_step_user())["data_schema"]
+
+    assert schema(_group_input(name="  Power  "))["name"] == "Power"
+    with pytest.raises(config_flow.vol.Invalid):
+        schema(_group_input(name="   "))
+    with pytest.raises(config_flow.vol.Invalid):
+        schema({"scan_interval": 10, "sensors": []})
+
+
+async def test_a_valid_submission_adds_a_group_titled_by_its_name(monkeypatch):
+    flow, _ = _group_flow(monkeypatch)
+
+    result = await flow.async_step_user(
+        _group_input(scan_interval=15.0, sensors=["pv_power", "grid_power"])
+    )
+
+    assert result == {
+        "type": "create_entry",
+        "title": "Power",
+        "data": {"scan_interval": 15, "sensors": ["pv_power", "grid_power"]},
+    }
+    assert type(result["data"]["scan_interval"]) is int
+    assert flow.updates == []
+
+
+async def test_a_valid_edit_updates_the_group_in_place_without_a_flow_reload(
+    monkeypatch,
+):
+    group = _group("g1", ["pv_power"], title="Old")
+    flow, entry = _group_flow(monkeypatch, subentries=[group], editing="g1")
+
+    result = await flow.async_step_reconfigure(
+        _group_input(name="New", scan_interval=30, sensors=["grid_power"])
+    )
+
+    assert result == _abort(reason="reconfigure_successful")
+    assert len(flow.updates) == 1
+    update = flow.updates[0]
+    assert update["entry"] is entry
+    assert update["subentry"] is group
+    assert update["title"] == "New"
+    assert update["data"] == {"scan_interval": 30, "sensors": ["grid_power"]}
+
+
+@pytest.mark.parametrize("interval", [9, 0, 12.5, "fast", None])
+@pytest.mark.parametrize("editing", [False, True])
+async def test_an_invalid_interval_is_reported_on_its_field_and_nothing_is_saved(
+    monkeypatch, interval, *, editing
+):
+    group = _group("g1", ["grid_power"])
+    flow, _ = _group_flow(
+        monkeypatch,
+        subentries=[group],
+        editing="g1" if editing else None,
+    )
+    step = flow.async_step_reconfigure if editing else flow.async_step_user
+
+    result = await step(_group_input(scan_interval=interval))
+
+    assert result["type"] == "form"
+    assert result["errors"] == {"scan_interval": "invalid_scan_interval"}
+    assert flow.updates == []
+
+
+async def test_a_submission_without_sensors_is_reported_on_the_sensors_field(
+    monkeypatch,
+):
+    flow, _ = _group_flow(monkeypatch)
+
+    result = await flow.async_step_user(_group_input(sensors=[]))
+
+    assert result["errors"] == {"sensors": "no_sensors_selected"}
+
+
+async def test_a_sensor_owned_by_another_group_is_rejected_on_the_sensors_field(
+    monkeypatch,
+):
+    other = _group("g2", ["pv_power"])
+    flow, _ = _group_flow(monkeypatch, subentries=[other])
+
+    result = await flow.async_step_user(
+        _group_input(sensors=["pv_power", "grid_power"])
+    )
+
+    assert result["errors"] == {"sensors": "sensor_in_other_group"}
+
+
+async def test_every_error_is_reported_together_and_the_submission_is_redisplayed(
+    monkeypatch,
+):
+    flow, _ = _group_flow(monkeypatch)
+
+    result = await flow.async_step_user(
+        _group_input(name="Mine", scan_interval=3, sensors=[])
+    )
+
+    assert result["errors"] == {
+        "scan_interval": "invalid_scan_interval",
+        "sensors": "no_sensors_selected",
+    }
+    schema = result["data_schema"]
+    assert _marker(schema, "name").default() == "Mine"
+    assert _marker(schema, "scan_interval").default() == 3
+
+
+@pytest.mark.parametrize("editing", [False, True])
+async def test_an_installation_without_sensors_cannot_have_groups(
+    monkeypatch, *, editing
+):
+    group = _group("g1", [])
+    flow, _ = _group_flow(
+        monkeypatch,
+        subentries=[group],
+        registered=[],
+        editing="g1" if editing else None,
+    )
+    step = flow.async_step_reconfigure if editing else flow.async_step_user
+
+    assert await step() == _abort(reason="no_sensors")
+
+
+async def test_adding_with_every_sensor_already_grouped_is_aborted_with_a_reason(
+    monkeypatch,
+):
+    groups = [
+        _group("g1", ["pv_power", "grid_power"]),
+        _group("g2", ["battery_soc"]),
+    ]
+    flow, _ = _group_flow(monkeypatch, subentries=groups)
+
+    assert await flow.async_step_user() == _abort(reason="all_sensors_assigned")
+
+
+async def test_editing_a_group_that_holds_every_sensor_still_shows_the_form(
+    monkeypatch,
+):
+    group = _group("g1", ["pv_power", "grid_power", "battery_soc"])
+    flow, _ = _group_flow(monkeypatch, subentries=[group], editing="g1")
+
+    form = await flow.async_step_reconfigure()
+
+    assert set(_offered(form)) == {"pv_power", "grid_power", "battery_soc"}
+    assert _marker(form["data_schema"], "sensors").default() == [
+        "pv_power",
+        "grid_power",
+        "battery_soc",
+    ]
+    assert _marker(form["data_schema"], "name").default() == "Group"
+    assert _marker(form["data_schema"], "scan_interval").default() == 10
+
+
+async def test_options_exclude_sensors_of_other_groups_and_include_the_groups_own(
+    monkeypatch,
+):
+    groups = [_group("g1", ["pv_power"]), _group("g2", ["grid_power"])]
+    adding, _ = _group_flow(monkeypatch, subentries=groups)
+    editing, _ = _group_flow(monkeypatch, subentries=groups, editing="g1")
+
+    assert set(_offered(await adding.async_step_user())) == {"battery_soc"}
+    assert set(_offered(await editing.async_step_reconfigure())) == {
+        "pv_power",
+        "battery_soc",
+    }
+
+
+async def test_a_sensor_released_by_one_group_is_offered_to_another(monkeypatch):
+    first, second = _group("g1", ["pv_power"]), _group("g2", ["grid_power"])
+    flow, entry = _group_flow(monkeypatch, subentries=[first, second], editing="g2")
+    assert "pv_power" not in _offered(await flow.async_step_reconfigure())
+
+    entry.subentries["g1"] = _group("g1", [])
+
+    assert "pv_power" in _offered(await flow.async_step_reconfigure())
+
+
+async def test_options_are_labelled_with_the_names_users_see(monkeypatch):
+    registered = [
+        _registered("pv_power", name="Roof", original_name="Solar power"),
+        _registered("grid_power", original_name="Grid power"),
+        _registered("battery_soc", name=None, original_name=None),
+        _registered("load_power", original_name="Other entry"),
+        _registered("operating_mode", original_name="Not a sensor", domain="switch"),
+    ]
+    registered[3].unique_id = "other-entry_load_power"
+    flow, _ = _group_flow(monkeypatch, registered=registered)
+
+    offered = _offered(await flow.async_step_user())
+
+    assert offered == {
+        "pv_power": "Roof",
+        "grid_power": "Grid power",
+        "battery_soc": "battery_soc",
+    }
+
+
+async def test_options_are_listed_in_label_order(monkeypatch):
+    flow, _ = _group_flow(monkeypatch)
+
+    offered = _offered(await flow.async_step_user())
+
+    assert list(offered.values()) == sorted(offered.values())
+
+
+async def test_a_disabled_sensor_is_still_offered(monkeypatch):
+    disabled = _registered("pv_power", original_name="Solar power")
+    disabled.disabled_by = "user"
+    flow, _ = _group_flow(monkeypatch, registered=[disabled])
+
+    assert set(_offered(await flow.async_step_user())) == {"pv_power"}
+
+
+async def test_editing_works_while_the_entry_is_not_loaded(monkeypatch):
+    group = _group("g1", ["pv_power"])
+    flow, entry = _group_flow(monkeypatch, subentries=[group], editing="g1")
+    assert not hasattr(entry, "runtime_data")
+
+    form = await flow.async_step_reconfigure()
+
+    assert form["type"] == "form"
+
+
+async def test_stale_sensors_are_hidden_when_editing_and_dropped_on_save(monkeypatch):
+    group = _group("g1", ["pv_power", "no_longer_exists"])
+    flow, _ = _group_flow(monkeypatch, subentries=[group], editing="g1")
+
+    form = await flow.async_step_reconfigure()
+    shown = _marker(form["data_schema"], "sensors").default()
+    await flow.async_step_reconfigure(_group_input(sensors=shown))
+
+    assert shown == ["pv_power"]
+    assert flow.updates[0]["data"]["sensors"] == ["pv_power"]
+
+
+async def test_groups_of_other_subentry_types_do_not_own_sensors(monkeypatch):
+    foreign = SimpleNamespace(
+        subentry_id="x", subentry_type="something_else", title="", data={}
+    )
+    flow, _ = _group_flow(monkeypatch, subentries=[foreign])
+
+    assert set(_offered(await flow.async_step_user())) == {
+        "pv_power",
+        "grid_power",
+        "battery_soc",
+    }
+
+
+async def test_temporary_validation_clients_draw_on_the_endpoints_shared_budget(
+    monkeypatch,
+):
+    instance = _flow(monkeypatch)
+    other = _flow(monkeypatch)
+    other.hass = instance.hass
+
+    await instance.async_step_user(INPUT)
+    await other.async_step_user({**INPUT, "host": "INVERTER"})
+    await instance.async_step_user({**INPUT, "port": 503})
+
+    budgets = [
+        client.parameters["environment"].budget for client in FlowClient.instances
+    ]
+    assert budgets[0] is budgets[1]
+    assert budgets[2] is not budgets[0]
+
+
+async def test_validation_is_not_held_back_by_the_endpoints_back_off(monkeypatch):
+    instance = _flow(monkeypatch)
+    config_flow.endpoint_guard(hass=instance.hass, host="inverter", port=502).failed(
+        now=0, base_delay=300
+    )
+
+    result = await instance.async_step_user(INPUT)
+
+    assert result["type"] == "create_entry"
+    assert len(FlowClient.instances) == 1
+
+
+def _backed_off_guard(flow, *, failures=2):
+    guard = config_flow.endpoint_guard(hass=flow.hass, host="inverter", port=502)
+    for _ in range(failures):
+        guard.failed(now=100, base_delay=30)
+    for moment in (1.0, 2.0, 3.0):
+        guard.budget.record(now=moment)
+    return guard
+
+
+def _state(guard):
+    return (
+        guard.consecutive_failures,
+        guard.backoff_delay,
+        guard.retry_in(now=100),
+        list(guard.budget._sent),
+    )
+
+
+async def _read_refused(client, device):
+    del client, device
+    return Readout(values={}, refusals={"pv_power": 2})
+
+
+async def _identify_unreachable(client, selection):
+    del client, selection
+    raise ModbusError(ModbusErrorMessage.CONNECTION_FAILED)
+
+
+async def test_a_passed_validation_over_a_temporary_client_clears_the_back_off(
+    monkeypatch,
+):
+    instance = _flow(monkeypatch)
+    guard = _backed_off_guard(instance)
+    budget_history = list(guard.budget._sent)
+
+    result = await instance.async_step_user(INPUT)
+
+    assert result["type"] == "create_entry"
+    assert guard.consecutive_failures == 0
+    assert guard.backoff_delay == 0
+    assert guard.retry_in(now=100) == 0
+    assert list(guard.budget._sent) == budget_history
+
+
+async def test_a_passed_validation_over_the_installation_client_clears_the_back_off(
+    monkeypatch,
+):
+    entry, session, flow = _options_flow_with_validation_session(monkeypatch)
+    guard = _backed_off_guard(flow)
+    budget_history = list(guard.budget._sent)
+
+    result = await flow.async_step_init(_submission(scan_interval=60))
+
+    assert result == _abort(reason="changes_saved")
+    assert not session.client.closed
+    assert guard.consecutive_failures == 0
+    assert guard.retry_in(now=100) == 0
+    assert list(guard.budget._sent) == budget_history
+    assert entry.update_count == 1
+
+
+@pytest.mark.parametrize(
+    "failing_step",
+    [
+        ("identify", _identify_unreachable),
+        ("read_telemetry", _read_refused),
+    ],
+)
+async def test_a_failed_validation_over_a_temporary_client_leaves_the_guard_alone(
+    monkeypatch, failing_step
+):
+    instance = _flow(monkeypatch)
+    guard = _backed_off_guard(instance)
+    before = _state(guard)
+    monkeypatch.setattr(config_flow, *failing_step)
+
+    result = await instance.async_step_user(INPUT)
+
+    assert result["errors"]
+    assert _state(guard) == before
+
+
+@pytest.mark.parametrize(
+    "failing_step",
+    [
+        ("identify", _identify_unreachable),
+        ("read_telemetry", _read_refused),
+    ],
+)
+async def test_a_failed_validation_over_the_installation_client_leaves_the_guard_alone(
+    monkeypatch, failing_step
+):
+    entry, session, flow = _options_flow_with_validation_session(monkeypatch)
+    guard = _backed_off_guard(flow)
+    before = _state(guard)
+    monkeypatch.setattr(config_flow, *failing_step)
+
+    result = await flow.async_step_init(_submission(scan_interval=60))
+
+    assert result["errors"]
+    assert _state(guard) == before
+    assert not session.client.closed
+    assert entry.update_count == 0

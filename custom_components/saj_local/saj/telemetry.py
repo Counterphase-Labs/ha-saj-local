@@ -4,8 +4,10 @@ from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .client import ModbusError, ModbusErrorMessage
+
 if TYPE_CHECKING:
-    from .client import ModbusTcpClient
+    from .client import RegisterReader
     from .device import Device
 
 OPERATING_MODE = "operating_mode"
@@ -57,6 +59,19 @@ class Telemetry:
         return self.values.get(key)
 
 
+@dataclass(frozen=True)
+class Readout:
+    values: Mapping[str, int | float | None]
+    refusals: Mapping[str, int]
+
+    def require_complete(self) -> None:
+        if self.refusals:
+            raise ModbusError(
+                ModbusErrorMessage.EXCEPTION_RESPONSE,
+                exception_code=next(iter(self.refusals.values())),
+            )
+
+
 def decode_unsigned(raw: int) -> int:
     return raw
 
@@ -82,10 +97,17 @@ MEASUREMENTS = {
 }
 
 
-def plan_ranges(measurements: Iterable[Measurement]) -> list[ReadRange]:
+def plan_ranges(
+    measurements: Iterable[Measurement], isolated: Collection[str] = frozenset()
+) -> list[ReadRange]:
     ranges: list[ReadRange] = []
     for measurement in sorted(measurements, key=lambda item: item.address):
-        if ranges and ranges[-1].address + ranges[-1].count == measurement.address:
+        if (
+            ranges
+            and ranges[-1].address + ranges[-1].count == measurement.address
+            and measurement.key not in isolated
+            and ranges[-1].keys[-1] not in isolated
+        ):
             last = ranges[-1]
             ranges[-1] = ReadRange(
                 address=last.address,
@@ -99,30 +121,52 @@ def plan_ranges(measurements: Iterable[Measurement]) -> list[ReadRange]:
     return ranges
 
 
-def decode_telemetry(
-    raw: Mapping[str, int], measurements: Mapping[str, Measurement]
-) -> Telemetry:
-    return Telemetry(
-        values={key: measurements[key].decoder(word) for key, word in raw.items()}
-    )
-
-
-async def read_telemetry(
-    client: ModbusTcpClient,
+def plan_reads(
     device: Device,
     enabled: Collection[str] | None = None,
+    isolated: Collection[str] = frozenset(),
     measurements: Mapping[str, Measurement] = MEASUREMENTS,
-) -> Telemetry:
+) -> list[ReadRange]:
     requested = measurements.keys() if enabled is None else enabled
     selected = [
         measurement
         for key, measurement in measurements.items()
         if key in requested and key in device.profile.measurement_keys
     ]
+    return plan_ranges(measurements=selected, isolated=isolated)
+
+
+def decode_values(
+    raw: Mapping[str, int], measurements: Mapping[str, Measurement]
+) -> dict[str, int | float | None]:
+    return {key: measurements[key].decoder(word) for key, word in raw.items()}
+
+
+async def read_telemetry(
+    client: RegisterReader,
+    device: Device,
+    enabled: Collection[str] | None = None,
+    isolated: Collection[str] = frozenset(),
+    measurements: Mapping[str, Measurement] = MEASUREMENTS,
+) -> Readout:
     raw: dict[str, int] = {}
-    for read_range in plan_ranges(measurements=selected):
-        words = await client.read_holding_registers(
-            address=read_range.address, count=read_range.count
-        )
+    refusals: dict[str, int] = {}
+    for read_range in plan_reads(
+        device=device,
+        enabled=enabled,
+        isolated=isolated,
+        measurements=measurements,
+    ):
+        try:
+            words = await client.read_holding_registers(
+                address=read_range.address, count=read_range.count
+            )
+        except ModbusError as err:
+            if err.exception_code is None or err.device_unavailable:
+                raise
+            refusals.update(dict.fromkeys(read_range.keys, err.exception_code))
+            continue
         raw.update(zip(read_range.keys, words, strict=True))
-    return decode_telemetry(raw=raw, measurements=measurements)
+    return Readout(
+        values=decode_values(raw=raw, measurements=measurements), refusals=refusals
+    )

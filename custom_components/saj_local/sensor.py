@@ -7,10 +7,11 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, UnitOfPower
+from homeassistant.core import callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, sensor_unique_id
 from .coordinator import SajCoordinator
 from .saj.telemetry import (
     BATTERY_POWER,
@@ -85,8 +86,11 @@ class SajSensor(CoordinatorEntity[SajCoordinator], SensorEntity):
     ) -> None:
         super().__init__(coordinator=coordinator, context=description.key)
         self.key = description.key
+        self._written_available: bool | None = None
         self._attr_translation_key = description.key
-        self._attr_unique_id = f"{coordinator.entry_id}_{description.key}"
+        self._attr_unique_id = sensor_unique_id(
+            entry_id=coordinator.entry_id, key=description.key
+        )
         self._attr_device_class = description.device_class
         self._attr_native_unit_of_measurement = description.unit
         self._attr_device_info = DeviceInfo(
@@ -100,6 +104,22 @@ class SajSensor(CoordinatorEntity[SajCoordinator], SensorEntity):
             self._attr_options = list(OPERATING_MODE_NAMES.values())
         elif description.device_class is not None:
             self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.key not in self.coordinator.unavailable_keys
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._written_available = self.available
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        if self.key in self.coordinator.last_read or (
+            self.available != self._written_available
+        ):
+            self._written_available = self.available
+            self.async_write_ha_state()
 
     @property
     def native_value(self) -> int | float | str | None:

@@ -28,7 +28,7 @@
       "read_rejected": "The inverter rejected a required register read. Check that this is a supported SAJ device and model.",
       "invalid_port": "Enter a whole-number port from 1 to 65535.",
       "invalid_endpoint": "Enter a valid port and unit ID.",
-      "invalid_scan_interval": "Enter a whole-number polling interval of at least 30 seconds.",
+      "invalid_scan_interval": "Enter a whole-number polling interval of at least 10 seconds.",
       "model_mismatch": "This device identifies as {detected_model}, not {selected_model}. Choose {detected_model} or Automatic.",
       "unknown_model": "The model {selection} is not a known model. Choose Automatic or one of the listed models."
     },
@@ -65,7 +65,7 @@
       "invalid_port": "Enter a whole-number port from 1 to 65535.",
       "invalid_unit_id": "Enter a whole-number unit ID from 1 to 247.",
       "invalid_endpoint": "Enter a valid port and unit ID.",
-      "invalid_scan_interval": "Enter a whole-number polling interval of at least 30 seconds.",
+      "invalid_scan_interval": "Enter a whole-number polling interval of at least 10 seconds.",
       "cannot_connect": "Could not connect or read the inverter. Check the endpoint and try again.",
       "unsupported_device": "The device reports type {device_type}, which is not recognised automatically. Choose its model manually.",
       "invalid_device_data": "The inverter returned invalid identity or telemetry data.",
@@ -78,6 +78,44 @@
       "changes_saved": "SAJ Local settings were saved.",
       "already_configured": "Another SAJ Local entry now owns this endpoint or inverter serial.",
       "confirmation_not_pending": "No validated change is awaiting confirmation."
+    }
+  },
+  "config_subentries": {
+    "polling_group": {
+      "entry_type": "Polling group",
+      "initiate_flow": {
+        "user": "Add polling group"
+      },
+      "step": {
+        "user": {
+          "title": "Add polling group",
+          "description": "Sensors in a polling group are read at the group's own interval. All other sensors are read at the default interval.",
+          "data": {
+            "name": "Name",
+            "scan_interval": "Seconds between updates",
+            "sensors": "Sensors"
+          }
+        },
+        "reconfigure": {
+          "title": "Edit polling group",
+          "description": "Sensors in a polling group are read at the group's own interval. A sensor can belong to one group only.",
+          "data": {
+            "name": "Name",
+            "scan_interval": "Seconds between updates",
+            "sensors": "Sensors"
+          }
+        }
+      },
+      "error": {
+        "invalid_scan_interval": "Enter a whole-number polling interval of at least 10 seconds.",
+        "no_sensors_selected": "Select at least one sensor.",
+        "sensor_in_other_group": "A selected sensor already belongs to another polling group."
+      },
+      "abort": {
+        "no_sensors": "This installation has no sensors yet, so a polling group cannot be created.",
+        "all_sensors_assigned": "Every sensor already belongs to a polling group, so there is none left to add.",
+        "reconfigure_successful": "The polling group was saved."
+      }
     }
   },
   "entity": {
@@ -138,6 +176,9 @@
     },
     "unknown_model": {
       "message": "The saved model {selection} is not a known model. Choose Automatic or a listed model in Configure."
+    },
+    "backing_off": {
+      "message": "The inverter endpoint is backing off after repeated failures, so no connection was attempted. Home Assistant will retry automatically."
     }
   },
   "selector": {

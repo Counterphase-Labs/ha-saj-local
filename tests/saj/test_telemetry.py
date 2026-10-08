@@ -1,14 +1,17 @@
 import pytest
 
+from saj.client import ModbusError, ModbusErrorMessage
 from saj.telemetry import (
     Measurement,
+    Readout,
     ReadRange,
     Telemetry,
     decode_percent,
     decode_signed,
-    decode_telemetry,
     decode_unsigned,
+    decode_values,
     plan_ranges,
+    plan_reads,
     read_telemetry,
 )
 from tests.saj.fakes import FakeClient
@@ -96,10 +99,61 @@ def test_range_keys_follow_address_order():
     ]
 
 
-def test_decoding_applies_each_declared_decoder():
-    telemetry = decode_telemetry(raw={"alpha": 3, "beta": 4}, measurements=DECLARED)
+@pytest.mark.parametrize(
+    ("isolated", "expected"),
+    [
+        ({"beta"}, [(100, 1), (101, 1), (102, 1), (200, 1)]),
+        ({"alpha"}, [(100, 1), (101, 2), (200, 1)]),
+        ({"gamma"}, [(100, 2), (102, 1), (200, 1)]),
+        ({"alpha", "gamma"}, [(100, 1), (101, 1), (102, 1), (200, 1)]),
+        ({"delta", "unknown"}, [(100, 3), (200, 1)]),
+        (set(), [(100, 3), (200, 1)]),
+    ],
+)
+def test_isolated_keys_are_planned_alone_and_never_merged_with_neighbours(
+    isolated: set[str], expected: list[tuple[int, int]]
+):
+    ranges = plan_ranges(measurements=DECLARED.values(), isolated=isolated)
 
-    assert telemetry == Telemetry(values={"alpha": 3, "beta": 40})
+    assert [(read_range.address, read_range.count) for read_range in ranges] == expected
+
+
+@pytest.mark.parametrize(
+    ("enabled", "supported", "expected"),
+    [
+        (None, ALL_KEYS, [(100, 3), (200, 1)]),
+        ({"alpha", "delta", "unknown"}, ALL_KEYS, [(100, 1), (200, 1)]),
+        (ALL_KEYS, {"alpha", "beta"}, [(100, 2)]),
+        (set(), ALL_KEYS, []),
+    ],
+)
+def test_the_read_plan_covers_enabled_keys_the_profile_supports(
+    enabled: set[str] | None, supported: set[str], expected: list[tuple[int, int]]
+):
+    ranges = plan_reads(
+        device=FakeDevice(supported), enabled=enabled, measurements=DECLARED
+    )
+
+    assert [(read_range.address, read_range.count) for read_range in ranges] == expected
+
+
+def test_the_read_plan_isolates_the_requested_keys():
+    ranges = plan_reads(
+        device=FakeDevice(ALL_KEYS), isolated={"beta"}, measurements=DECLARED
+    )
+
+    assert [(read_range.address, read_range.count) for read_range in ranges] == [
+        (100, 1),
+        (101, 1),
+        (102, 1),
+        (200, 1),
+    ]
+
+
+def test_decoding_applies_each_declared_decoder():
+    values = decode_values(raw={"alpha": 3, "beta": 4}, measurements=DECLARED)
+
+    assert values == {"alpha": 3, "beta": 40}
 
 
 def test_telemetry_lookup_returns_none_for_absent_key():
@@ -146,6 +200,7 @@ async def test_read_requests_only_enabled_and_supported_measurements(
     assert client.reads == expected_reads
     requested = ALL_KEYS if enabled is None else enabled
     assert set(telemetry.values) == requested & supported & ALL_KEYS
+    assert telemetry.refusals == {}
 
 
 async def test_read_decodes_returned_words_by_key():
@@ -158,3 +213,75 @@ async def test_read_decodes_returned_words_by_key():
     )
 
     assert telemetry.values == {"alpha": 1, "beta": 20, "gamma": 3, "delta": 9}
+
+
+async def test_isolated_keys_are_requested_alone():
+    client = FakeClient(
+        {(100, 1): (1,), (101, 1): (2,), (102, 1): (3,), (200, 1): (9,)}
+    )
+
+    telemetry = await read_telemetry(
+        client=client,
+        device=FakeDevice(ALL_KEYS),
+        isolated={"beta"},
+        measurements=DECLARED,
+    )
+
+    assert client.reads == [(100, 1), (101, 1), (102, 1), (200, 1)]
+    assert telemetry.values == {"alpha": 1, "beta": 20, "gamma": 3, "delta": 9}
+
+
+@pytest.mark.parametrize("code", [0, 1, 2, 3, 5, 0x0B, 0x7F])
+async def test_a_refused_request_yields_refusals_and_the_rest_is_still_read(
+    code: int,
+):
+    client = FakeClient(
+        {
+            (100, 3): ModbusError(
+                ModbusErrorMessage.EXCEPTION_RESPONSE, exception_code=code
+            ),
+            (200, 1): (9,),
+        }
+    )
+
+    telemetry = await read_telemetry(
+        client=client, device=FakeDevice(ALL_KEYS), measurements=DECLARED
+    )
+
+    assert client.reads == [(100, 3), (200, 1)]
+    assert telemetry.values == {"delta": 9}
+    assert telemetry.refusals == {"alpha": code, "beta": code, "gamma": code}
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        ModbusError(ModbusErrorMessage.EXCEPTION_RESPONSE, exception_code=4),
+        ModbusError(ModbusErrorMessage.EXCEPTION_RESPONSE, exception_code=6),
+        ModbusError(ModbusErrorMessage.REQUEST_TIMEOUT),
+        ModbusError(ModbusErrorMessage.MALFORMED_REGISTERS),
+    ],
+)
+async def test_busy_device_failure_and_link_errors_stop_the_read(failure: ModbusError):
+    client = FakeClient({(100, 3): failure, (200, 1): (9,)})
+
+    with pytest.raises(ModbusError) as caught:
+        await read_telemetry(
+            client=client, device=FakeDevice(ALL_KEYS), measurements=DECLARED
+        )
+
+    assert caught.value is failure
+    assert client.reads == [(100, 3)]
+
+
+def test_a_readout_without_refusals_is_complete():
+    Readout(values={"alpha": 1}, refusals={}).require_complete()
+
+
+def test_an_incomplete_readout_reports_the_refusal_code():
+    readout = Readout(values={}, refusals={"alpha": 0, "beta": 2})
+
+    with pytest.raises(ModbusError) as caught:
+        readout.require_complete()
+
+    assert caught.value.exception_code == 0

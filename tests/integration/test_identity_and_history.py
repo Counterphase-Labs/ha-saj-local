@@ -1,0 +1,213 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import pytest
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.saj_local import config_flow
+from custom_components.saj_local.const import (
+    DOMAIN,
+    SUBENTRY_POLLING_GROUP,
+    sensor_unique_id,
+)
+from custom_components.saj_local.saj.device import Device
+from custom_components.saj_local.saj.profiles import PROFILES
+from custom_components.saj_local.saj.telemetry import Readout
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+
+KEYS = ("pv_power", "battery_power", "grid_power", "load_power")
+H2 = next(profile for profile in PROFILES if profile.key == "h2")
+HS3 = next(profile for profile in PROFILES if profile.key == "hs3")
+
+
+class QuietClient:
+    def __init__(self, **_parameters) -> None:
+        return
+
+    async def close(self) -> None:
+        return
+
+
+@pytest.fixture(autouse=True)
+def _integration(enable_custom_integrations):
+    del enable_custom_integrations
+
+
+@pytest.fixture
+def entry(hass) -> ConfigEntry:
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="H2-SERIAL",
+        data={"host": "inverter", "port": 502, "unit_id": 1, "model": "automatic"},
+        options={"scan_interval": 60},
+    )
+    config_entry.add_to_hass(hass)
+    return config_entry
+
+
+@pytest.fixture
+def entities(hass, entry) -> er.EntityRegistry:
+    registry = er.async_get(hass)
+    for key in KEYS:
+        registered = registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            sensor_unique_id(entry_id=entry.entry_id, key=key),
+            config_entry=entry,
+            suggested_object_id=f"saj_{key}",
+            original_name=key.replace("_", " ").title(),
+        )
+        registry.async_update_entity(
+            registered.entity_id, name=f"My {key}", icon="mdi:flash"
+        )
+    registry.async_update_entity(
+        "sensor.saj_load_power", disabled_by=er.RegistryEntryDisabler.USER
+    )
+    return registry
+
+
+def _snapshot(registry: er.EntityRegistry, entry: ConfigEntry) -> dict[str, tuple]:
+    return {
+        registered.entity_id: (
+            registered.id,
+            registered.unique_id,
+            registered.name,
+            registered.original_name,
+            registered.icon,
+            registered.disabled_by,
+            registered.config_entry_id,
+            registered.config_subentry_id,
+        )
+        for registered in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+
+
+async def _save_group(hass, entry, *, name, sensors, subentry_id=None):
+    manager = hass.config_entries.subentries
+    context = {"source": "user"}
+    if subentry_id is not None:
+        context = {"source": "reconfigure", "subentry_id": subentry_id}
+    result = await manager.async_init(
+        (entry.entry_id, SUBENTRY_POLLING_GROUP), context=context
+    )
+    assert result["type"] is FlowResultType.FORM
+    result = await manager.async_configure(
+        result["flow_id"],
+        {"name": name, "scan_interval": 10, "sensors": list(sensors)},
+    )
+    assert result["type"] in {FlowResultType.CREATE_ENTRY, FlowResultType.ABORT}
+
+
+def _group_id(entry, title):
+    return next(
+        subentry.subentry_id
+        for subentry in entry.subentries.values()
+        if subentry.title == title
+    )
+
+
+def _sensors_of(entry, title):
+    return set(entry.subentries[_group_id(entry, title)].data["sensors"])
+
+
+async def test_moving_and_removing_sensors_and_deleting_groups_leave_entities_alone(
+    hass, entry, entities
+):
+    before = _snapshot(entities, entry)
+    assert len(before) == len(KEYS)
+
+    await _save_group(hass, entry, name="Fast", sensors=["pv_power", "battery_power"])
+    await _save_group(hass, entry, name="Slow", sensors=["grid_power"])
+    assert _snapshot(entities, entry) == before
+
+    await _save_group(
+        hass,
+        entry,
+        name="Fast",
+        sensors=["battery_power"],
+        subentry_id=_group_id(entry, "Fast"),
+    )
+    assert _snapshot(entities, entry) == before
+    await _save_group(
+        hass,
+        entry,
+        name="Slow",
+        sensors=["grid_power", "pv_power"],
+        subentry_id=_group_id(entry, "Slow"),
+    )
+    assert _sensors_of(entry, "Slow") == {"grid_power", "pv_power"}
+    assert _snapshot(entities, entry) == before
+
+    await _save_group(
+        hass,
+        entry,
+        name="Slow",
+        sensors=["grid_power"],
+        subentry_id=_group_id(entry, "Slow"),
+    )
+    assert _sensors_of(entry, "Slow") == {"grid_power"}
+    assert _snapshot(entities, entry) == before
+
+    for title in ("Fast", "Slow"):
+        hass.config_entries.async_remove_subentry(entry, _group_id(entry, title))
+    assert entry.subentries == {}
+    assert _snapshot(entities, entry) == before
+
+
+@pytest.mark.parametrize(
+    "swap",
+    [(H2, HS3, "HS3-SERIAL"), (HS3, H2, "H2-SERIAL-2")],
+)
+async def test_replacing_the_model_while_groups_exist_leaves_entities_alone(
+    hass, monkeypatch, entry, entities, swap
+):
+    start, end, end_serial = swap
+    await _save_group(hass, entry, name="Fast", sensors=["pv_power", "battery_power"])
+    before = _snapshot(entities, entry)
+    groups_before = {key: dict(value.data) for key, value in entry.subentries.items()}
+    replacement = Device(
+        end_serial,
+        min(end.device_types),
+        12000,
+        end,
+        detected=True,
+    )
+
+    async def identify(client, selection):
+        del client, selection
+        return replacement
+
+    async def read(client, device):
+        del client, device
+        return Readout(values={}, refusals={})
+
+    monkeypatch.setattr(config_flow, "ModbusTcpClient", QuietClient)
+    monkeypatch.setattr(config_flow, "identify", identify)
+    monkeypatch.setattr(config_flow, "read_telemetry", read)
+    hass.config_entries.async_update_entry(entry, unique_id=f"{start.key}-OLD")
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "host": "inverter",
+            "port": 502,
+            "unit_id": 1,
+            "scan_interval": 60,
+            "model": "automatic",
+        },
+    )
+    assert result["step_id"] == "confirm_replacement"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+
+    assert result["type"] is FlowResultType.ABORT
+    assert entry.unique_id == end_serial
+    assert _snapshot(entities, entry) == before
+    assert {key: dict(value.data) for key, value in entry.subentries.items()} == (
+        groups_before
+    )

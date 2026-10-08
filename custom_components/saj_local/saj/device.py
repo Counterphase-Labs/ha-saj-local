@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from .profiles import AUTOMATIC, Profile, resolve_profile
 
 if TYPE_CHECKING:
-    from .client import ModbusTcpClient
+    from .client import RegisterReader
 
 IDENTITY_ADDRESS = 0x8F00
 IDENTITY_WORD_COUNT = 2
@@ -23,7 +23,7 @@ class Device:
     detected: bool
 
 
-async def identify(client: ModbusTcpClient, selection: str = AUTOMATIC) -> Device:
+async def identify(client: RegisterReader, selection: str = AUTOMATIC) -> Device:
     type_power = await client.read_holding_registers(
         address=IDENTITY_ADDRESS, count=IDENTITY_WORD_COUNT
     )

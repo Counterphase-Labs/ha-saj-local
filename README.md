@@ -29,9 +29,9 @@ This is an unofficial, community-built integration. It is not made, supported or
 
 ### Gentle on your inverter
 
-- **Careful Modbus access.** Reads are paced so the inverter is never put at risk of overload, with particular care for AIO3 systems.
-- **You choose what is read.** Read only the sensors you want, or exclude the ones you do not.
-- **Update cadences you control.** Set a default refresh rate, poll selected sensors faster or slower, and define more than one cadence.
+- **Careful Modbus access.** One connection per inverter, one request at a time, and a hard ceiling of 40 requests in any 60 seconds per inverter address that no setting, reload or failure can exceed, with particular care for AIO3 systems.
+- **You choose what is read.** Disable a sensor in Home Assistant and its register is no longer read.
+- **Update cadences you control.** Set a default refresh rate and create polling groups that read selected sensors faster or slower.
 
 ### Read, and when you want it, write
 
@@ -73,7 +73,7 @@ The HS3 register behaviour has been verified by hand. The H2 behaviour comes fro
 
 ## Installation
 
-There is no published release yet. The development integration can be added through Home Assistant using the inverter's host, Modbus TCP port (default `502`) and unit ID (default `1`). The **Model** field defaults to Automatic, which identifies an HS3 or an H2 from the device itself. Choose a model manually only when the inverter is not recognised: a selection that contradicts a recognised device is rejected, and a selection applied to an unrecognised device is saved only after its required registers answer and you confirm it. Home Assistant's sensor controls disable readings that are not needed.
+There is no published release yet. The development integration can be added through Home Assistant using the inverter's host, Modbus TCP port (default `502`) and unit ID (default `1`). The **Model** field defaults to Automatic, which identifies an HS3 or an H2 from the device itself. Choose a model manually only when the inverter is not recognised: a selection that contradicts a recognised device is rejected, and a selection applied to an unrecognised device is saved only after its required registers answer and you confirm it. Home Assistant's sensor controls disable readings that are not needed. The default update interval is 60 seconds and no interval can be shorter than 10 seconds.
 
 Moving an installation between an H2 and an HS3 is done through Configure. Confirm the replacement and the device, entities, names and history stay with the installation.
 
@@ -89,6 +89,28 @@ Moving an installation between an H2 and an HS3 is done through Configure. Confi
 ## How it works
 
 The integration connects to your inverter over Modbus TCP on your local network and reads its registers on a schedule you control. All communication stays between Home Assistant and the inverter.
+
+### Polling groups
+
+By default every sensor is read at the installation's update interval. To read some sensors faster or slower, open the integration page, choose **Add polling group** and give the group a name, a number of seconds between updates (at least 10) and the sensors it holds. Edit or delete a group from the same page. A sensor belongs to at most one group, and every sensor in no group stays on the default interval.
+
+Changing a group reloads the integration once. It never touches the sensors themselves: moving a sensor between groups, removing it from a group or deleting the group keeps the entity, its name and its history.
+
+All cadences of an installation share one clock, so a 10 second group and a 60 second default are read together every sixth tick, in one combined read where registers are next to each other. A cycle that overruns is not caught up: the missed ticks are dropped and polling carries on from the next tick.
+
+### Protecting the inverter
+
+Communication modules can stop serving a client that polls too hard, so the limits below apply to everything the integration sends and cannot be configured away.
+
+- One connection and one request in flight per inverter, with a pause between requests. Checking a connection in Configure uses the installation's own connection rather than a second one.
+- At most 40 requests in any 60 seconds per inverter address. The count is kept for as long as Home Assistant runs, so reloading the integration, editing a polling group, a setup retry and the connection check in Configure all draw on the same allowance instead of starting from zero. A request that would exceed this waits; nothing is sent early or dropped. One request reads one block of neighbouring registers, so grouping sensors that sit together costs less. At load a warning is logged if your cadences plan more than the limit, and diagnostics show the planned load.
+- No retries inside a cycle. After a failed cycle the wait before the next attempt doubles from the shortest interval up to 5 minutes, then the first cycle that succeeds reads everything again. The wait also survives reloads and applies to loading the integration: a load attempted too early reports not ready without contacting the inverter, and a failed load counts as a failure. Checking a connection yourself in setup or Configure is never held back by the wait and still counts towards the 40 requests; a check that passes clears the wait, because the inverter has just answered, and one that fails leaves it as it was.
+- Every wait is time-limited, so a stalled inverter ends a cycle as a failure instead of stopping polling silently. A late or stray response is discarded and never read as a value.
+- A connection the inverter has closed in the meantime is reopened once and the device is verified; that cycle then reads every enabled sensor again, so no value predates the reconnect.
+
+### When the inverter refuses a register
+
+A refusal is an answer, not a failure. Only the sensor in the refused request becomes unavailable and the others keep updating. From the next cycle that sensor is read on its own. After three refusals in a row it is suspended: shown as unavailable, no longer read, logged once with the exception code and listed in diagnostics. A suspended sensor is tried again once a day and whenever the integration loads, and comes back as soon as the register answers. An inverter that reports itself busy or failed stops the cycle instead, and every sensor is unavailable until it recovers.
 
 ## Help and feedback
 

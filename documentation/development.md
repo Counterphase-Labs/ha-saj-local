@@ -42,6 +42,20 @@ A recognised device type is authoritative, so no selection can make the library 
 
 The library's model errors live in `saj/errors.py`, and an import-linter contract allows only the integration's `errors.py` to import that module. It is the single place that turns those errors into translation keys and placeholders, so a new error needs an edit there and nowhere else.
 
+### Polling
+
+The library decides what to read and when, and protects the device; the integration only presents the result. Polling rules live in the library because they describe the device, not Home Assistant, so no integration code can bypass them.
+
+- **Schedule, budget, health and poller** (`saj/schedule.py`, `budget.py`, `health.py`, `poller.py`) each own one decision and take time and waiting as inputs. Nothing in them reads a clock or sleeps, which is what lets their tests run instantly and deterministically. Only the client's defaults and the coordinator's wiring touch real time.
+- **One shared time grid per installation.** Cadences that are offset from each other would never share a request; a common grid lets coincident ticks be planned together, and dropping missed ticks stops an overrun from becoming a backlog.
+- **The request budget is a device property.** It counts requests, because that is what field reports describe, and it is a library constant rather than a setting so that no configuration can exceed it. Waiting for the budget lengthens a cycle instead of dropping reads.
+- **A response is classified, not treated as pass or fail.** A refused register is an answer from a healthy device and affects only its sensors; only busy and device-failure codes and link errors fail a cycle. This is why one refused block can no longer make every entity flap.
+- **Failed cycles back off and never retry inside the cycle.** Retries multiply load exactly when a module is struggling. The single exception is a stale kept connection, which is not a device failure; it is reopened, identity is verified and the cycle becomes a full read so no published value predates the reconnect.
+- **The budget and the back-off belong to the endpoint, not to a load** (`saj/guard.py`). A reload, a group edit or a setup retry builds a new client, and a budget or failure count held there would start from zero each time, which is how a module gets hammered by Home Assistant's own retries. The integration keeps one guard per host and port in `hass.data` for the life of Home Assistant and gives it to every client and poller, including the temporary client of a setup or Configure check. Loading asks the guard first and reports not ready before opening a connection; a check started by the user bypasses the back-off but not the budget. A check that passes resets the back-off, since the device has just answered and the load that follows should not be refused for a failure that has already healed; a failed check changes nothing, so a user retrying a bad address cannot extend or erase the protection.
+- **Polling groups are config subentries.** They give native add, edit and delete on the integration page without changing Setup or Configure. A group stores semantic sensor keys, never entity IDs, and entities are never attached to a subentry, because Home Assistant deletes the entities of a deleted subentry and a group must not take a sensor or its history with it.
+- **State is written only for sensors that were read** or whose availability changed, so a fast group does not make slow sensors look refreshed.
+- **Wake-ups are rounded up.** Home Assistant schedules a coordinator on whole seconds, and a wake-up that fires early would find nothing due and waste a slot.
+
 ### Stable names
 
 Sensor names are a contract with every dashboard and automation a user writes. The library presents one set of names, units and formats across SAJ models, so a hardware upgrade keeps history wherever the old and new systems overlap. Map a new device onto the existing vocabulary before inventing names.

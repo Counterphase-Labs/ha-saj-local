@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 from contextlib import asynccontextmanager, suppress
 from datetime import timedelta
 from typing import TYPE_CHECKING, NoReturn
@@ -9,19 +10,58 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .const import CONF_MODEL, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
-from .errors import HANDLED_ERRORS, has_safe_message, translate_error
+from .const import (
+    CONF_MODEL,
+    CONF_SCAN_INTERVAL,
+    CONF_SENSORS,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    SUBENTRY_POLLING_GROUP,
+)
+from .errors import has_safe_message, translate_error
+from .saj.budget import BUDGET_PER_MINUTE
 from .saj.client import ModbusError, ModbusTcpClient
-from .saj.device import Device, identify
-from .saj.telemetry import Telemetry, read_telemetry
+from .saj.health import ReadHealth
+from .saj.poller import (
+    CycleFailedError,
+    CycleResult,
+    IdentityChangedError,
+    Poller,
+    Services,
+    Target,
+    Tracking,
+)
+from .saj.schedule import Cadence, Schedule, build_cadences
+from .saj.telemetry import Telemetry
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Collection
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
+    from .saj.device import Device
+    from .saj.guard import EndpointGuard
+
 _LOGGER = logging.getLogger(__name__)
+
+
+def wakeup_delay(*, target: float, now: float) -> timedelta:
+    # Home Assistant schedules from the whole second of the moment it schedules,
+    # so rounding the distance up from that second lands on or after the target.
+    # A zero interval would mean no schedule at all, hence the one second floor.
+    return timedelta(seconds=max(1, math.ceil(target - math.floor(now))))
+
+
+def _group_cadences(*, entry: ConfigEntry) -> list[Cadence]:
+    return [
+        Cadence(
+            interval=int(subentry.data[CONF_SCAN_INTERVAL]),
+            keys=frozenset(subentry.data[CONF_SENSORS]),
+        )
+        for subentry in entry.subentries.values()
+        if subentry.subentry_type == SUBENTRY_POLLING_GROUP
+    ]
 
 
 class SajCoordinator(DataUpdateCoordinator[Telemetry]):
@@ -31,72 +71,118 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         client: ModbusTcpClient,
         device: Device,
         entry: ConfigEntry,
+        guard: EndpointGuard,
     ) -> None:
-        interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-        super().__init__(
-            hass=hass,
-            logger=_LOGGER,
-            name="SAJ",
-            update_interval=timedelta(seconds=interval),
-        )
+        super().__init__(hass=hass, logger=_LOGGER, name="SAJ")
         self.client = client
         self.device = device
         self.model_selection = entry.data[CONF_MODEL]
-        self.interval = interval
         self.entry_id = entry.entry_id
         self.last_error: dict[str, int | str | None] | None = None
+        self.last_read: frozenset[str] = frozenset()
+        self.unavailable_keys: frozenset[str] = frozenset()
+        self.poller = Poller(
+            target=Target(client=client, device=device, selection=self.model_selection),
+            tracking=Tracking(
+                schedule=Schedule(
+                    cadences=build_cadences(
+                        default_interval=entry.options.get(
+                            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+                        ),
+                        groups=_group_cadences(entry=entry),
+                        supported=device.profile.measurement_keys,
+                    ),
+                    origin=hass.loop.time(),
+                ),
+                health=ReadHealth(),
+                guard=guard,
+            ),
+            services=Services(clock=hass.loop.time, bound=asyncio.wait_for),
+        )
+        self._values: dict[str, int | float | None] = {}
         self._cycle_lock = asyncio.Lock()
         self._initial_refresh = True
         self._update_task: asyncio.Task[object] | None = None
+        self._log_plan()
+
+    def _log_plan(self) -> None:
+        plans = self.poller.cadence_plans()
+        for plan in plans:
+            _LOGGER.debug(
+                "SAJ cadence every %s s reads %s as %s%s",
+                plan.interval,
+                sorted(plan.keys),
+                [f"{address:#06x}+{count}" for address, count in plan.ranges],
+                " (default)" if plan.default else "",
+            )
+        load = self.poller.planned_load()
+        if load > BUDGET_PER_MINUTE:
+            _LOGGER.warning(
+                "SAJ cadences plan %.1f requests per minute, above the budget of %.0f;"
+                " they will run slower than configured",
+                load,
+                BUDGET_PER_MINUTE,
+            )
 
     @asynccontextmanager
-    async def async_validation_session(self) -> AsyncIterator[None]:
+    async def async_validation_session(self) -> AsyncIterator[ModbusTcpClient]:
         async with self._cycle_lock:
-            yield
+            yield self.client
 
     async def _async_update_data(self) -> Telemetry:
         async with self._cycle_lock:
             self._update_task = asyncio.current_task()
             try:
+                enabled = self._enabled_keys()
                 try:
-                    if not self.client.is_connected():
-                        await self.client.close()
-                        await self.client.connect()
-                        current = await identify(
-                            client=self.client, selection=self.model_selection
-                        )
-                        if current.serial != self.device.serial:
-                            _raise_identity_changed()
-                    enabled = self._enabled_keys()
-                    snapshot = await read_telemetry(
-                        client=self.client, device=self.device, enabled=enabled
-                    )
-                except UPDATE_ERRORS as err:
-                    await self.client.close()
-                    error = {
-                        "type": type(err).__name__,
-                        "reason": str(err)
-                        if isinstance(err, IdentityChangedError)
-                        or has_safe_message(error=err)
-                        else "Device read failed",
-                        "exception_code": err.exception_code
-                        if isinstance(err, ModbusError)
-                        else None,
-                    }
-                    if self.last_error != error:
-                        _LOGGER.warning("SAJ update failed (%s)", error["type"])
-                    self.last_error = error
-                    _raise_update_failed(err)
-                except asyncio.CancelledError:
-                    await self.client.close()
-                    raise
-                if self.last_error is not None:
-                    _LOGGER.info("SAJ connection restored for configured device")
-                self.last_error = None
-                self._initial_refresh = False
-                return snapshot
+                    result = await self.poller.run(enabled=enabled)
+                except CycleFailedError as failure:
+                    self._fail(failure=failure)
+                return self._publish(result=result, enabled=enabled)
             finally:
                 self._update_task = None
+
+    def _fail(self, *, failure: CycleFailedError) -> NoReturn:
+        err = failure.cause
+        self._values = {}
+        self.last_read = frozenset()
+        error = {
+            "type": type(err).__name__,
+            "reason": str(err)
+            if isinstance(err, IdentityChangedError) or has_safe_message(error=err)
+            else "Device read failed",
+            "exception_code": err.exception_code
+            if isinstance(err, ModbusError)
+            else None,
+        }
+        if self.last_error != error:
+            _LOGGER.warning("SAJ update failed (%s)", error["type"])
+        self.last_error = error
+        self._schedule_wakeup(target=failure.next_wakeup)
+        _raise_update_failed(err)
+
+    def _publish(self, *, result: CycleResult, enabled: Collection[str]) -> Telemetry:
+        if self.last_error is not None:
+            _LOGGER.info("SAJ connection restored for configured device")
+        self.last_error = None
+        self._initial_refresh = False
+        merged = {**self._values, **result.values}
+        self._values = {
+            key: value
+            for key, value in merged.items()
+            if key in enabled and key not in result.unavailable
+        }
+        self.last_read = result.read
+        self.unavailable_keys = result.unavailable
+        self._schedule_wakeup(target=result.next_wakeup)
+        return Telemetry(values=dict(self._values))
+
+    def _schedule_wakeup(self, *, target: float | None) -> None:
+        self.update_interval = (
+            None
+            if target is None
+            else wakeup_delay(target=target, now=self.hass.loop.time())
+        )
 
     async def async_shutdown(self) -> None:
         await super().async_shutdown()
@@ -115,24 +201,6 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
     @property
     def enabled_sensor_keys(self) -> set[str]:
         return self._enabled_keys()
-
-
-def _raise_identity_changed() -> NoReturn:
-    raise IdentityChangedError
-
-
-class IdentityChangedError(Exception):
-    def __init__(self) -> None:
-        message = "Device identity changed at configured endpoint"
-        super().__init__(message)
-
-
-UPDATE_ERRORS: tuple[type[Exception], ...] = (
-    *HANDLED_ERRORS,
-    IdentityChangedError,
-    TimeoutError,
-    OSError,
-)
 
 
 def _raise_update_failed(error: Exception) -> NoReturn:

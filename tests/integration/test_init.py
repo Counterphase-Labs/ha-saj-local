@@ -11,7 +11,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 
 import custom_components.saj_local as integration
 from custom_components.saj_local import SajRuntimeData, errors
-from custom_components.saj_local.const import DOMAIN
+from custom_components.saj_local.const import DOMAIN, endpoint_guard
 from custom_components.saj_local.saj import errors as saj_errors
 from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessage
 from custom_components.saj_local.saj.device import Device
@@ -40,6 +40,7 @@ class FakeClient:
 
     def __init__(self, *_args, **_kwargs) -> None:
         self.host = _kwargs.get("host", _args[0] if _args else "host")
+        self.environment = _kwargs.get("environment")
         self.closed = False
         self.instances.append(self)
 
@@ -71,6 +72,7 @@ class FakeEntry:
     unique_id: str
     data: dict[str, object]
     options: dict[str, object] = field(default_factory=dict)
+    subentries: dict[str, object] = field(default_factory=dict)
     runtime_data: SajRuntimeData | None = None
     entry_id: str = "entry-1"
 
@@ -98,8 +100,15 @@ def reset_fake_instances():
     FakeCoordinator.instances.clear()
 
 
+NOW = 500.0
+
+
 def _hass():
-    return SimpleNamespace(config_entries=FakeConfigEntries())
+    return SimpleNamespace(
+        config_entries=FakeConfigEntries(),
+        data={},
+        loop=SimpleNamespace(time=lambda: NOW),
+    )
 
 
 def _entry(
@@ -368,3 +377,116 @@ async def test_options_listener_reloads_entry(monkeypatch):
     entry = _entry()
     await integration._async_options_updated(hass, entry)
     assert calls == [entry.entry_id]
+
+
+def _guard(hass, host="inverter", port=502):
+    return endpoint_guard(hass=hass, host=host, port=port)
+
+
+async def test_load_inside_the_back_off_is_not_ready_and_sends_nothing(monkeypatch):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    _guard(hass).failed(now=NOW - 5, base_delay=30)
+
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await integration.async_setup_entry(hass, _entry())
+
+    assert error.value.translation_domain == DOMAIN
+    assert error.value.translation_key == "backing_off"
+    assert FakeClient.instances == []
+    assert FakeCoordinator.instances == []
+
+
+async def test_load_after_the_back_off_proceeds(monkeypatch):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    _guard(hass).failed(now=NOW - 30, base_delay=30)
+
+    assert await integration.async_setup_entry(hass, _entry())
+
+
+@pytest.mark.parametrize(
+    ("options", "groups", "expected_base"),
+    [
+        ({}, [], 60),
+        ({"scan_interval": 45}, [], 45),
+        ({"scan_interval": 45}, [20, 90], 20),
+        ({"scan_interval": 15}, [20], 15),
+    ],
+)
+async def test_a_failed_load_counts_as_a_failure_from_the_shortest_interval(
+    monkeypatch, options, groups, expected_base
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+
+    async def fail(client, selection):
+        raise ModbusError(ModbusErrorMessage.CONNECTION_FAILED)
+
+    monkeypatch.setattr(integration, "identify", fail)
+    entry = _entry()
+    entry.options = options
+    entry.subentries = {
+        f"g{index}": SimpleNamespace(
+            subentry_type="polling_group",
+            data={"scan_interval": interval, "sensors": ["pv_power"]},
+        )
+        for index, interval in enumerate(groups)
+    }
+
+    with pytest.raises(ConfigEntryNotReady):
+        await integration.async_setup_entry(hass, entry)
+
+    guard = _guard(hass)
+    assert guard.consecutive_failures == 1
+    assert guard.backoff_delay == expected_base
+    assert guard.retry_in(now=NOW) == expected_base
+
+
+async def test_a_configuration_failure_does_not_count_against_the_endpoint(
+    monkeypatch,
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+
+    async def fail(client, selection):
+        raise ValueError
+
+    monkeypatch.setattr(integration, "identify", fail)
+
+    with pytest.raises(ConfigEntryError):
+        await integration.async_setup_entry(hass, _entry())
+
+    assert _guard(hass).consecutive_failures == 0
+
+
+async def test_every_load_of_an_endpoint_reuses_its_guard_and_budget(monkeypatch):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    first, second = _entry(), _entry()
+
+    assert await integration.async_setup_entry(hass, first)
+    assert await integration.async_setup_entry(hass, second)
+
+    guard = _guard(hass)
+    assert [client.environment.budget for client in FakeClient.instances] == [
+        guard.budget,
+        guard.budget,
+    ]
+    assert [c.entry for c in FakeCoordinator.instances] == [first, second]
+    assert hass.data[DOMAIN] == {("inverter", 502): guard}
+
+
+async def test_different_endpoints_have_separate_guards(monkeypatch):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    _guard(hass, "inverter-a").failed(now=NOW, base_delay=30)
+
+    assert await integration.async_setup_entry(hass, _entry("inverter-b"))
+    with pytest.raises(ConfigEntryNotReady):
+        await integration.async_setup_entry(hass, _entry("inverter-a"))
+
+    assert _guard(hass, "inverter-b").consecutive_failures == 0
+    assert _guard(hass, "inverter-b").budget is not _guard(hass, "inverter-a").budget
+    assert _guard(hass, "INVERTER-A") is _guard(hass, "inverter-a")
+    assert _guard(hass, "inverter-a", 503) is not _guard(hass, "inverter-a")

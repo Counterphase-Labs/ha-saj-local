@@ -3,7 +3,10 @@ from types import SimpleNamespace
 import pytest
 
 from custom_components.saj_local.diagnostics import async_get_config_entry_diagnostics
+from custom_components.saj_local.saj.budget import BUDGET_PER_MINUTE
 from custom_components.saj_local.saj.device import Device
+from custom_components.saj_local.saj.health import Refusal
+from custom_components.saj_local.saj.poller import CadencePlan
 from custom_components.saj_local.saj.profiles import Profile
 from custom_components.saj_local.saj.telemetry import Telemetry
 
@@ -16,9 +19,32 @@ PROFILE = Profile(
 )
 
 
+NOW = 5000.0
+HASS = SimpleNamespace(loop=SimpleNamespace(time=lambda: NOW))
+
+
 class FakeClient:
+    late_frames_discarded = 0
+
     def is_connected(self) -> bool:
         return True
+
+
+class FakePoller:
+    stale_reconnects = 0
+    consecutive_failures = 0
+    backoff_seconds = 0.0
+
+    def __init__(self) -> None:
+        self.refusals = {}
+        self.plans = ()
+        self.load = 0.0
+
+    def cadence_plans(self):
+        return self.plans
+
+    def planned_load(self):
+        return self.load
 
 
 class FakeCoordinator:
@@ -27,6 +53,8 @@ class FakeCoordinator:
         self.data = telemetry
         self.last_update_success = True
         self.last_error = None
+        self.last_read = frozenset()
+        self.poller = FakePoller()
 
     def async_contexts(self):
         return iter(self._contexts)
@@ -63,7 +91,7 @@ async def test_diagnostics_report_status_and_omit_endpoint_identity(
         ),
     )
 
-    result = await async_get_config_entry_diagnostics(None, entry)
+    result = await async_get_config_entry_diagnostics(HASS, entry)
 
     assert result["model_selection"] == "automatic"
     assert result["profile"] == "alpha"
@@ -99,7 +127,121 @@ async def test_diagnostics_report_selection_and_whether_profile_was_assumed(
         ),
     )
 
-    result = await async_get_config_entry_diagnostics(None, entry)
+    result = await async_get_config_entry_diagnostics(HASS, entry)
 
     assert result["model_selection"] == selection
     assert result["profile_detected"] is detected
+
+
+def _entry(coordinator, client=None):
+    return SimpleNamespace(
+        data={"host": "private-host", "port": 502, "unit_id": 1, "model": "automatic"},
+        options={},
+        subentries={
+            "id-1": SimpleNamespace(title="Private group name", data={}),
+        },
+        runtime_data=SimpleNamespace(
+            device=Device("PRIVATE-SERIAL", 0x1610, 12000, PROFILE, detected=True),
+            client=client or FakeClient(),
+            coordinator=coordinator,
+        ),
+    )
+
+
+async def test_diagnostics_report_cadences_and_planned_load_against_the_budget():
+    coordinator = FakeCoordinator(set(), None)
+    coordinator.poller.plans = (
+        CadencePlan(
+            interval=60,
+            keys=frozenset({"pv_power", "grid_power"}),
+            ranges=((0x4004, 1), (0x40A5, 3)),
+            default=True,
+        ),
+        CadencePlan(
+            interval=10,
+            keys=frozenset({"battery_soc"}),
+            ranges=((0x406F, 1),),
+            default=False,
+        ),
+    )
+    coordinator.poller.load = 8.0
+    coordinator.last_read = frozenset({"pv_power", "battery_soc"})
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator))
+
+    assert result["cadences"] == [
+        {
+            "default": True,
+            "interval_seconds": 60,
+            "sensors": ["grid_power", "pv_power"],
+            "requests_per_read": 2,
+        },
+        {
+            "default": False,
+            "interval_seconds": 10,
+            "sensors": ["battery_soc"],
+            "requests_per_read": 1,
+        },
+    ]
+    assert result["planned_requests_per_minute"] == 8.0
+    assert result["request_budget_per_minute"] == BUDGET_PER_MINUTE
+    assert result["last_cycle_read"] == ["battery_soc", "pv_power"]
+
+
+async def test_diagnostics_report_refused_and_suspended_sensors_with_retest_timing():
+    coordinator = FakeCoordinator(set(), None)
+    coordinator.poller.refusals = {
+        "pv_power": Refusal(count=1, code=2, retest_at=None),
+        "grid_power": Refusal(count=3, code=0, retest_at=NOW + 600),
+        "battery_soc": Refusal(count=7, code=11, retest_at=NOW - 5),
+    }
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator))
+
+    assert result["refused_sensors"] == {
+        "pv_power": {
+            "exception_code": 2,
+            "consecutive_refusals": 1,
+            "suspended": False,
+            "next_retest_in_seconds": None,
+        },
+        "grid_power": {
+            "exception_code": 0,
+            "consecutive_refusals": 3,
+            "suspended": True,
+            "next_retest_in_seconds": 600,
+        },
+        "battery_soc": {
+            "exception_code": 11,
+            "consecutive_refusals": 7,
+            "suspended": True,
+            "next_retest_in_seconds": 0,
+        },
+    }
+
+
+async def test_diagnostics_report_backoff_state_and_link_counters():
+    coordinator = FakeCoordinator(set(), None)
+    coordinator.poller.consecutive_failures = 3
+    coordinator.poller.backoff_seconds = 40.0
+    coordinator.poller.stale_reconnects = 2
+    client = FakeClient()
+    client.late_frames_discarded = 5
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator, client))
+
+    assert result["consecutive_failed_cycles"] == 3
+    assert result["backoff_seconds"] == 40.0
+    assert result["late_frames_discarded"] == 5
+    assert result["stale_reconnects"] == 2
+
+
+async def test_diagnostics_omit_group_names_host_and_serial():
+    coordinator = FakeCoordinator({"pv_power"}, None)
+    coordinator.poller.refusals = {"pv_power": Refusal(count=1, code=2, retest_at=None)}
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator))
+
+    assert "Private group name" not in str(result)
+    assert "private-host" not in str(result)
+    assert "PRIVATE-SERIAL" not in str(result)
