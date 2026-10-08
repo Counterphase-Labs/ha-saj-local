@@ -2,6 +2,7 @@
   "domain": "saj_local",
   "name": "SAJ Local",
   "codeowners": ["@dogmatic69"],
+  "after_dependencies": ["recorder"],
   "config_flow": true,
   "documentation": "https://github.com/dogmatic69/home-assistant-saj-modbus",
   "integration_type": "hub",

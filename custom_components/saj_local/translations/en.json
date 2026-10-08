@@ -9,7 +9,11 @@
           "port": "Port",
           "unit_id": "Unit ID",
           "scan_interval": "Seconds between updates",
-          "model": "Model"
+          "model": "Model",
+          "prefix": "Prefix"
+        },
+        "data_description": {
+          "prefix": "Optional. Adds a prefix to this installation's entity IDs, for example sensor.saj_house_pv_power instead of sensor.saj_pv_power. Use it when you have more than one SAJ system. Lowercase letters and digits only, no underscores, up to 32 characters, and no two installations can share one."
         }
       },
       "confirm_model": {
@@ -30,7 +34,11 @@
       "invalid_endpoint": "Enter a valid port and unit ID.",
       "invalid_scan_interval": "Enter a whole-number polling interval of at least 10 seconds.",
       "model_mismatch": "This device identifies as {detected_model}, not {selected_model}. Choose {detected_model} or Automatic.",
-      "unknown_model": "The model {selection} is not a known model. Choose Automatic or one of the listed models."
+      "unknown_model": "The model {selection} is not a known model. Choose Automatic or one of the listed models.",
+      "invalid_prefix": "Use only lowercase letters and digits, with no underscores, up to 32 characters.",
+      "prefix_shadows_sensor": "This prefix would make entity IDs that clash with a sensor name. Choose a different prefix.",
+      "prefix_in_use": "Another SAJ Local installation already uses this prefix. Leaving it empty also counts, so only one installation can have no prefix.",
+      "entity_id_taken": "The entity ID {entity_id} is already taken in Home Assistant. Choose a different prefix."
     },
     "abort": {
       "already_configured": "This inverter is already configured.",
@@ -47,7 +55,11 @@
           "port": "Port",
           "unit_id": "Unit ID",
           "scan_interval": "Seconds between updates",
-          "model": "Model"
+          "model": "Model",
+          "prefix": "Prefix"
+        },
+        "data_description": {
+          "prefix": "Optional. Adds a prefix to this installation's entity IDs, for example sensor.saj_house_pv_power instead of sensor.saj_pv_power. Use it when you have more than one SAJ system. Lowercase letters and digits only, no underscores, up to 32 characters, and no two installations can share one. Changing it renames this installation's entities after you confirm."
         }
       },
       "confirm_replacement": {
@@ -57,6 +69,10 @@
       "confirm_model": {
         "title": "Confirm model",
         "description": "The device reports type {device_type}, which is not recognised as {model}, so it could not be verified as that model. Its required registers answered, but readings may be wrong if it is a different model. Use {model} anyway?"
+      },
+      "confirm_prefix": {
+        "title": "Confirm entity ID change",
+        "description": "Entity IDs change from `{old_pattern}` to `{new_pattern}`.\n\nHistory and long-term statistics move to the new entity IDs.\n\nAutomations, scripts, dashboards, templates and Energy settings that use the old entity IDs will stop working until you update them.\n\nEntities you renamed yourself are left alone. Change the entity IDs?"
       }
     },
     "error": {
@@ -72,12 +88,18 @@
       "timeout": "The inverter did not respond in time. Check the endpoint and try again.",
       "read_rejected": "The inverter rejected a required register read. Check that this is a supported SAJ device and model.",
       "model_mismatch": "This device identifies as {detected_model}, not {selected_model}. Choose {detected_model} or Automatic.",
-      "unknown_model": "The model {selection} is not a known model. Choose Automatic or one of the listed models."
+      "unknown_model": "The model {selection} is not a known model. Choose Automatic or one of the listed models.",
+      "invalid_prefix": "Use only lowercase letters and digits, with no underscores, up to 32 characters.",
+      "prefix_shadows_sensor": "This prefix would make entity IDs that clash with a sensor name. Choose a different prefix.",
+      "prefix_in_use": "Another SAJ Local installation already uses this prefix. Leaving it empty also counts, so only one installation can have no prefix.",
+      "entity_id_taken": "The entity ID {entity_id} is already taken in Home Assistant. Choose a different prefix.",
+      "statistics_exist": "Home Assistant already holds long-term statistics under {entity_id}, so this installation's history could not be moved there. Choose a different prefix."
     },
     "abort": {
       "changes_saved": "SAJ Local settings were saved.",
       "already_configured": "Another SAJ Local entry now owns this endpoint or inverter serial.",
-      "confirmation_not_pending": "No validated change is awaiting confirmation."
+      "confirmation_not_pending": "No validated change is awaiting confirmation.",
+      "prefix_unavailable": "The prefix or one of its entity IDs was taken while you were confirming. Nothing was changed."
     }
   },
   "config_subentries": {

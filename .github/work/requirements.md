@@ -26,6 +26,14 @@ Platform stability and correctness is paramount.
 - clear and detailed errors with good error handling
 - extensive and useful debug dump tools using native HA solutions that are privacy focused
 
+### Entity IDs
+
+- Entity IDs are fixed by code, never derived from display text: `sensor.saj_<key>`, or `sensor.saj_<prefix>_<key>` when a prefix is set
+- Each system has an optional prefix, empty by default
+- Prefixes must be unique across systems. Empty counts as a value, so only one system can have no prefix
+- A prefix can be added, changed or removed later. The user is warned about the consequences before it is applied
+- Changing a prefix renames the entities and must keep their history
+
 ### Modbus Mock
 
 - A completely stand alone docker service that simulates the behaviour of an actual SAJ modbus device.

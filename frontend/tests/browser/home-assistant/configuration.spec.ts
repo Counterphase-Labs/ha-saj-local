@@ -79,6 +79,7 @@ const addIntegration = async (
     page: Page,
     browserFailures: string[],
     host: string,
+    prefix = "",
 ): Promise<void> => {
     await page.getByRole("link", { name: "Settings" }).click();
     await page.getByRole("link", { name: /devices & services/i }).click();
@@ -105,6 +106,9 @@ const addIntegration = async (
     await page
         .getByRole("spinbutton", { name: "Seconds between updates*" })
         .fill("30");
+    if (prefix) {
+        await page.getByRole("textbox", { name: "Prefix" }).fill(prefix);
+    }
     await page.getByRole("button", { name: /submit/i }).click();
     await page.getByRole("button", { name: "Finish" }).click();
 };
@@ -159,6 +163,6 @@ test("an HS3 and an H2 endpoint load and report sensor values", async ({
     await addIntegration(page, browserFailures, "modbus-mock");
     await expectEntrySensorsReportValues(page, 1);
 
-    await addIntegration(page, browserFailures, "modbus-mock-h2");
+    await addIntegration(page, browserFailures, "modbus-mock-h2", "h2");
     await expectEntrySensorsReportValues(page, 2);
 });

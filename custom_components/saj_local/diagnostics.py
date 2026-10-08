@@ -1,8 +1,17 @@
 from typing import TYPE_CHECKING, Any
 
-from .const import CONF_MODEL, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+from .const import (
+    CONF_MODEL,
+    CONF_PREFIX,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+    KEY_PLACEHOLDER,
+    sensor_entity_id,
+)
 from .saj.budget import BUDGET_PER_MINUTE
 from .saj.telemetry import OPERATING_MODE, OPERATING_MODE_NAMES
+
+REDACTED_PREFIX = "[redacted]"
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -25,6 +34,10 @@ async def async_get_config_entry_diagnostics(
         "rated_power_w": runtime.device.rated_power,
         "poll_interval_seconds": entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+        ),
+        "entity_id_pattern": sensor_entity_id(
+            prefix=REDACTED_PREFIX if entry.options.get(CONF_PREFIX, "") else "",
+            key=KEY_PLACEHOLDER,
         ),
         "enabled_sensors": sorted(coordinator.enabled_sensor_keys),
         "connected": runtime.client.is_connected(),

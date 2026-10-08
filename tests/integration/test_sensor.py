@@ -1,3 +1,4 @@
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -57,6 +58,38 @@ def _stub_coordinator_entity_constructor(monkeypatch):
     monkeypatch.setattr(sensor.CoordinatorEntity, "__init__", construct_entity)
 
 
+class FakeRegistry:
+    def __init__(self) -> None:
+        self.registered = {}
+        self.taken = set()
+
+    def async_get_entity_id(self, domain, platform, unique_id):
+        del domain, platform
+        return self.registered.get(unique_id)
+
+    def async_get_available_entity_id(self, domain, preferred):
+        return f"{domain}.{preferred}_2"
+
+
+@pytest.fixture(autouse=True)
+def registry(monkeypatch) -> FakeRegistry:
+    fake = FakeRegistry()
+    monkeypatch.setattr(sensor.er, "async_get", lambda _hass: fake)
+
+    def in_use(*, hass, entity_id):
+        del hass
+        return entity_id in fake.taken
+
+    monkeypatch.setattr(sensor, "entity_id_in_use", in_use)
+    return fake
+
+
+def _entry(coordinator, **options):
+    return SimpleNamespace(
+        runtime_data=SimpleNamespace(coordinator=coordinator), options=options
+    )
+
+
 class FakeCoordinator:
     def __init__(self, data: Telemetry, device: Device | None = None) -> None:
         self.device = device or _device()
@@ -84,7 +117,7 @@ async def test_platform_creates_one_entity_per_key_supported_by_the_profile(
 ):
     device = _device(_profile(display_name=display_name, keys=supported))
     coordinator = FakeCoordinator(_telemetry(), device)
-    entry = SimpleNamespace(runtime_data=SimpleNamespace(coordinator=coordinator))
+    entry = _entry(coordinator)
     entities = []
 
     await sensor.async_setup_entry(None, entry, entities.extend)
@@ -95,7 +128,7 @@ async def test_platform_creates_one_entity_per_key_supported_by_the_profile(
 
 async def test_platform_creates_six_entities_from_entry_runtime():
     coordinator = FakeCoordinator(_telemetry())
-    entry = SimpleNamespace(runtime_data=SimpleNamespace(coordinator=coordinator))
+    entry = _entry(coordinator)
     entities = []
 
     await sensor.async_setup_entry(None, entry, entities.extend)
@@ -119,12 +152,14 @@ def test_power_sensors_expose_native_power_measurements():
     solar = sensor.SajSensor(
         coordinator,
         sensor.SensorDescription("pv_power", SensorDeviceClass.POWER, UnitOfPower.WATT),
+        prefix="",
     )
     battery = sensor.SajSensor(
         coordinator,
         sensor.SensorDescription(
             "battery_power", SensorDeviceClass.POWER, UnitOfPower.WATT
         ),
+        prefix="",
     )
 
     assert solar.native_value == 2000
@@ -138,6 +173,7 @@ def test_battery_charge_uses_percent_and_battery_class():
     entity = sensor.SajSensor(
         coordinator,
         sensor.SensorDescription("battery_soc", SensorDeviceClass.BATTERY, PERCENTAGE),
+        prefix="",
     )
 
     assert entity.native_value == 84.25
@@ -148,7 +184,9 @@ def test_battery_charge_uses_percent_and_battery_class():
 def test_operating_mode_is_an_enum_with_translated_state_key():
     coordinator = FakeCoordinator(_telemetry(operating_mode=2))
     entity = sensor.SajSensor(
-        coordinator, sensor.SensorDescription("operating_mode", SensorDeviceClass.ENUM)
+        coordinator,
+        sensor.SensorDescription("operating_mode", SensorDeviceClass.ENUM),
+        prefix="",
     )
 
     assert entity._attr_device_class is SensorDeviceClass.ENUM
@@ -160,7 +198,9 @@ def test_operating_mode_is_an_enum_with_translated_state_key():
 def test_unknown_mode_has_unknown_sensor_state_and_stable_device_identity():
     coordinator = FakeCoordinator(_telemetry(operating_mode=27))
     entity = sensor.SajSensor(
-        coordinator, sensor.SensorDescription("operating_mode", SensorDeviceClass.ENUM)
+        coordinator,
+        sensor.SensorDescription("operating_mode", SensorDeviceClass.ENUM),
+        prefix="",
     )
 
     assert entity.native_value is None
@@ -175,7 +215,7 @@ def test_unknown_mode_has_unknown_sensor_state_and_stable_device_identity():
 
 def test_non_measurement_description_has_no_state_class():
     entity = sensor.SajSensor(
-        FakeCoordinator(_telemetry()), sensor.SensorDescription("custom")
+        FakeCoordinator(_telemetry()), sensor.SensorDescription("custom"), prefix=""
     )
 
     assert not hasattr(entity, "_attr_state_class")
@@ -196,6 +236,7 @@ def test_device_model_names_the_effective_profile_and_whether_it_was_detected(
     entity = sensor.SajSensor(
         FakeCoordinator(_telemetry(), device),
         sensor.SensorDescription("pv_power", SensorDeviceClass.POWER, UnitOfPower.WATT),
+        prefix="",
     )
 
     assert entity._attr_device_info["model"] == expected
@@ -209,6 +250,7 @@ def test_unique_ids_and_device_identity_are_independent_of_the_profile():
         sensor.SajSensor(
             FakeCoordinator(_telemetry(), _device(_profile(display_name=name))),
             description,
+            prefix="",
         )
         for name in ("Alpha", "Beta")
     ]
@@ -232,7 +274,7 @@ def writes(monkeypatch):
 
 
 def _entity(coordinator, key="pv_power"):
-    return sensor.SajSensor(coordinator, sensor.SensorDescription(key))
+    return sensor.SajSensor(coordinator, sensor.SensorDescription(key), prefix="")
 
 
 @pytest.mark.parametrize(
@@ -298,9 +340,88 @@ async def test_a_sensor_not_read_writes_once_per_availability_change(writes):
     assert writes == ["pv_power"] * 4
 
 
+@pytest.mark.parametrize(
+    ("prefix", "key", "expected"),
+    [
+        ("", "pv_power", "sensor.saj_pv_power"),
+        ("", "battery_soc", "sensor.saj_battery_soc"),
+        ("", "load_power", "sensor.saj_load_power"),
+        ("house", "pv_power", "sensor.saj_house_pv_power"),
+        ("garage2", "battery_soc", "sensor.saj_garage2_battery_soc"),
+    ],
+)
+def test_entity_id_comes_from_the_key_and_prefix_never_from_display_text(
+    prefix, key, expected
+):
+    entity = sensor.SajSensor(
+        FakeCoordinator(_telemetry()), sensor.SensorDescription(key), prefix=prefix
+    )
+
+    assert entity.entity_id == expected
+
+
+@pytest.mark.parametrize(
+    ("options", "expected_prefix"),
+    [({"prefix": "house"}, "house_"), ({"prefix": ""}, ""), ({}, "")],
+)
+async def test_the_platform_applies_the_prefix_saved_in_the_entry_options(
+    options, expected_prefix
+):
+    entry = _entry(FakeCoordinator(_telemetry()), **options)
+    entities = []
+
+    await sensor.async_setup_entry(None, entry, entities.extend)
+
+    assert {entity.entity_id for entity in entities} == {
+        f"sensor.saj_{expected_prefix}{entity.key}" for entity in entities
+    }
+    assert len(entities) == 6
+
+
+async def test_a_new_sensor_whose_entity_id_is_taken_logs_one_warning_naming_both_ids(
+    registry, caplog
+):
+    registry.taken.add("sensor.saj_house_pv_power")
+    entry = _entry(FakeCoordinator(_telemetry()), prefix="house")
+
+    with caplog.at_level(logging.WARNING, logger=sensor.__name__):
+        await sensor.async_setup_entry(None, entry, [].extend)
+
+    assert [record.getMessage() for record in caplog.records] == [
+        (
+            "Entity ID sensor.saj_house_pv_power is taken, so sensor pv_power is "
+            "registered as sensor.saj_house_pv_power_2"
+        )
+    ]
+
+
+@pytest.mark.parametrize("already_registered", [True, False])
+async def test_only_a_sensor_new_to_the_registry_is_warned_about(
+    registry, caplog, *, already_registered
+):
+    registry.taken.add("sensor.saj_pv_power")
+    if already_registered:
+        registry.registered["logical-installation-123_pv_power"] = "sensor.saj_pv_power"
+    entry = _entry(FakeCoordinator(_telemetry()))
+
+    with caplog.at_level(logging.WARNING, logger=sensor.__name__):
+        await sensor.async_setup_entry(None, entry, [].extend)
+
+    assert bool(caplog.records) is not already_registered
+
+
+async def test_free_entity_ids_log_no_warning(caplog):
+    entry = _entry(FakeCoordinator(_telemetry()), prefix="house")
+
+    with caplog.at_level(logging.WARNING, logger=sensor.__name__):
+        await sensor.async_setup_entry(None, entry, [].extend)
+
+    assert caplog.records == []
+
+
 async def test_the_platform_adds_entities_without_attaching_them_to_a_subentry():
     coordinator = FakeCoordinator(_telemetry())
-    entry = SimpleNamespace(runtime_data=SimpleNamespace(coordinator=coordinator))
+    entry = _entry(coordinator)
     calls = []
 
     def add_entities(entities, *args, **kwargs):

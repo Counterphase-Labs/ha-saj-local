@@ -1,8 +1,11 @@
+import re
 from contextlib import nullcontext
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, Any, Protocol
 
 import voluptuous as vol
+from homeassistant.components.recorder.statistics import async_list_statistic_ids
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.config_entries import (
     ConfigFlow,
@@ -17,7 +20,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Collection, Mapping
+    from collections.abc import Awaitable, Callable, Collection, Iterable, Mapping
     from contextlib import AbstractAsyncContextManager
 
     from homeassistant.config_entries import ConfigEntry, ConfigSubentry
@@ -27,6 +30,7 @@ if TYPE_CHECKING:
 
 from .const import (
     CONF_MODEL,
+    CONF_PREFIX,
     CONF_SCAN_INTERVAL,
     CONF_SENSORS,
     CONF_UNIT_ID,
@@ -34,12 +38,15 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_UNIT_ID,
     DOMAIN,
+    KEY_PLACEHOLDER,
     MAX_PORT,
     MAX_UNIT_ID,
     MIN_UNIT_ID,
     REQUEST_TIMEOUT,
     SUBENTRY_POLLING_GROUP,
     endpoint_guard,
+    entity_id_in_use,
+    sensor_entity_id,
     sensor_key,
 )
 from .errors import HANDLED_ERRORS, translate_error
@@ -53,12 +60,23 @@ from .saj.telemetry import read_telemetry
 MODEL_TRANSLATION_KEY = "model"
 STEP_CONFIRM_MODEL = "confirm_model"
 STEP_CONFIRM_REPLACEMENT = "confirm_replacement"
+STEP_CONFIRM_PREFIX = "confirm_prefix"
 ABORT_NOT_PENDING = "confirmation_not_pending"
 ABORT_ALREADY_CONFIGURED = "already_configured"
 ABORT_NO_SENSORS = "no_sensors"
 ABORT_ALL_SENSORS_ASSIGNED = "all_sensors_assigned"
+ABORT_PREFIX_UNAVAILABLE = "prefix_unavailable"
 ERROR_NO_SENSORS_SELECTED = "no_sensors_selected"
 ERROR_SENSOR_IN_OTHER_GROUP = "sensor_in_other_group"
+ERROR_INVALID_PREFIX = "invalid_prefix"
+ERROR_PREFIX_SHADOWS_SENSOR = "prefix_shadows_sensor"
+ERROR_PREFIX_IN_USE = "prefix_in_use"
+ERROR_ENTITY_ID_TAKEN = "entity_id_taken"
+ERROR_STATISTICS_EXIST = "statistics_exist"
+PREFIX_SHAPE = re.compile(r"[a-z0-9]+")
+MAX_PREFIX_LENGTH = 32
+RECORDER_COMPONENT = "recorder"
+RECORDER_STATISTICS_SOURCE = "recorder"
 
 
 class EndpointCheck(Protocol):
@@ -75,6 +93,29 @@ class SessionFactory(Protocol):
     ) -> AbstractAsyncContextManager[ModbusTcpClient | None]: ...
 
 
+class EntityIdCheck(Protocol):
+    def __call__(self, *, entity_id: str) -> bool: ...
+
+
+class StatisticsLookup(Protocol):
+    def __call__(
+        self, *, entity_ids: Collection[str]
+    ) -> Awaitable[Collection[str]]: ...
+
+
+@dataclass(frozen=True)
+class PrefixContext:
+    other_prefixes: frozenset[str]
+    sensor_keys: frozenset[str]
+    saved_prefix: str | None = None
+
+
+@dataclass(frozen=True)
+class PrefixCheck:
+    prefix: str
+    error: str | None = None
+
+
 @dataclass(frozen=True)
 class Submission:
     host: str
@@ -82,6 +123,7 @@ class Submission:
     unit_id: int
     scan_interval: int
     model: str
+    prefix: str
 
     @property
     def entry_data(self) -> dict[str, Any]:
@@ -92,6 +134,14 @@ class Submission:
             CONF_MODEL: self.model,
         }
 
+    @property
+    def entry_options(self) -> dict[str, Any]:
+        return {CONF_SCAN_INTERVAL: self.scan_interval, CONF_PREFIX: self.prefix}
+
+    @property
+    def form_values(self) -> dict[str, Any]:
+        return {**self.entry_data, **self.entry_options}
+
 
 @dataclass
 class PendingChange:
@@ -99,6 +149,7 @@ class PendingChange:
     device: Device
     model_confirmed: bool = False
     replacement_confirmed: bool = False
+    prefix_confirmed: bool = False
 
 
 @dataclass(frozen=True)
@@ -127,17 +178,17 @@ class SajLocalConfigFlow(ConfigFlow, domain=DOMAIN):
             endpoint_taken=self._endpoint_exists,
             validation_session=_unguarded_session,
             guard_for=self._guard_for,
+            prefix_context=self._prefix_context(),
         )
         if validation.change is not None:
-            self._pending = validation.change
-            if not validation.change.device.detected:
-                return self._show_model_confirmation(change=validation.change)
-            return await self._async_create_entry(change=validation.change)
-        return self.async_show_form(
-            step_id="user",
-            data_schema=_endpoint_schema(defaults=user_input),
-            **validation.feedback,
-        )
+            conflict = await self._prefix_conflict(change=validation.change)
+            if conflict is None:
+                self._pending = validation.change
+                if not validation.change.device.detected:
+                    return self._show_model_confirmation(change=validation.change)
+                return await self._async_create_entry(change=validation.change)
+            validation = conflict
+        return self._show_user_form(defaults=user_input, validation=validation)
 
     async def async_step_confirm_model(
         self, user_input: dict[str, Any] | None = None
@@ -152,7 +203,33 @@ class SajLocalConfigFlow(ConfigFlow, domain=DOMAIN):
             host=submission.host, port=submission.port, unit_id=submission.unit_id
         ):
             return self.async_abort(reason=ABORT_ALREADY_CONFIGURED)
+        conflict = await self._prefix_conflict(change=change)
+        if conflict is not None:
+            return self._show_user_form(
+                defaults=submission.form_values, validation=conflict
+            )
         return await self._async_create_entry(change=change)
+
+    def _show_user_form(
+        self, *, defaults: dict[str, Any] | None, validation: Validation
+    ) -> ConfigFlowResult:
+        return self.async_show_form(
+            step_id="user",
+            data_schema=_endpoint_schema(defaults=defaults),
+            **validation.feedback,
+        )
+
+    def _prefix_context(self) -> PrefixContext:
+        return prefix_context(entries=self.hass.config_entries.async_entries(DOMAIN))
+
+    async def _prefix_conflict(self, *, change: PendingChange) -> Validation | None:
+        return await find_prefix_conflict(
+            hass=self.hass,
+            context=self._prefix_context(),
+            prefix=change.submission.prefix,
+            keys=change.device.profile.measurement_keys,
+            check_statistics=False,
+        )
 
     def _show_model_confirmation(self, *, change: PendingChange) -> ConfigFlowResult:
         return self.async_show_form(**_model_confirmation_form(device=change.device))
@@ -164,7 +241,7 @@ class SajLocalConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(
             title=f"SAJ {change.device.serial}",
             data=submission.entry_data,
-            options={CONF_SCAN_INTERVAL: submission.scan_interval},
+            options=submission.entry_options,
         )
 
     def _guard_for(self, *, host: str, port: int) -> EndpointGuard:
@@ -202,14 +279,18 @@ class SajOptionsFlow(OptionsFlow):
             endpoint_taken=self._endpoint_exists_for_other,
             validation_session=self._validation_session,
             guard_for=self._guard_for,
+            prefix_context=self._prefix_context(),
         )
         change = validation.change
         if change is not None:
             if self._serial_exists_for_other(serial=change.device.serial):
                 validation = Validation(errors={"base": ABORT_ALREADY_CONFIGURED})
             else:
-                self._pending = change
-                return await self._async_advance(change=change)
+                conflict = await self._prefix_conflict(change=change)
+                if conflict is None:
+                    self._pending = change
+                    return await self._async_advance(change=change)
+                validation = conflict
         return self.async_show_form(
             step_id="init",
             data_schema=_options_schema(entry=self.config_entry, submitted=user_input),
@@ -228,6 +309,13 @@ class SajOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         return await self._async_confirm(
             submitted=user_input is not None, confirm=_confirm_replacement
+        )
+
+    async def async_step_confirm_prefix(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return await self._async_confirm(
+            submitted=user_input is not None, confirm=_confirm_prefix
         )
 
     async def _async_confirm(
@@ -257,7 +345,65 @@ class SajOptionsFlow(OptionsFlow):
                     "serial": device.serial,
                 },
             )
-        return self._save_changes(change=change)
+        if self._prefix_changed(change=change) and not change.prefix_confirmed:
+            return self.async_show_form(
+                **_prefix_confirmation_form(
+                    old_prefix=self._current_prefix,
+                    new_prefix=change.submission.prefix,
+                )
+            )
+        return await self._save_changes(change=change)
+
+    @property
+    def _current_prefix(self) -> str:
+        return self.config_entry.options.get(CONF_PREFIX, "")
+
+    def _prefix_changed(self, *, change: PendingChange) -> bool:
+        return change.submission.prefix != self._current_prefix
+
+    def _other_entries(self) -> list[ConfigEntry]:
+        return [
+            entry
+            for entry in self.hass.config_entries.async_entries(DOMAIN)
+            if entry.entry_id != self.config_entry.entry_id
+        ]
+
+    def _prefix_context(self) -> PrefixContext:
+        return prefix_context(
+            entries=self._other_entries(), saved_prefix=self._current_prefix
+        )
+
+    async def _prefix_conflict(self, *, change: PendingChange) -> Validation | None:
+        if not self._prefix_changed(change=change):
+            return None
+        keys = change.device.profile.measurement_keys | frozenset(
+            _sensor_labels(hass=self.hass, entry_id=self.config_entry.entry_id)
+        )
+        return await find_prefix_conflict(
+            hass=self.hass,
+            context=self._prefix_context(),
+            prefix=change.submission.prefix,
+            keys=keys,
+            check_statistics=True,
+        )
+
+    def _rename_entities(self, *, new_prefix: str) -> None:
+        registry = er.async_get(self.hass)
+        entry_id = self.config_entry.entry_id
+        renames: dict[str, str] = {}
+        for registered in er.async_entries_for_config_entry(registry, entry_id):
+            key = sensor_key(entry_id=entry_id, unique_id=registered.unique_id)
+            if (
+                registered.domain == SENSOR_DOMAIN
+                and key is not None
+                and registered.entity_id
+                == sensor_entity_id(prefix=self._current_prefix, key=key)
+            ):
+                renames[registered.entity_id] = sensor_entity_id(
+                    prefix=new_prefix, key=key
+                )
+        for entity_id, new_entity_id in renames.items():
+            registry.async_update_entity(entity_id, new_entity_id=new_entity_id)
 
     def _guard_for(self, *, host: str, port: int) -> EndpointGuard:
         return endpoint_guard(hass=self.hass, host=host, port=port)
@@ -287,16 +433,20 @@ class SajOptionsFlow(OptionsFlow):
             for entry in self.hass.config_entries.async_entries(DOMAIN)
         )
 
-    def _save_changes(self, *, change: PendingChange) -> ConfigFlowResult:
+    async def _save_changes(self, *, change: PendingChange) -> ConfigFlowResult:
         submission = change.submission
         if self._endpoint_exists_for_other(
             host=submission.host, port=submission.port, unit_id=submission.unit_id
         ) or self._serial_exists_for_other(serial=change.device.serial):
             return self.async_abort(reason=ABORT_ALREADY_CONFIGURED)
+        if await self._prefix_conflict(change=change) is not None:
+            return self.async_abort(reason=ABORT_PREFIX_UNAVAILABLE)
+        if self._prefix_changed(change=change):
+            self._rename_entities(new_prefix=submission.prefix)
         self.hass.config_entries.async_update_entry(
             self.config_entry,
             data=submission.entry_data,
-            options={CONF_SCAN_INTERVAL: submission.scan_interval},
+            options=submission.entry_options,
             unique_id=change.device.serial,
         )
         return self.async_abort(reason="changes_saved")
@@ -456,6 +606,7 @@ async def validate_submission(
     endpoint_taken: EndpointCheck,
     validation_session: SessionFactory,
     guard_for: GuardSource,
+    prefix_context: PrefixContext,
 ) -> Validation:
     if user_input is None:
         return Validation()
@@ -464,6 +615,11 @@ async def validate_submission(
     interval = _normalized_interval(user_input=user_input)
     if interval is None:
         errors["base"] = "invalid_scan_interval"
+    checked_prefix = _checked_prefix(
+        value=user_input.get(CONF_PREFIX, ""), context=prefix_context
+    )
+    if checked_prefix.error is not None:
+        errors[CONF_PREFIX] = checked_prefix.error
     if endpoint is None or interval is None or errors:
         return Validation(errors=errors)
     host, port, unit_id = endpoint
@@ -473,6 +629,7 @@ async def validate_submission(
         unit_id=unit_id,
         scan_interval=interval,
         model=user_input[CONF_MODEL],
+        prefix=checked_prefix.prefix,
     )
     if endpoint_taken(host=host, port=port, unit_id=unit_id):
         return Validation(errors={"base": ABORT_ALREADY_CONFIGURED})
@@ -537,6 +694,125 @@ def _confirm_replacement(change: PendingChange) -> None:
     change.replacement_confirmed = True
 
 
+def _confirm_prefix(change: PendingChange) -> None:
+    change.prefix_confirmed = True
+
+
+def prefix_context(
+    *, entries: Iterable[ConfigEntry], saved_prefix: str | None = None
+) -> PrefixContext:
+    return PrefixContext(
+        saved_prefix=saved_prefix,
+        other_prefixes=frozenset(
+            entry.options.get(CONF_PREFIX, "") for entry in entries
+        ),
+        sensor_keys=frozenset().union(
+            *(profile.measurement_keys for profile in PROFILES)
+        ),
+    )
+
+
+def _checked_prefix(*, value: object, context: PrefixContext) -> PrefixCheck:
+    if (
+        context.saved_prefix is not None
+        and isinstance(value, str)
+        and value.strip().lower() == context.saved_prefix
+    ):
+        return PrefixCheck(prefix=context.saved_prefix)
+    return validate_prefix(
+        value=value,
+        other_prefixes=context.other_prefixes,
+        sensor_keys=context.sensor_keys,
+    )
+
+
+def validate_prefix(
+    *, value: object, other_prefixes: Collection[str], sensor_keys: Collection[str]
+) -> PrefixCheck:
+    if not isinstance(value, str):
+        return PrefixCheck(prefix="", error=ERROR_INVALID_PREFIX)
+    prefix = value.strip().lower()
+    if prefix and (
+        len(prefix) > MAX_PREFIX_LENGTH or PREFIX_SHAPE.fullmatch(prefix) is None
+    ):
+        return PrefixCheck(prefix=prefix, error=ERROR_INVALID_PREFIX)
+    if prefix and any(key.startswith(f"{prefix}_") for key in sensor_keys):
+        return PrefixCheck(prefix=prefix, error=ERROR_PREFIX_SHADOWS_SENSOR)
+    if prefix in other_prefixes:
+        return PrefixCheck(prefix=prefix, error=ERROR_PREFIX_IN_USE)
+    return PrefixCheck(prefix=prefix)
+
+
+def first_taken_entity_id(
+    *, entity_ids: Iterable[str], is_taken: EntityIdCheck
+) -> str | None:
+    return next(
+        (
+            entity_id
+            for entity_id in sorted(entity_ids)
+            if is_taken(entity_id=entity_id)
+        ),
+        None,
+    )
+
+
+async def first_entity_id_with_statistics(
+    *, entity_ids: Iterable[str], recorded_among: StatisticsLookup
+) -> str | None:
+    candidates = sorted(entity_ids)
+    recorded = await recorded_among(entity_ids=candidates)
+    return next((entity_id for entity_id in candidates if entity_id in recorded), None)
+
+
+async def find_prefix_conflict(
+    *,
+    hass: HomeAssistant,
+    context: PrefixContext,
+    prefix: str,
+    keys: Iterable[str],
+    check_statistics: bool,
+) -> Validation | None:
+    checked = validate_prefix(
+        value=prefix,
+        other_prefixes=context.other_prefixes,
+        sensor_keys=context.sensor_keys,
+    )
+    if checked.error is not None:
+        return Validation(errors={CONF_PREFIX: checked.error})
+    entity_ids = [sensor_entity_id(prefix=prefix, key=key) for key in keys]
+    taken = first_taken_entity_id(
+        entity_ids=entity_ids, is_taken=partial(entity_id_in_use, hass=hass)
+    )
+    if taken is not None:
+        return _entity_id_conflict(error=ERROR_ENTITY_ID_TAKEN, entity_id=taken)
+    if not check_statistics or RECORDER_COMPONENT not in hass.config.components:
+        return None
+    recorded = await first_entity_id_with_statistics(
+        entity_ids=entity_ids,
+        recorded_among=partial(_recorded_statistic_ids, hass=hass),
+    )
+    if recorded is None:
+        return None
+    return _entity_id_conflict(error=ERROR_STATISTICS_EXIST, entity_id=recorded)
+
+
+def _entity_id_conflict(*, error: str, entity_id: str) -> Validation:
+    return Validation(
+        errors={CONF_PREFIX: error}, placeholders={"entity_id": entity_id}
+    )
+
+
+async def _recorded_statistic_ids(
+    *, hass: HomeAssistant, entity_ids: Collection[str]
+) -> frozenset[str]:
+    listed = await async_list_statistic_ids(hass, set(entity_ids))
+    return frozenset(
+        item["statistic_id"]
+        for item in listed
+        if item["source"] == RECORDER_STATISTICS_SOURCE
+    )
+
+
 def _unguarded_session(
     *, host: str, port: int, unit_id: int
 ) -> AbstractAsyncContextManager[ModbusTcpClient | None]:
@@ -552,6 +828,18 @@ def _model_confirmation_form(*, device: Device) -> dict[str, Any]:
         "description_placeholders": {
             "model": device.profile.display_name,
             "device_type": format_device_type(device.device_type),
+        },
+    }
+
+
+def _prefix_confirmation_form(*, old_prefix: str, new_prefix: str) -> dict[str, Any]:
+    return {
+        "step_id": STEP_CONFIRM_PREFIX,
+        "data_schema": vol.Schema({}),
+        "errors": {},
+        "description_placeholders": {
+            "old_pattern": sensor_entity_id(prefix=old_prefix, key=KEY_PLACEHOLDER),
+            "new_pattern": sensor_entity_id(prefix=new_prefix, key=KEY_PLACEHOLDER),
         },
     }
 
@@ -578,6 +866,9 @@ def _endpoint_schema(*, defaults: dict[str, Any] | None = None) -> vol.Schema:
         vol.Required(CONF_MODEL, default=values.get(CONF_MODEL, AUTOMATIC)): (
             _model_selector()
         ),
+        vol.Optional(
+            CONF_PREFIX, description={"suggested_value": values.get(CONF_PREFIX, "")}
+        ): str,
     }
     return vol.Schema(schema)
 
@@ -592,6 +883,7 @@ def _options_schema(
         CONF_SCAN_INTERVAL: entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
         ),
+        CONF_PREFIX: entry.options.get(CONF_PREFIX, ""),
     }
     return _endpoint_schema(defaults=defaults)
 

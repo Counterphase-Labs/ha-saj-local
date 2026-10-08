@@ -36,6 +36,13 @@ BETA = Profile(
     measurement_keys=frozenset(),
     hand_verified=False,
 )
+GAMMA = Profile(
+    key="gamma",
+    display_name="Gamma",
+    device_types=frozenset({0x0003}),
+    measurement_keys=frozenset({"pv_power", "grid_power"}),
+    hand_verified=True,
+)
 INPUT = {
     "host": "inverter",
     "port": 502,
@@ -119,6 +126,7 @@ class FakeNumberSelectorMode(StrEnum):
 class FakeConfigEntries:
     def __init__(self, entries=()) -> None:
         self.entries = list(entries)
+        self.events = []
 
     def async_entries(self, _domain):
         return self.entries
@@ -128,6 +136,7 @@ class FakeConfigEntries:
         entry.options = changes["options"]
         entry.unique_id = changes["unique_id"]
         entry.update_count = getattr(entry, "update_count", 0) + 1
+        self.events.append("update_entry")
         return True
 
 
@@ -139,6 +148,11 @@ def _device(
     device_type: int = 0x0001,
 ) -> Device:
     return Device(serial, device_type, 12000, profile, detected=detected)
+
+
+def _nothing_taken(*, hass, entity_id) -> bool:
+    del hass, entity_id
+    return False
 
 
 def _identifying(device: Device):
@@ -172,10 +186,11 @@ def reset_flow_client_instances(monkeypatch):
     monkeypatch.setattr(
         config_flow.selector, "NumberSelectorMode", FakeNumberSelectorMode
     )
-    monkeypatch.setattr(config_flow, "PROFILES", (ALPHA, BETA))
+    monkeypatch.setattr(config_flow, "PROFILES", (ALPHA, BETA, GAMMA))
     monkeypatch.setattr(config_flow, "ModbusTcpClient", FlowClient)
     monkeypatch.setattr(config_flow, "identify", _identifying(_device()))
     monkeypatch.setattr(config_flow, "read_telemetry", _telemetry)
+    monkeypatch.setattr(config_flow, "entity_id_in_use", _nothing_taken)
 
 
 def _form(**kwargs):
@@ -188,7 +203,11 @@ def _abort(*, reason):
 
 def _flow(monkeypatch, *, entries=()):
     instance = object.__new__(config_flow.SajLocalConfigFlow)
-    instance.hass = SimpleNamespace(config_entries=FakeConfigEntries(entries), data={})
+    instance.hass = SimpleNamespace(
+        config_entries=FakeConfigEntries(entries),
+        config=SimpleNamespace(components=set()),
+        data={},
+    )
     monkeypatch.setattr(instance, "async_show_form", _form)
     monkeypatch.setattr(instance, "async_abort", _abort)
     monkeypatch.setattr(
@@ -222,7 +241,7 @@ def _marker(schema, name: str):
     return next(marker for marker in schema.schema if marker.schema == name)
 
 
-async def test_user_step_shows_the_five_fields_with_automatic_model_default(
+async def test_user_step_shows_the_six_fields_with_automatic_model_default(
     monkeypatch,
 ):
     instance = _flow(monkeypatch)
@@ -236,6 +255,7 @@ async def test_user_step_shows_the_five_fields_with_automatic_model_default(
         "unit_id",
         "scan_interval",
         "model",
+        "prefix",
     ]
     assert result["data_schema"]({"host": "inverter"}) == {
         **INPUT,
@@ -252,7 +272,7 @@ async def test_model_dropdown_offers_automatic_then_every_library_profile(
     schema = (await instance.async_step_user())["data_schema"]
     model_selector = schema.schema[_marker(schema, "model")]
 
-    assert model_selector.config["options"] == ["automatic", "alpha", "beta"]
+    assert model_selector.config["options"] == ["automatic", "alpha", "beta", "gamma"]
     assert model_selector.config["mode"] == "dropdown"
     assert model_selector.config["translation_key"] == "model"
 
@@ -272,7 +292,7 @@ async def test_user_step_creates_entry_on_automatic_through_one_path(
         "type": "create_entry",
         "title": f"SAJ {SERIAL}",
         "data": {**SAVED_DATA, "unit_id": 5},
-        "options": {"scan_interval": 30},
+        "options": {"scan_interval": 30, "prefix": ""},
     }
     assert identify.selections == ["automatic"]
     assert instance.selected_unique_id == SERIAL
@@ -305,7 +325,10 @@ async def test_user_step_stores_explicit_selection_and_never_the_detected_model(
 
 
 async def test_user_step_rejects_duplicate_endpoint_before_connecting(monkeypatch):
-    entry = SimpleNamespace(data={"host": "INVERTER", "port": 502, "unit_id": 1})
+    entry = SimpleNamespace(
+        data={"host": "INVERTER", "port": 502, "unit_id": 1},
+        options={"prefix": "other"},
+    )
     instance = _flow(monkeypatch, entries=[entry])
 
     result = await instance.async_step_user(INPUT)
@@ -319,6 +342,7 @@ async def test_user_step_rechecks_endpoint_after_validation_before_create(monkey
         entry_id="entry-b",
         unique_id="OTHER",
         data={"host": "other", "port": 502, "unit_id": 1},
+        options={"prefix": "other"},
     )
     instance = _flow(monkeypatch, entries=[other])
 
@@ -484,7 +508,7 @@ async def test_confirmed_model_creates_entry_with_the_selection(monkeypatch):
         "type": "create_entry",
         "title": f"SAJ {SERIAL}",
         "data": {**SAVED_DATA, "model": "beta"},
-        "options": {"scan_interval": 30},
+        "options": {"scan_interval": 30, "prefix": ""},
     }
     assert instance.selected_unique_id == SERIAL
 
@@ -538,7 +562,10 @@ async def test_model_confirmation_aborts_when_endpoint_was_claimed_meanwhile(
     monkeypatch,
 ):
     other = SimpleNamespace(
-        entry_id="entry-b", unique_id="OTHER", data={"host": "other"}
+        entry_id="entry-b",
+        unique_id="OTHER",
+        data={"host": "other"},
+        options={"prefix": "other"},
     )
     instance = _flow(monkeypatch, entries=[other])
     monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
@@ -551,13 +578,13 @@ async def test_model_confirmation_aborts_when_endpoint_was_claimed_meanwhile(
     assert not hasattr(instance, "selected_unique_id")
 
 
-def _saved_entry(*, entry_id="entry-a", serial=SERIAL, model="automatic"):
+def _saved_entry(*, entry_id="entry-a", serial=SERIAL, model="automatic", prefix=""):
     return SimpleNamespace(
         entry_id=entry_id,
         unique_id=serial,
         title=f"SAJ {serial}",
         data={**SAVED_DATA, "model": model},
-        options={"scan_interval": 45},
+        options={"scan_interval": 45, "prefix": prefix},
         update_count=0,
     )
 
@@ -566,6 +593,7 @@ def _options_flow(monkeypatch, *, entry, entries=None):
     instance = object.__new__(config_flow.SajOptionsFlow)
     instance.hass = SimpleNamespace(
         config_entries=FakeConfigEntries(entries if entries is not None else [entry]),
+        config=SimpleNamespace(components=set()),
         data={},
     )
     monkeypatch.setattr(
@@ -584,12 +612,12 @@ def _submission(**changes):
 
 def _unchanged(entry, *, data=None, options=None, serial=SERIAL):
     assert entry.data == (data or SAVED_DATA)
-    assert entry.options == (options or {"scan_interval": 45})
+    assert entry.options == (options or {"scan_interval": 45, "prefix": ""})
     assert entry.unique_id == serial
     assert entry.update_count == 0
 
 
-async def test_options_form_prefills_the_five_fields_from_saved_state(monkeypatch):
+async def test_options_form_prefills_the_six_fields_from_saved_state(monkeypatch):
     entry = _saved_entry(model="beta")
     flow = _options_flow(monkeypatch, entry=entry)
 
@@ -602,6 +630,7 @@ async def test_options_form_prefills_the_five_fields_from_saved_state(monkeypatc
         "unit_id",
         "scan_interval",
         "model",
+        "prefix",
     ]
     assert _marker(schema, "port").default() == 502
     assert _marker(schema, "unit_id").default() == 1
@@ -622,7 +651,7 @@ async def test_options_step_uses_default_interval_when_none_saved(monkeypatch):
     assert await instance.async_step_init(_submission(scan_interval=60)) == _abort(
         reason="changes_saved"
     )
-    assert entry.options == {"scan_interval": 60}
+    assert entry.options == {"scan_interval": 60, "prefix": ""}
     assert entry.update_count == 1
 
 
@@ -678,9 +707,16 @@ async def test_validated_edit_saves_once_and_keeps_entry_identity(
     assert FlowClient.instances[0].closed
     assert entry.entry_id == "entry-a"
     assert entry.data == expected_data
-    assert entry.options == {"scan_interval": expected_interval}
+    assert entry.options == {"scan_interval": expected_interval, "prefix": ""}
     assert entry.unique_id == SERIAL
     assert entry.update_count == 1
+
+
+def _entry_with_neighbour(monkeypatch, *, serial, neighbour_host):
+    entry = _saved_entry()
+    other = _saved_entry(entry_id="entry-b", serial=serial, prefix="other")
+    other.data = {**SAVED_DATA, "host": neighbour_host}
+    return entry, other, _options_flow(monkeypatch, entry=entry, entries=[entry, other])
 
 
 def _options_flow_with_validation_session(monkeypatch):
@@ -830,7 +866,7 @@ async def test_replacement_across_models_asks_confirmation_before_any_change(
     assert entry.unique_id == REPLACEMENT_SERIAL
     assert entry.title == f"SAJ {SERIAL}"
     assert entry.data == {**SAVED_DATA, "host": new_host}
-    assert entry.options == {"scan_interval": 75}
+    assert entry.options == {"scan_interval": 75, "prefix": ""}
     assert entry.update_count == 1
 
 
@@ -903,10 +939,9 @@ async def test_replacement_prompt_shown_again_until_submitted(monkeypatch):
 async def test_duplicate_serial_is_rejected_before_replacement_confirmation(
     monkeypatch,
 ):
-    entry = _saved_entry()
-    other = _saved_entry(entry_id="entry-b", serial=REPLACEMENT_SERIAL)
-    other.data = {**SAVED_DATA, "host": "other"}
-    flow = _options_flow(monkeypatch, entry=entry, entries=[entry, other])
+    entry, _other, flow = _entry_with_neighbour(
+        monkeypatch, serial=REPLACEMENT_SERIAL, neighbour_host="other"
+    )
     monkeypatch.setattr(
         config_flow,
         "identify",
@@ -1021,10 +1056,9 @@ async def test_model_prompt_is_shown_again_until_submitted(monkeypatch):
 async def test_confirmation_rechecks_other_entry_ownership_before_saving(
     monkeypatch, ownership_change, confirmation
 ):
-    entry = _saved_entry()
-    other = _saved_entry(entry_id="entry-b", serial="OTHER")
-    other.data = {**SAVED_DATA, "host": "other"}
-    flow = _options_flow(monkeypatch, entry=entry, entries=[entry, other])
+    entry, other, flow = _entry_with_neighbour(
+        monkeypatch, serial="OTHER", neighbour_host="other"
+    )
     device = (
         _device(serial=REPLACEMENT_SERIAL, profile=BETA)
         if confirmation == "replacement"
@@ -1064,10 +1098,9 @@ async def test_changed_endpoint_validation_failure_leaves_saved_state_unchanged(
 
 
 async def test_changed_endpoint_rejects_other_entry_before_connecting(monkeypatch):
-    entry = _saved_entry()
-    other = _saved_entry(entry_id="entry-b", serial="OTHER")
-    other.data = {**SAVED_DATA, "host": "new-inverter"}
-    flow = _options_flow(monkeypatch, entry=entry, entries=[entry, other])
+    entry, _other, flow = _entry_with_neighbour(
+        monkeypatch, serial="OTHER", neighbour_host="new-inverter"
+    )
 
     result = await flow.async_step_init(_submission(host="new-inverter"))
 
@@ -1079,10 +1112,9 @@ async def test_changed_endpoint_rejects_other_entry_before_connecting(monkeypatc
 async def test_connection_edit_rechecks_endpoint_ownership_after_validation(
     monkeypatch,
 ):
-    entry = _saved_entry()
-    other = _saved_entry(entry_id="entry-b", serial="OTHER")
-    other.data = {**SAVED_DATA, "host": "other"}
-    flow = _options_flow(monkeypatch, entry=entry, entries=[entry, other])
+    entry, other, flow = _entry_with_neighbour(
+        monkeypatch, serial="OTHER", neighbour_host="other"
+    )
 
     async def identify_and_claim_endpoint(client, selection):
         del client, selection
@@ -1129,7 +1161,7 @@ async def test_user_step_enforces_the_shared_minimum_interval(
     result = await instance.async_step_user({**INPUT, "scan_interval": interval})
 
     if accepted:
-        assert result["options"] == {"scan_interval": interval}
+        assert result["options"] == {"scan_interval": interval, "prefix": ""}
     else:
         assert result["errors"] == {"base": "invalid_scan_interval"}
         assert FlowClient.instances == []
@@ -1628,3 +1660,889 @@ async def test_a_failed_validation_over_the_installation_client_leaves_the_guard
     assert _state(guard) == before
     assert not session.client.closed
     assert entry.update_count == 0
+
+
+def _id(prefix, key):
+    return f"sensor.saj_{prefix}_{key}" if prefix else f"sensor.saj_{key}"
+
+
+def _prefix_error(result):
+    return result["errors"].get("prefix")
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("", ""),
+        ("house", "house"),
+        ("  House  ", "house"),
+        ("HOUSE", "house"),
+        ("a", "a"),
+        ("9lives", "9lives"),
+        ("garage2", "garage2"),
+        ("x" * 32, "x" * 32),
+    ],
+)
+def test_a_well_formed_prefix_is_trimmed_and_lowercased(value, expected):
+    checked = config_flow.validate_prefix(
+        value=value, other_prefixes=set(), sensor_keys=set()
+    )
+
+    assert checked == config_flow.PrefixCheck(prefix=expected, error=None)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "_house",
+        "house_",
+        "a_b",
+        "garage_2",
+        "ho_use",
+        "a__b",
+        "a-b",
+        "a b",
+        "a.b",
+        "house!",
+        "x" * 33,
+        "caf\u00e9",
+        "_",
+        5,
+        None,
+        ["house"],
+    ],
+)
+def test_a_malformed_prefix_is_rejected_not_rewritten(value):
+    checked = config_flow.validate_prefix(
+        value=value, other_prefixes=set(), sensor_keys=set()
+    )
+
+    assert checked.error == "invalid_prefix"
+
+
+@pytest.mark.parametrize(
+    ("value", "others", "error"),
+    [
+        ("house", {"house"}, "prefix_in_use"),
+        ("HOUSE", {"house"}, "prefix_in_use"),
+        ("", {""}, "prefix_in_use"),
+        ("", {"house"}, None),
+        ("house", {"", "garage"}, None),
+    ],
+)
+def test_a_prefix_is_unique_across_installations_and_empty_counts_as_a_value(
+    value, others, error
+):
+    checked = config_flow.validate_prefix(
+        value=value, other_prefixes=others, sensor_keys=set()
+    )
+
+    assert checked.error == error
+
+
+@pytest.mark.parametrize(
+    ("value", "error"),
+    [
+        ("battery", "prefix_shadows_sensor"),
+        ("pv", "prefix_shadows_sensor"),
+        ("batterypower", None),
+        ("bat", None),
+        ("power", None),
+        ("", None),
+    ],
+)
+def test_a_prefix_may_not_start_a_sensor_key_of_any_supported_model(value, error):
+    checked = config_flow.validate_prefix(
+        value=value,
+        other_prefixes=set(),
+        sensor_keys={"battery_power", "pv_power"},
+    )
+
+    assert checked.error == error
+
+
+def test_a_malformed_prefix_is_reported_before_it_is_compared_with_anything():
+    checked = config_flow.validate_prefix(
+        value="Pv__x", other_prefixes={"pv__x"}, sensor_keys={"pv__x_a"}
+    )
+
+    assert checked.error == "invalid_prefix"
+
+
+def test_the_prefix_context_gathers_every_installations_prefix_and_every_models_keys(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        config_flow,
+        "PROFILES",
+        (
+            ALPHA,
+            GAMMA,
+            Profile(
+                key="delta",
+                display_name="Delta",
+                device_types=frozenset({4}),
+                measurement_keys=frozenset({"a", "pv_power"}),
+                hand_verified=True,
+            ),
+        ),
+    )
+    entries = [
+        SimpleNamespace(options={"prefix": "house"}),
+        SimpleNamespace(options={"prefix": ""}),
+        SimpleNamespace(options={}),
+    ]
+
+    context = config_flow.prefix_context(entries=entries)
+
+    assert context.other_prefixes == {"house", ""}
+    assert context.sensor_keys == {"a", "pv_power", "grid_power"}
+
+
+@pytest.mark.parametrize(
+    ("taken", "expected"),
+    [
+        (set(), None),
+        ({"sensor.saj_b"}, "sensor.saj_b"),
+        ({"sensor.saj_c", "sensor.saj_a"}, "sensor.saj_a"),
+    ],
+)
+def test_the_first_taken_entity_id_is_named(taken, expected):
+    def is_taken(*, entity_id):
+        return entity_id in taken
+
+    found = config_flow.first_taken_entity_id(
+        entity_ids=["sensor.saj_c", "sensor.saj_a", "sensor.saj_b"], is_taken=is_taken
+    )
+
+    assert found == expected
+
+
+@pytest.mark.parametrize(
+    ("recorded", "expected"),
+    [
+        (set(), None),
+        ({"sensor.saj_c"}, "sensor.saj_c"),
+        ({"sensor.saj_b", "sensor.saj_a", "elsewhere"}, "sensor.saj_a"),
+    ],
+)
+async def test_the_first_entity_id_with_statistics_comes_from_one_lookup(
+    recorded, expected
+):
+    lookups = []
+
+    async def lookup(*, entity_ids):
+        lookups.append(list(entity_ids))
+        return recorded
+
+    found = await config_flow.first_entity_id_with_statistics(
+        entity_ids=["sensor.saj_c", "sensor.saj_a", "sensor.saj_b"],
+        recorded_among=lookup,
+    )
+
+    assert found == expected
+    assert lookups == [["sensor.saj_a", "sensor.saj_b", "sensor.saj_c"]]
+
+
+async def test_recorded_statistic_ids_keep_only_the_recorders_own_statistics(
+    monkeypatch,
+):
+    asked = []
+
+    async def listed(hass, statistic_ids):
+        asked.append((hass, statistic_ids))
+        return [
+            {"statistic_id": "sensor.saj_a", "source": "recorder"},
+            {"statistic_id": "sensor.saj_b", "source": "some_integration"},
+        ]
+
+    monkeypatch.setattr(config_flow, "async_list_statistic_ids", listed)
+
+    found = await config_flow._recorded_statistic_ids(
+        hass="hass", entity_ids=["sensor.saj_a", "sensor.saj_b"]
+    )
+
+    assert found == {"sensor.saj_a"}
+    assert asked == [("hass", {"sensor.saj_a", "sensor.saj_b"})]
+
+
+def _conflict_hass(*, components=("recorder",)):
+    return SimpleNamespace(config=SimpleNamespace(components=set(components)))
+
+
+async def _find_conflict(monkeypatch, *, taken=(), recorded=(), **overrides):
+    lookups = []
+
+    def in_use(*, hass, entity_id):
+        del hass
+        return entity_id in taken
+
+    async def statistics(*, hass, entity_ids):
+        del hass
+        lookups.append(sorted(entity_ids))
+        return {entity_id for entity_id in entity_ids if entity_id in recorded}
+
+    monkeypatch.setattr(config_flow, "entity_id_in_use", in_use)
+    monkeypatch.setattr(config_flow, "_recorded_statistic_ids", statistics)
+    arguments = {
+        "hass": _conflict_hass(),
+        "context": config_flow.PrefixContext(frozenset(), frozenset()),
+        "prefix": "house",
+        "keys": ["pv_power", "grid_power"],
+        "check_statistics": True,
+        **overrides,
+    }
+    return await config_flow.find_prefix_conflict(**arguments), lookups
+
+
+async def test_no_conflict_when_nothing_is_taken_and_no_statistics_exist(monkeypatch):
+    conflict, lookups = await _find_conflict(monkeypatch)
+
+    assert conflict is None
+    assert lookups == [["sensor.saj_house_grid_power", "sensor.saj_house_pv_power"]]
+
+
+async def test_a_taken_entity_id_is_reported_on_the_prefix_field_naming_the_id(
+    monkeypatch,
+):
+    conflict, lookups = await _find_conflict(
+        monkeypatch,
+        taken={"sensor.saj_house_pv_power", "sensor.saj_house_grid_power"},
+    )
+
+    assert conflict.errors == {"prefix": "entity_id_taken"}
+    assert conflict.placeholders == {"entity_id": "sensor.saj_house_grid_power"}
+    assert lookups == []
+
+
+async def test_existing_statistics_are_reported_on_the_prefix_field_naming_the_id(
+    monkeypatch,
+):
+    conflict, _ = await _find_conflict(
+        monkeypatch, recorded={"sensor.saj_house_pv_power"}
+    )
+
+    assert conflict.errors == {"prefix": "statistics_exist"}
+    assert conflict.placeholders == {"entity_id": "sensor.saj_house_pv_power"}
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"check_statistics": False},
+        {"hass": _conflict_hass(components=())},
+    ],
+)
+async def test_statistics_are_not_looked_up_when_not_wanted_or_no_recorder_runs(
+    monkeypatch, overrides
+):
+    conflict, lookups = await _find_conflict(
+        monkeypatch, recorded={"sensor.saj_house_pv_power"}, **overrides
+    )
+
+    assert conflict is None
+    assert lookups == []
+
+
+async def test_a_rule_breaking_prefix_is_a_conflict_without_any_lookup(monkeypatch):
+    conflict, lookups = await _find_conflict(
+        monkeypatch,
+        prefix="house",
+        context=config_flow.PrefixContext(frozenset({"house"}), frozenset()),
+    )
+
+    assert conflict.errors == {"prefix": "prefix_in_use"}
+    assert conflict.placeholders == {}
+    assert lookups == []
+
+
+def _other_entry(prefix="other"):
+    return SimpleNamespace(
+        entry_id="entry-b",
+        unique_id="OTHER",
+        data={"host": "other", "port": 502, "unit_id": 1},
+        options={"prefix": prefix},
+    )
+
+
+def _gamma():
+    return _identifying(_device(profile=GAMMA, device_type=0x0003))
+
+
+def _taking(*entity_ids):
+    def in_use(*, hass, entity_id):
+        del hass
+        return entity_id in entity_ids
+
+    return in_use
+
+
+def test_the_prefix_field_suggests_a_value_and_has_no_default():
+    schema = config_flow._endpoint_schema(defaults={"prefix": "house"})
+    marker = _marker(schema, "prefix")
+
+    assert marker.description == {"suggested_value": "house"}
+    assert marker.default is config_flow.vol.UNDEFINED
+    assert "prefix" not in schema({"host": "inverter"})
+
+
+async def test_setup_stores_the_normalised_prefix_in_the_entry_options(monkeypatch):
+    instance = _flow(monkeypatch)
+
+    result = await instance.async_step_user({**INPUT, "prefix": "  House "})
+
+    assert result["options"] == {"scan_interval": 30, "prefix": "house"}
+    assert "prefix" not in result["data"]
+
+
+async def test_setup_treats_a_cleared_prefix_field_as_empty(monkeypatch):
+    instance = _flow(monkeypatch)
+
+    result = await instance.async_step_user(dict(INPUT))
+
+    assert result["options"]["prefix"] == ""
+
+
+@pytest.mark.parametrize(
+    ("prefix", "other_prefix", "error"),
+    [
+        ("house", "house", "prefix_in_use"),
+        ("", "", "prefix_in_use"),
+        ("Bad Prefix", "other", "invalid_prefix"),
+        ("pv", "other", "prefix_shadows_sensor"),
+    ],
+)
+async def test_setup_refuses_a_bad_prefix_on_the_prefix_field_before_connecting(
+    monkeypatch, prefix, other_prefix, error
+):
+    other = _other_entry(prefix=other_prefix)
+    other.data = {"host": "other", "port": 502, "unit_id": 1}
+    instance = _flow(monkeypatch, entries=[other])
+    monkeypatch.setattr(config_flow, "identify", _gamma())
+
+    result = await instance.async_step_user({**INPUT, "prefix": prefix})
+
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"prefix": error}
+    assert FlowClient.instances == []
+    assert _marker(result["data_schema"], "prefix").description == {
+        "suggested_value": prefix
+    }
+
+
+async def test_setup_refuses_a_prefix_whose_entity_id_is_taken_naming_the_first(
+    monkeypatch,
+):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _gamma())
+    monkeypatch.setattr(
+        config_flow,
+        "entity_id_in_use",
+        _taking("sensor.saj_house_pv_power", "sensor.saj_house_grid_power"),
+    )
+
+    result = await instance.async_step_user({**INPUT, "prefix": "house"})
+
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"prefix": "entity_id_taken"}
+    assert result["description_placeholders"] == {
+        "entity_id": "sensor.saj_house_grid_power"
+    }
+    assert not hasattr(instance, "selected_unique_id")
+
+
+async def test_setup_accepts_a_prefix_whose_entity_ids_are_free(monkeypatch):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _gamma())
+    monkeypatch.setattr(config_flow, "entity_id_in_use", _taking("sensor.saj_pv_power"))
+
+    result = await instance.async_step_user({**INPUT, "prefix": "house"})
+
+    assert result["type"] == "create_entry"
+
+
+async def test_setup_never_consults_the_recorder(monkeypatch):
+    instance = _flow(monkeypatch)
+    instance.hass.config.components.add("recorder")
+    monkeypatch.setattr(config_flow, "identify", _gamma())
+
+    async def exploding(*, hass, entity_ids):
+        raise AssertionError
+
+    monkeypatch.setattr(config_flow, "_recorded_statistic_ids", exploding)
+
+    result = await instance.async_step_user({**INPUT, "prefix": "house"})
+
+    assert result["type"] == "create_entry"
+
+
+async def test_setup_rechecks_the_prefix_when_the_model_is_confirmed(monkeypatch):
+    other = _other_entry()
+    instance = _flow(monkeypatch, entries=[other])
+    monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
+    await instance.async_step_user({**INPUT, "model": "beta", "prefix": "house"})
+    other.options = {"prefix": "house"}
+
+    result = await instance.async_step_confirm_model({})
+
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"prefix": "prefix_in_use"}
+    assert _marker(result["data_schema"], "prefix").description == {
+        "suggested_value": "house"
+    }
+    assert _marker(result["data_schema"], "model").default() == "beta"
+    assert not hasattr(instance, "selected_unique_id")
+
+
+async def test_setup_confirmation_creates_the_entry_with_its_prefix(monkeypatch):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
+    await instance.async_step_user({**INPUT, "model": "beta", "prefix": "house"})
+
+    result = await instance.async_step_confirm_model({})
+
+    assert result["options"] == {"scan_interval": 30, "prefix": "house"}
+
+
+class FakeEntityRegistry:
+    def __init__(self, entities, events) -> None:
+        self.entities = entities
+        self.events = events
+
+    def async_update_entity(self, entity_id, *, new_entity_id):
+        self.events.append(("rename", entity_id, new_entity_id))
+        next(
+            entity for entity in self.entities if entity.entity_id == entity_id
+        ).entity_id = new_entity_id
+
+
+def _registered_entity(
+    key, *, prefix="", entity_id=None, domain="sensor", owner="entry-a"
+):
+    return SimpleNamespace(
+        entity_id=entity_id or _id(prefix, key),
+        unique_id=f"{owner}_{key}",
+        domain=domain,
+        name=None,
+        original_name=key,
+    )
+
+
+def _prefix_flow(monkeypatch, *, saved_prefix="", entities=None, others=()):
+    entry = _saved_entry(prefix=saved_prefix)
+    flow = _options_flow(monkeypatch, entry=entry, entries=[entry, *others])
+    registered = (
+        entities
+        if entities is not None
+        else [
+            _registered_entity(key, prefix=saved_prefix)
+            for key in ("pv_power", "grid_power")
+        ]
+    )
+    registry = FakeEntityRegistry(registered, flow.hass.config_entries.events)
+    monkeypatch.setattr(config_flow.er, "async_get", lambda _hass: registry)
+    monkeypatch.setattr(
+        config_flow.er,
+        "async_entries_for_config_entry",
+        lambda found, entry_id: found.entities if entry_id == "entry-a" else [],
+    )
+    monkeypatch.setattr(config_flow, "identify", _gamma())
+    return entry, flow
+
+
+def _renames(flow):
+    return [
+        event for event in flow.hass.config_entries.events if event != "update_entry"
+    ]
+
+
+async def test_the_options_form_suggests_the_saved_prefix(monkeypatch):
+    entry = _saved_entry(prefix="house")
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    form = await flow.async_step_init()
+
+    assert _marker(form["data_schema"], "prefix").description == {
+        "suggested_value": "house"
+    }
+
+
+async def test_the_options_form_suggests_an_empty_prefix_when_none_was_saved(
+    monkeypatch,
+):
+    entry = _saved_entry()
+    del entry.options["prefix"]
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    form = await flow.async_step_init()
+
+    assert _marker(form["data_schema"], "prefix").description == {"suggested_value": ""}
+
+
+async def test_an_unchanged_prefix_skips_confirmation_and_renames_nothing(
+    monkeypatch,
+):
+    entry, flow = _prefix_flow(monkeypatch, saved_prefix="house")
+
+    result = await flow.async_step_init(_submission(prefix="house", scan_interval=90))
+
+    assert result == _abort(reason="changes_saved")
+    assert entry.options == {"scan_interval": 90, "prefix": "house"}
+    assert flow.hass.config_entries.events == ["update_entry"]
+
+
+async def test_an_unchanged_prefix_is_not_checked_against_the_registry_or_recorder(
+    monkeypatch,
+):
+    entry, flow = _prefix_flow(monkeypatch, saved_prefix="house")
+    flow.hass.config.components.add("recorder")
+    monkeypatch.setattr(
+        config_flow,
+        "entity_id_in_use",
+        _taking("sensor.saj_house_pv_power"),
+    )
+
+    result = await flow.async_step_init(_submission(prefix="house"))
+
+    assert result == _abort(reason="changes_saved")
+    assert entry.update_count == 1
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "expected_old", "expected_new"),
+    [
+        ("", "house", "sensor.saj_<key>", "sensor.saj_house_<key>"),
+        ("house", "garage", "sensor.saj_house_<key>", "sensor.saj_garage_<key>"),
+        ("house", "", "sensor.saj_house_<key>", "sensor.saj_<key>"),
+    ],
+)
+async def test_adding_changing_or_removing_a_prefix_asks_for_confirmation_first(
+    monkeypatch, old, new, expected_old, expected_new
+):
+    entry, flow = _prefix_flow(monkeypatch, saved_prefix=old)
+
+    form = await flow.async_step_init(_submission(prefix=new))
+
+    assert form["step_id"] == "confirm_prefix"
+    assert form["description_placeholders"] == {
+        "old_pattern": expected_old,
+        "new_pattern": expected_new,
+    }
+    _unchanged(entry, options={"scan_interval": 45, "prefix": old})
+    assert flow.hass.config_entries.events == []
+
+
+async def test_the_prefix_prompt_is_shown_again_until_submitted(monkeypatch):
+    _entry, flow = _prefix_flow(monkeypatch)
+    await flow.async_step_init(_submission(prefix="house"))
+
+    prompt = await flow.async_step_confirm_prefix()
+
+    assert prompt["step_id"] == "confirm_prefix"
+    assert flow.hass.config_entries.events == []
+
+
+async def test_prefix_confirmation_without_a_pending_change_aborts(monkeypatch):
+    _entry, flow = _prefix_flow(monkeypatch)
+
+    assert await flow.async_step_confirm_prefix({}) == _abort(
+        reason="confirmation_not_pending"
+    )
+
+
+@pytest.mark.parametrize(
+    ("old", "new"), [("", "house"), ("house", "garage"), ("house", "")]
+)
+async def test_confirming_renames_every_entity_then_saves_the_prefix(
+    monkeypatch, old, new
+):
+    entry, flow = _prefix_flow(monkeypatch, saved_prefix=old)
+    await flow.async_step_init(_submission(prefix=new))
+
+    result = await flow.async_step_confirm_prefix({})
+
+    assert result == _abort(reason="changes_saved")
+    assert flow.hass.config_entries.events == [
+        ("rename", _id(old, "pv_power"), _id(new, "pv_power")),
+        ("rename", _id(old, "grid_power"), _id(new, "grid_power")),
+        "update_entry",
+    ]
+    assert entry.options == {"scan_interval": 45, "prefix": new}
+    assert entry.update_count == 1
+
+
+async def test_only_entities_at_the_id_the_old_prefix_produces_are_renamed(
+    monkeypatch,
+):
+    entities = [
+        _registered_entity("pv_power", prefix="house"),
+        _registered_entity("grid_power", entity_id="sensor.my_grid"),
+        _registered_entity("battery_soc", prefix="house", domain="switch"),
+        _registered_entity("load_power", prefix="house", owner="entry-b"),
+    ]
+    _entry, flow = _prefix_flow(monkeypatch, saved_prefix="house", entities=entities)
+    await flow.async_step_init(_submission(prefix="garage"))
+
+    await flow.async_step_confirm_prefix({})
+
+    assert _renames(flow) == [
+        ("rename", "sensor.saj_house_pv_power", "sensor.saj_garage_pv_power")
+    ]
+    assert entities[1].entity_id == "sensor.my_grid"
+
+
+async def test_a_disabled_entity_is_renamed_like_any_other(monkeypatch):
+    disabled = _registered_entity("pv_power")
+    disabled.disabled_by = "user"
+    _entry, flow = _prefix_flow(monkeypatch, entities=[disabled])
+    await flow.async_step_init(_submission(prefix="house"))
+
+    await flow.async_step_confirm_prefix({})
+
+    assert _renames(flow) == [
+        ("rename", "sensor.saj_pv_power", "sensor.saj_house_pv_power")
+    ]
+
+
+async def test_a_taken_target_id_refuses_the_change_before_confirmation(
+    monkeypatch,
+):
+    _entry, flow = _prefix_flow(monkeypatch)
+    monkeypatch.setattr(
+        config_flow, "entity_id_in_use", _taking("sensor.saj_house_grid_power")
+    )
+
+    result = await flow.async_step_init(_submission(prefix="house"))
+
+    assert result["step_id"] == "init"
+    assert result["errors"] == {"prefix": "entity_id_taken"}
+    assert result["description_placeholders"] == {
+        "entity_id": "sensor.saj_house_grid_power"
+    }
+    assert _marker(result["data_schema"], "prefix").description == {
+        "suggested_value": "house"
+    }
+    assert flow.hass.config_entries.events == []
+
+
+async def test_a_target_id_of_an_entity_from_an_earlier_model_is_checked_too(
+    monkeypatch,
+):
+    entities = [_registered_entity("battery_soc")]
+    _entry, flow = _prefix_flow(monkeypatch, entities=entities)
+    monkeypatch.setattr(
+        config_flow, "entity_id_in_use", _taking("sensor.saj_house_battery_soc")
+    )
+
+    result = await flow.async_step_init(_submission(prefix="house"))
+
+    assert result["errors"] == {"prefix": "entity_id_taken"}
+
+
+async def test_a_target_id_taken_during_confirmation_aborts_and_renames_nothing(
+    monkeypatch,
+):
+    entry, flow = _prefix_flow(monkeypatch)
+    await flow.async_step_init(_submission(prefix="house"))
+    monkeypatch.setattr(
+        config_flow, "entity_id_in_use", _taking("sensor.saj_house_grid_power")
+    )
+
+    result = await flow.async_step_confirm_prefix({})
+
+    assert result == _abort(reason="prefix_unavailable")
+    assert flow.hass.config_entries.events == []
+    _unchanged(entry)
+
+
+async def test_a_prefix_claimed_during_confirmation_aborts_and_renames_nothing(
+    monkeypatch,
+):
+    other = _other_entry()
+    entry, flow = _prefix_flow(monkeypatch, others=[other])
+    await flow.async_step_init(_submission(prefix="house"))
+    other.options = {"prefix": "house"}
+
+    result = await flow.async_step_confirm_prefix({})
+
+    assert result == _abort(reason="prefix_unavailable")
+    assert flow.hass.config_entries.events == []
+    _unchanged(entry)
+
+
+async def test_statistics_under_a_target_id_refuse_the_change_naming_the_id(
+    monkeypatch,
+):
+    _entry, flow = _prefix_flow(monkeypatch)
+    flow.hass.config.components.add("recorder")
+    calls = []
+
+    async def listed(hass, statistic_ids):
+        calls.append(statistic_ids)
+        return [{"statistic_id": "sensor.saj_house_pv_power", "source": "recorder"}]
+
+    monkeypatch.setattr(config_flow, "async_list_statistic_ids", listed)
+
+    result = await flow.async_step_init(_submission(prefix="house"))
+
+    assert result["errors"] == {"prefix": "statistics_exist"}
+    assert result["description_placeholders"] == {
+        "entity_id": "sensor.saj_house_pv_power"
+    }
+    assert calls == [{"sensor.saj_house_pv_power", "sensor.saj_house_grid_power"}]
+    assert flow.hass.config_entries.events == []
+
+
+async def test_statistics_appearing_during_confirmation_abort_and_rename_nothing(
+    monkeypatch,
+):
+    _entry, flow = _prefix_flow(monkeypatch)
+    flow.hass.config.components.add("recorder")
+
+    async def none_yet(hass, statistic_ids):
+        return []
+
+    monkeypatch.setattr(config_flow, "async_list_statistic_ids", none_yet)
+    await flow.async_step_init(_submission(prefix="house"))
+
+    async def appeared(hass, statistic_ids):
+        return [{"statistic_id": "sensor.saj_house_grid_power", "source": "recorder"}]
+
+    monkeypatch.setattr(config_flow, "async_list_statistic_ids", appeared)
+
+    result = await flow.async_step_confirm_prefix({})
+
+    assert result == _abort(reason="prefix_unavailable")
+    assert flow.hass.config_entries.events == []
+
+
+async def test_without_a_recorder_the_statistics_check_is_skipped(monkeypatch):
+    _entry, flow = _prefix_flow(monkeypatch)
+
+    async def exploding(hass, statistic_ids):
+        raise AssertionError
+
+    monkeypatch.setattr(config_flow, "async_list_statistic_ids", exploding)
+
+    form = await flow.async_step_init(_submission(prefix="house"))
+
+    assert form["step_id"] == "confirm_prefix"
+
+
+@pytest.mark.parametrize(
+    ("prefix", "other_prefix", "error"),
+    [
+        ("other", "other", "prefix_in_use"),
+        ("", "", "prefix_in_use"),
+        ("Not Valid", "other", "invalid_prefix"),
+        ("pv", "other", "prefix_shadows_sensor"),
+    ],
+)
+async def test_configure_refuses_a_bad_prefix_on_the_prefix_field_before_connecting(
+    monkeypatch, prefix, other_prefix, error
+):
+    other = _other_entry(prefix=other_prefix)
+    entry, flow = _prefix_flow(monkeypatch, saved_prefix="house", others=[other])
+
+    result = await flow.async_step_init(_submission(prefix=prefix))
+
+    assert result["errors"] == {"prefix": error}
+    assert FlowClient.instances == []
+    _unchanged(entry, options={"scan_interval": 45, "prefix": "house"})
+
+
+async def test_the_prefix_is_confirmed_after_the_model_and_the_replacement(
+    monkeypatch,
+):
+    entry, flow = _prefix_flow(monkeypatch)
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _identifying(_assumed_device(serial=REPLACEMENT_SERIAL)),
+    )
+
+    form = await flow.async_step_init(_submission(model="beta", prefix="house"))
+    assert form["step_id"] == "confirm_model"
+    form = await flow.async_step_confirm_model({})
+    assert form["step_id"] == "confirm_replacement"
+    form = await flow.async_step_confirm_replacement({})
+    assert form["step_id"] == "confirm_prefix"
+    assert flow.hass.config_entries.events == []
+    result = await flow.async_step_confirm_prefix({})
+
+    assert result == _abort(reason="changes_saved")
+    assert entry.unique_id == REPLACEMENT_SERIAL
+    assert entry.data["model"] == "beta"
+    assert entry.options["prefix"] == "house"
+    assert entry.update_count == 1
+
+
+async def test_confirming_the_prefix_first_cannot_skip_the_other_confirmations(
+    monkeypatch,
+):
+    _entry, flow = _prefix_flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
+    await flow.async_step_init(_submission(model="beta", prefix="house"))
+
+    form = await flow.async_step_confirm_prefix({})
+
+    assert form["step_id"] == "confirm_model"
+    assert flow.hass.config_entries.events == []
+
+
+@pytest.mark.parametrize(
+    ("saved", "submitted", "neighbour_prefix"),
+    [
+        ("pv", "pv", "other"),
+        ("bad_saved", " BAD_SAVED ", "other"),
+        ("dup", "dup", "dup"),
+    ],
+)
+async def test_a_saved_prefix_that_now_breaks_a_rule_does_not_block_other_changes(
+    monkeypatch, saved, submitted, neighbour_prefix
+):
+    entry, flow = _prefix_flow(
+        monkeypatch, saved_prefix=saved, others=[_other_entry(prefix=neighbour_prefix)]
+    )
+
+    result = await flow.async_step_init(_submission(prefix=submitted, scan_interval=90))
+
+    assert result == _abort(reason="changes_saved")
+    assert entry.options == {"scan_interval": 90, "prefix": saved}
+    assert flow.hass.config_entries.events == ["update_entry"]
+
+
+@pytest.mark.parametrize(
+    ("saved", "submitted", "error"),
+    [
+        ("pv", "pv2_", "invalid_prefix"),
+        ("bad_saved", "bad_other", "invalid_prefix"),
+        ("pv", "battery", "prefix_shadows_sensor"),
+        ("dup", "other", "prefix_in_use"),
+    ],
+)
+async def test_changing_a_rule_breaking_saved_prefix_to_a_bad_value_is_still_refused(
+    monkeypatch, saved, submitted, error
+):
+    entry, flow = _prefix_flow(
+        monkeypatch, saved_prefix=saved, others=[_other_entry(prefix="other")]
+    )
+    monkeypatch.setattr(
+        config_flow,
+        "PROFILES",
+        (
+            Profile(
+                key="delta",
+                display_name="Delta",
+                device_types=frozenset({4}),
+                measurement_keys=frozenset({"battery_power", "pv_power"}),
+                hand_verified=True,
+            ),
+        ),
+    )
+
+    result = await flow.async_step_init(_submission(prefix=submitted))
+
+    assert result["errors"] == {"prefix": error}
+    assert flow.hass.config_entries.events == []
+    _unchanged(entry, options={"scan_interval": 45, "prefix": saved})

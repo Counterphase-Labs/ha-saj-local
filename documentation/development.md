@@ -60,6 +60,10 @@ The library decides what to read and when, and protects the device; the integrat
 
 Sensor names are a contract with every dashboard and automation a user writes. The library presents one set of names, units and formats across SAJ models, so a hardware upgrade keeps history wherever the old and new systems overlap. Map a new device onto the existing vocabulary before inventing names.
 
+Entity IDs are part of the same contract. `sensor_object_id` in `const.py` is the only place the format is defined, and everything else (the sensor, the rename on a prefix change, the confirmation text, diagnostics) calls it. A sensor key is therefore part of an entity ID: renaming a key is a breaking change, rewording a label is not. Sensor unique IDs stay the config entry ID plus the key and are untouched by a prefix change. The prefix is a Home Assistant concern and lives only in the integration's entry options, never in the SAJ library.
+
+A prefix change renames through the entity registry because that is what makes the recorder carry history and statistics to the new ID. The recorder refuses to move statistics onto an ID that already has them, so the change is checked first with one metadata lookup (`async_list_statistic_ids`) and every check is repeated when the change is saved, before the first rename.
+
 Until the first release, a wrong design is replaced outright with no compatibility layer. See the Backwards Compatibility notice in `AGENTS.md`.
 
 ## Stack

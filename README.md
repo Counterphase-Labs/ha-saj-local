@@ -98,6 +98,20 @@ Changing a group reloads the integration once. It never touches the sensors them
 
 All cadences of an installation share one clock, so a 10 second group and a 60 second default are read together every sixth tick, in one combined read where registers are next to each other. A cycle that overruns is not caught up: the missed ticks are dropped and polling carries on from the next tick.
 
+### Entity IDs and the prefix
+
+Entity IDs are fixed by the integration, never by the text shown on a dashboard: `sensor.saj_<key>`, for example `sensor.saj_pv_power`, `sensor.saj_battery_soc` and `sensor.saj_load_power`. Display names can be reworded freely; the key in the ID cannot.
+
+Each installation has an optional **Prefix**, empty by default. With the prefix `house` the IDs become `sensor.saj_house_pv_power`, so a second system with its own prefix never ends up with `_2` IDs. A prefix uses lowercase letters and digits only, with no underscores, and is at most 32 characters. Underscores are excluded so that two prefixes can never produce the same ID. It must be unique: two installations cannot share a prefix, and an empty prefix counts, so only one installation can have none. It cannot start a sensor name, so `battery` is refused because `battery_power` exists. Setup is refused when any ID the installation would create is already taken in Home Assistant. These rules apply when a prefix is set or changed; saving other Configure settings with the prefix unchanged does not re-check it.
+
+The prefix can be added, changed or removed in Configure. Before anything is saved you are shown the old and new pattern and warned that automations, scripts, dashboards, templates and Energy settings using the old IDs will stop working until you update them. On confirmation the installation's entities are renamed through Home Assistant's entity registry, which carries their history and long-term statistics to the new IDs, and the integration reloads. Only an entity still at the ID the old prefix produces is renamed; one you renamed yourself is left alone. Disabled entities are renamed too.
+
+A change is refused, and nothing is renamed, when a new ID is already taken or when Home Assistant already holds long-term statistics under a new ID, for example from a deleted installation that used the prefix. Home Assistant will not move statistics onto an ID that already has them. Short-term state history under a new ID cannot be detected, so the old ID's recent state history is not carried over in that case while statistics still are. Setup does not check statistics, so adding an installation back with the prefix of a deleted one continues that installation's history.
+
+If a later release adds a sensor and its ID is already taken, Home Assistant gives the new sensor a numeric suffix and a warning naming both IDs is logged.
+
+Diagnostics never contain the prefix. They show the pattern as `sensor.saj_<key>` or `sensor.saj_[redacted]_<key>`, which tells you whether a prefix is set.
+
 ### Protecting the inverter
 
 Communication modules can stop serving a client that polls too hard, so the limits below apply to everything the integration sends and cannot be configured away.

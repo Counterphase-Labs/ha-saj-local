@@ -245,3 +245,30 @@ async def test_diagnostics_omit_group_names_host_and_serial():
     assert "Private group name" not in str(result)
     assert "private-host" not in str(result)
     assert "PRIVATE-SERIAL" not in str(result)
+
+
+@pytest.mark.parametrize(
+    ("options", "pattern"),
+    [
+        ({"prefix": "private-house"}, "sensor.saj_[redacted]_<key>"),
+        ({"prefix": ""}, "sensor.saj_<key>"),
+        ({}, "sensor.saj_<key>"),
+    ],
+)
+async def test_diagnostics_show_whether_a_prefix_is_set_without_revealing_it(
+    options, pattern
+):
+    entry = SimpleNamespace(
+        data={"host": "private-host", "port": 502, "unit_id": 1, "model": "automatic"},
+        options=options,
+        runtime_data=SimpleNamespace(
+            device=Device("PRIVATE-SERIAL", 0x1610, 12000, PROFILE, detected=True),
+            client=FakeClient(),
+            coordinator=FakeCoordinator(set(), None),
+        ),
+    )
+
+    result = await async_get_config_entry_diagnostics(HASS, entry)
+
+    assert result["entity_id_pattern"] == pattern
+    assert "private-house" not in str(result)
