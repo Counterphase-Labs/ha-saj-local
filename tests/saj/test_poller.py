@@ -861,3 +861,28 @@ async def test_a_fault_in_a_gap_word_is_found_as_a_break_that_later_cycles_keep(
     ]
     assert poller.breaks == {Break(before=LOAD_ADDRESS + 1, after=GRID_ADDRESS)}
     assert poller.narrowing == ()
+
+
+async def test_a_link_failure_outside_a_cycle_closes_backs_off_and_needs_a_full_read():
+    harness = Harness()
+    harness.guard.delay = 40
+    harness.schedule.shortest_interval = 15
+
+    wakeup = await harness.poller().link_failed()
+
+    assert wakeup == NOW + 40
+    assert harness.client.events == ["close"]
+    assert harness.guard.calls == [("failed", NOW, 15)]
+    assert harness.schedule.calls == [("require_full_read",)]
+    assert harness.reads == []
+
+
+async def test_the_next_cycle_after_a_link_failure_reopens_the_connection():
+    harness = Harness()
+    poller = harness.poller()
+    await poller.link_failed()
+    harness.schedule.due_keys = frozenset({"a"})
+
+    await poller.run(enabled={"a"})
+
+    assert harness.client.events == ["close", "close", "connect"]

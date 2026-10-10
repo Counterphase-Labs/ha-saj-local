@@ -8,6 +8,7 @@ from .codec import Encoding, Range
 from .definitions import (
     DEFINITIONS,
     FAMILY_BY_NAME,
+    Access,
     Combination,
     Definition,
     EntityKind,
@@ -90,8 +91,20 @@ class Register:
         return self.definition.kind
 
     @property
+    def access(self) -> Access:
+        return self.definition.access
+
+    @property
     def writable(self) -> bool:
         return self.definition.writable
+
+    @property
+    def readable(self) -> bool:
+        return self.definition.readable
+
+    @property
+    def command_value(self) -> int | None:
+        return self.definition.command_value
 
     @property
     def range(self) -> Range | None:
@@ -134,6 +147,7 @@ class Catalogue:
             for placement in placements
         )
         _require_writable_forms(registers=registers)
+        _require_write_only_forms(registers=registers)
         _require_combination_sources(registers=registers)
         _require_addresses(registers=registers)
         _require_no_overlap(registers=registers)
@@ -146,13 +160,30 @@ class Catalogue:
             self._by_shape[shape] = _fitting(registers=self.registers, shape=shape)
         return self._by_shape[shape]
 
-    def rows_for(self, *, shape: Shape) -> tuple[Row, ...]:
-        rows = {
-            register.row
+    def read_registers_for(self, *, shape: Shape) -> tuple[Register, ...]:
+        return tuple(
+            register
             for register in self.registers_for(shape=shape)
-            if register.row is not None
-        }
-        return tuple(sorted(rows, key=lambda row: (row.address, row.words)))
+            if register.readable
+        )
+
+    def unread_registers_for(self, *, shape: Shape) -> tuple[Register, ...]:
+        return tuple(
+            register
+            for register in self.registers_for(shape=shape)
+            if not register.readable
+        )
+
+    def rows_for(self, *, shape: Shape) -> tuple[Row, ...]:
+        return _rows_of(registers=self.read_registers_for(shape=shape))
+
+    def unread_rows_for(self, *, shape: Shape) -> tuple[Row, ...]:
+        return _rows_of(registers=self.unread_registers_for(shape=shape))
+
+
+def _rows_of(*, registers: Iterable[Register]) -> tuple[Row, ...]:
+    rows = {register.row for register in registers if register.row is not None}
+    return tuple(sorted(rows, key=lambda row: (row.address, row.words)))
 
 
 def _definitions_by_key(*, definitions: Sequence[Definition]) -> dict[str, Definition]:
@@ -252,6 +283,18 @@ def _require_writable_forms(*, registers: Iterable[Register]) -> None:
             raise CatalogueError(message)
 
 
+def _require_write_only_forms(*, registers: Iterable[Register]) -> None:
+    for register in registers:
+        if register.access is not Access.WRITE_ONLY and (
+            register.command_value is not None
+        ):
+            message = f"Command key {register.key} must be write-only"
+            raise CatalogueError(message)
+        if register.access is Access.WRITE_ONLY and register.field is not None:
+            message = f"Write-only key {register.key} cannot be a packed field"
+            raise CatalogueError(message)
+
+
 def _require_combination_sources(*, registers: Sequence[Register]) -> None:
     keys = {register.key for register in registers}
     for register in registers:
@@ -286,7 +329,7 @@ def _require_no_overlap(*, registers: Iterable[Register]) -> None:
         if register.row is not None:
             rows.setdefault(register.row, []).append(register)
     for row, sharing in rows.items():
-        if len(sharing) > 1 and any(register.field is None for register in sharing):
+        if len(sharing) > 1 and not _may_share(sharing=sharing):
             message = f"Keys {[register.key for register in sharing]} share {row}"
             raise CatalogueError(message)
     ordered = sorted(rows, key=lambda row: (row.address, row.words))
@@ -298,20 +341,47 @@ def _require_no_overlap(*, registers: Iterable[Register]) -> None:
             raise CatalogueError(message)
 
 
+def _may_share(*, sharing: Sequence[Register]) -> bool:
+    if all(register.field is not None for register in sharing):
+        return True
+    if any(register.access is not Access.WRITE_ONLY for register in sharing):
+        return False
+    commands = [
+        register.command_value
+        for register in sharing
+        if register.command_value is not None
+    ]
+    uncommanded = len(sharing) - len(commands)
+    return uncommanded <= 1 and len(set(commands)) == len(commands)
+
+
 def _require_spans(*, profile: Profile, registers: Iterable[Register]) -> None:
     for register in registers:
         row = register.row
         if row is None:
             continue
-        if not any(
-            span.contains(address=row.address, words=row.words)
+        if register.readable:
+            _require_readable_row(profile=profile, register=register, row=row)
+        elif any(
+            span.overlaps(address=row.address, words=row.words)
             for span in profile.spans
         ):
-            message = f"Key {register.key} at {row.address:#06x} is outside every span"
+            message = (
+                f"Write-only key {register.key} at {row.address:#06x}"
+                " lies inside a span"
+            )
             raise CatalogueError(message)
-        if row.words > profile.largest_request:
-            message = f"Key {register.key} is wider than the largest request"
-            raise CatalogueError(message)
+
+
+def _require_readable_row(*, profile: Profile, register: Register, row: Row) -> None:
+    if not any(
+        span.contains(address=row.address, words=row.words) for span in profile.spans
+    ):
+        message = f"Key {register.key} at {row.address:#06x} is outside every span"
+        raise CatalogueError(message)
+    if row.words > profile.largest_request:
+        message = f"Key {register.key} is wider than the largest request"
+        raise CatalogueError(message)
 
 
 def _fitting(*, registers: Iterable[Register], shape: Shape) -> tuple[Register, ...]:
@@ -377,10 +447,26 @@ def device_registers(*, profile: Profile, device_type: int) -> tuple[Register, .
     )
 
 
+def device_read_registers(
+    *, profile: Profile, device_type: int
+) -> tuple[Register, ...]:
+    return catalogue_of(profile=profile).read_registers_for(
+        shape=profile.shape_of(device_type=device_type)
+    )
+
+
+def device_unread_registers(
+    *, profile: Profile, device_type: int
+) -> tuple[Register, ...]:
+    return catalogue_of(profile=profile).unread_registers_for(
+        shape=profile.shape_of(device_type=device_type)
+    )
+
+
 def device_keys(*, profile: Profile, device_type: int) -> frozenset[str]:
     return frozenset(
         register.key
-        for register in device_registers(profile=profile, device_type=device_type)
+        for register in device_read_registers(profile=profile, device_type=device_type)
     )
 
 
@@ -393,7 +479,7 @@ def known_keys(*, profiles: Iterable[Profile]) -> frozenset[str]:
 
 
 def blocks_by_key(*, profile: Profile, device_type: int) -> dict[str, str]:
-    registers = device_registers(profile=profile, device_type=device_type)
+    registers = device_read_registers(profile=profile, device_type=device_type)
     by_key = {register.key: register for register in registers}
     placed = [
         (_placed(register=register, by_key=by_key), register) for register in registers

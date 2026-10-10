@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .catalogue import device_registers
+from .catalogue import device_read_registers
 from .client import ModbusError, ModbusErrorMessage
 from .codec import Value, decode
 from .definitions import Combination, Operation
@@ -29,7 +29,9 @@ SETUP_KEYS = frozenset(
 
 
 def setup_keys(device: Device) -> frozenset[str]:
-    registers = device_registers(profile=device.profile, device_type=device.device_type)
+    registers = device_read_registers(
+        profile=device.profile, device_type=device.device_type
+    )
     return SETUP_KEYS & {register.key for register in registers}
 
 
@@ -177,7 +179,7 @@ def plan_requests(
     narrowing: Collection[Region] = (),
     breaks: Collection[Break] = (),
 ) -> list[ReadRange]:
-    registers = device_registers(profile=profile, device_type=device_type)
+    registers = device_read_registers(profile=profile, device_type=device_type)
     return plan_ranges(
         registers=_needed(registers, enabled),
         profile=profile,
@@ -257,7 +259,9 @@ async def read_telemetry(
     narrowing: Collection[Region] = (),
     breaks: Collection[Break] = (),
 ) -> Readout:
-    registers = device_registers(profile=device.profile, device_type=device.device_type)
+    registers = device_read_registers(
+        profile=device.profile, device_type=device.device_type
+    )
     needed = _needed(registers, enabled)
     by_key = {register.key: register for register in needed}
     requested = set(by_key) if enabled is None else set(enabled)

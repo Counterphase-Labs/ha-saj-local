@@ -1,11 +1,12 @@
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PORT, EVENT_HOMEASSISTANT_STOP
 from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 
 from .const import (
+    CONF_ALLOW_CONTROL,
     CONF_MODEL,
     CONF_SCAN_INTERVAL,
     CONF_UNIT_ID,
@@ -18,14 +19,17 @@ from .const import (
     SUBENTRY_POLLING_GROUP,
     endpoint_guard,
 )
-from .coordinator import SajCoordinator
+from .coordinator import Installation, SajCoordinator
 from .errors import HANDLED_ERRORS, translate_error
 from .saj.client import ClientEnvironment, ModbusError, ModbusTcpClient
+from .saj.control import Control
 from .saj.device import Device, identify
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+
     from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import Event, HomeAssistant
 
 
 @dataclass
@@ -58,10 +62,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _validate_identity(device=device, serial=entry.unique_id)
         coordinator = SajCoordinator(
             hass=hass,
-            client=client,
-            device=device,
+            installation=Installation(
+                client=client,
+                device=device,
+                guard=guard,
+                control=Control(
+                    link=client,
+                    device=device,
+                    guard=guard,
+                    enabled=entry.options.get(CONF_ALLOW_CONTROL, False),
+                    clock=hass.loop.time,
+                ),
+            ),
             entry=entry,
-            guard=guard,
         )
         await coordinator.async_config_entry_first_refresh()
     except HANDLED_ERRORS as err:
@@ -99,15 +112,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await client.close()
         raise
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+    entry.async_on_unload(
+        hass.bus.async_listen_once(
+            EVENT_HOMEASSISTANT_STOP, _release_ems_on_stop(coordinator=coordinator)
+        )
+    )
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        await entry.runtime_data.coordinator.async_release_ems()
         await entry.runtime_data.coordinator.async_shutdown()
         await entry.runtime_data.client.close()
     return unloaded
+
+
+def _release_ems_on_stop(
+    *, coordinator: SajCoordinator
+) -> Callable[[Event], Coroutine[Any, Any, None]]:
+    async def release(event: Event) -> None:
+        del event
+        await coordinator.async_release_ems()
+
+    return release
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, ClassVar
 
 import pytest
+from homeassistant.helpers import selector
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 from custom_components.saj_local import config_flow
 from custom_components.saj_local.errors import Translation
 from custom_components.saj_local.saj import errors as saj_errors
+from custom_components.saj_local.saj.catalogue import blocks_by_key
 from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessage
 from custom_components.saj_local.saj.device import Device
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
@@ -290,11 +292,18 @@ def _field_names(schema) -> list[str]:
     return [marker.schema for marker in schema.schema]
 
 
+def _use_home_assistant_number_selector(monkeypatch):
+    monkeypatch.setattr(config_flow.selector, "NumberSelector", selector.NumberSelector)
+    monkeypatch.setattr(
+        config_flow.selector, "NumberSelectorMode", selector.NumberSelectorMode
+    )
+
+
 def _marker(schema, name: str):
     return next(marker for marker in schema.schema if marker.schema == name)
 
 
-async def test_user_step_shows_the_six_fields_with_automatic_model_default(
+async def test_user_step_shows_the_seven_fields_with_automatic_model_default(
     monkeypatch,
 ):
     instance = _flow(monkeypatch)
@@ -309,10 +318,12 @@ async def test_user_step_shows_the_six_fields_with_automatic_model_default(
         "scan_interval",
         "model",
         "prefix",
+        "allow_control",
     ]
     assert result["data_schema"]({"host": "inverter"}) == {
         **INPUT,
         "scan_interval": 60,
+        "allow_control": False,
     }
     assert result["errors"] == {}
 
@@ -345,7 +356,7 @@ async def test_user_step_creates_entry_on_automatic_through_one_path(
         "type": "create_entry",
         "title": f"SAJ {SERIAL}",
         "data": {**SAVED_DATA, "unit_id": 5, "device_type": device_type},
-        "options": {"scan_interval": 30, "prefix": ""},
+        "options": {"scan_interval": 30, "prefix": "", "allow_control": False},
     }
     assert identify.selections == ["automatic"]
     assert instance.selected_unique_id == SERIAL
@@ -421,47 +432,63 @@ async def test_user_step_rejects_empty_host(monkeypatch):
     assert FlowClient.instances == []
 
 
-@pytest.mark.parametrize("unit_id", [0, 1.5, 248])
-async def test_user_step_rejects_invalid_unit_id(monkeypatch, unit_id):
+ENDPOINT_NUMBER_ERRORS = [
+    ("port", 0, "invalid_port"),
+    ("port", -1, "invalid_port"),
+    ("port", 65536, "invalid_port"),
+    ("port", 502.5, "invalid_port"),
+    ("unit_id", 0, "invalid_unit_id"),
+    ("unit_id", -1, "invalid_unit_id"),
+    ("unit_id", 248, "invalid_unit_id"),
+    ("unit_id", 1.5, "invalid_unit_id"),
+    ("scan_interval", 0, "invalid_scan_interval"),
+    ("scan_interval", 2, "invalid_scan_interval"),
+    ("scan_interval", -30, "invalid_scan_interval"),
+    ("scan_interval", 30.5, "invalid_scan_interval"),
+]
+
+
+@pytest.mark.parametrize(("field", "value", "error"), ENDPOINT_NUMBER_ERRORS)
+async def test_user_step_reports_a_bad_number_on_its_field_and_keeps_the_input(
+    monkeypatch, field, value, error
+):
     instance = _flow(monkeypatch)
 
-    result = await instance.async_step_user({**INPUT, "unit_id": unit_id})
+    result = await instance.async_step_user({**INPUT, field: value})
 
-    assert result["errors"] == {"base": "invalid_unit_id"}
+    assert result["type"] == "form"
+    assert result["errors"] == {field: error}
+    assert _marker(result["data_schema"], field).default() == value
     assert FlowClient.instances == []
+    assert not hasattr(instance, "selected_unique_id")
 
 
-async def test_endpoint_schema_uses_box_number_selector_with_integer_range(monkeypatch):
+async def test_endpoint_schema_uses_box_number_selectors_without_a_range(monkeypatch):
     instance = _flow(monkeypatch)
     result = await instance.async_step_user()
     schema = result["data_schema"]
     unit_marker = _marker(schema, "unit_id")
     port_marker = _marker(schema, "port")
-    interval_marker = _marker(schema, "scan_interval")
-    unit_selector = schema.schema[unit_marker]
 
-    assert isinstance(unit_selector, FakeNumberSelector)
-    assert unit_selector.config == {
-        "min": 1.0,
-        "max": 247.0,
-        "step": 1.0,
-        "mode": "box",
-    }
-    assert schema.schema[port_marker].config == {
-        "min": 1,
-        "step": 1,
-        "mode": "box",
-        "max": 65535,
-    }
-    assert schema.schema[interval_marker].config == {
-        "min": 10,
-        "step": 1,
-        "mode": "box",
-    }
+    for field in ("port", "unit_id", "scan_interval"):
+        selector_ = schema.schema[_marker(schema, field)]
+        assert isinstance(selector_, FakeNumberSelector)
+        assert selector_.config == {"step": "any", "mode": "box"}
     assert unit_marker.default() == 1
     assert port_marker.default() == 502
     assert type(schema({"host": "inverter"})["port"]) is int
     assert schema({"host": "inverter", "unit_id": 247})["unit_id"] == 247
+
+
+@pytest.mark.parametrize(("field", "value", "_error"), ENDPOINT_NUMBER_ERRORS)
+async def test_endpoint_schema_lets_an_out_of_range_number_reach_the_step_handler(
+    monkeypatch, field, value, _error
+):
+    _use_home_assistant_number_selector(monkeypatch)
+    instance = _flow(monkeypatch)
+    schema = (await instance.async_step_user())["data_schema"]
+
+    assert schema({"host": "inverter", field: value})[field] == value
 
 
 async def test_user_step_aborts_duplicate_serial_after_validation(monkeypatch):
@@ -561,7 +588,7 @@ async def test_confirmed_model_creates_entry_with_the_selection(monkeypatch):
         "type": "create_entry",
         "title": f"SAJ {SERIAL}",
         "data": {**SAVED_DATA, "model": "beta", "device_type": UNRECOGNISED_TYPE},
-        "options": {"scan_interval": 30, "prefix": ""},
+        "options": {"scan_interval": 30, "prefix": "", "allow_control": False},
     }
     assert instance.selected_unique_id == SERIAL
 
@@ -678,7 +705,7 @@ def _unchanged(entry, *, data=None, options=None, serial=SERIAL):
     assert entry.update_count == 0
 
 
-async def test_options_form_prefills_the_six_fields_from_saved_state(monkeypatch):
+async def test_options_form_prefills_the_seven_fields_from_saved_state(monkeypatch):
     entry = _saved_entry(model="beta")
     flow = _options_flow(monkeypatch, entry=entry)
 
@@ -692,7 +719,9 @@ async def test_options_form_prefills_the_six_fields_from_saved_state(monkeypatch
         "scan_interval",
         "model",
         "prefix",
+        "allow_control",
     ]
+    assert _marker(schema, "allow_control").default() is False
     assert _marker(schema, "port").default() == 502
     assert _marker(schema, "unit_id").default() == 1
     assert _marker(schema, "scan_interval").default() == 45
@@ -712,7 +741,7 @@ async def test_options_step_uses_default_interval_when_none_saved(monkeypatch):
     assert await instance.async_step_init(_submission(scan_interval=60)) == _abort(
         reason="changes_saved"
     )
-    assert entry.options == {"scan_interval": 60, "prefix": ""}
+    assert entry.options == {"scan_interval": 60, "prefix": "", "allow_control": False}
     assert entry.update_count == 1
 
 
@@ -720,16 +749,10 @@ async def test_options_step_uses_default_interval_when_none_saved(monkeypatch):
     ("changes", "reason"),
     [
         ({"port": "invalid"}, "invalid_endpoint"),
-        ({"port": 1.5}, "invalid_port"),
-        ({"port": 0}, "invalid_port"),
         ({"unit_id": "invalid"}, "invalid_endpoint"),
-        ({"unit_id": 1.5}, "invalid_unit_id"),
-        ({"scan_interval": "invalid"}, "invalid_scan_interval"),
-        ({"scan_interval": 30.5}, "invalid_scan_interval"),
-        ({"scan_interval": 9}, "invalid_scan_interval"),
     ],
 )
-async def test_options_step_rejects_invalid_numeric_fields(
+async def test_options_step_rejects_non_numeric_endpoint_fields(
     monkeypatch, changes, reason
 ):
     entry = _saved_entry()
@@ -738,6 +761,28 @@ async def test_options_step_rejects_invalid_numeric_fields(
     result = await flow.async_step_init(_submission(**changes))
 
     assert result["errors"] == {"base": reason}
+    _unchanged(entry)
+    assert FlowClient.instances == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error"),
+    [
+        *ENDPOINT_NUMBER_ERRORS,
+        ("scan_interval", "invalid", "invalid_scan_interval"),
+    ],
+)
+async def test_options_step_reports_a_bad_number_on_its_field_and_keeps_the_input(
+    monkeypatch, field, value, error
+):
+    entry = _saved_entry()
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    result = await flow.async_step_init(_submission(**{field: value}))
+
+    assert result["type"] == "form"
+    assert result["errors"] == {field: error}
+    assert _marker(result["data_schema"], field).default() == value
     _unchanged(entry)
     assert FlowClient.instances == []
 
@@ -768,7 +813,11 @@ async def test_validated_edit_saves_once_and_keeps_entry_identity(
     assert FlowClient.instances[0].closed
     assert entry.entry_id == "entry-a"
     assert entry.data == expected_data
-    assert entry.options == {"scan_interval": expected_interval, "prefix": ""}
+    assert entry.options == {
+        "scan_interval": expected_interval,
+        "prefix": "",
+        "allow_control": False,
+    }
     assert entry.unique_id == SERIAL
     assert entry.update_count == 1
 
@@ -927,7 +976,7 @@ async def test_replacement_across_models_asks_confirmation_before_any_change(
     assert entry.unique_id == REPLACEMENT_SERIAL
     assert entry.title == f"SAJ {SERIAL}"
     assert entry.data == {**SAVED_DATA, "host": new_host, "device_type": new_type}
-    assert entry.options == {"scan_interval": 75, "prefix": ""}
+    assert entry.options == {"scan_interval": 75, "prefix": "", "allow_control": False}
     assert entry.update_count == 1
 
 
@@ -1020,7 +1069,14 @@ async def test_duplicate_serial_is_rejected_before_replacement_confirmation(
 
 
 @pytest.mark.parametrize(
-    "step", ["confirm_model", "confirm_replacement", "confirm_prefix", "confirm_load"]
+    "step",
+    [
+        "confirm_model",
+        "confirm_replacement",
+        "confirm_prefix",
+        "confirm_load",
+        "confirm_control",
+    ],
 )
 async def test_confirmation_steps_without_pending_change_abort(monkeypatch, step):
     entry = _saved_entry()
@@ -1232,9 +1288,13 @@ async def test_user_step_enforces_the_shared_minimum_interval(
     result = await instance.async_step_user({**INPUT, "scan_interval": interval})
 
     if accepted:
-        assert result["options"] == {"scan_interval": interval, "prefix": ""}
+        assert result["options"] == {
+            "scan_interval": interval,
+            "prefix": "",
+            "allow_control": False,
+        }
     else:
-        assert result["errors"] == {"base": "invalid_scan_interval"}
+        assert result["errors"] == {"scan_interval": "invalid_scan_interval"}
         assert FlowClient.instances == []
 
 
@@ -1622,7 +1682,7 @@ async def test_the_result_choices_need_a_validated_submission(monkeypatch, step)
     assert await getattr(flow, step)() == _abort(reason="confirmation_not_pending")
 
 
-@pytest.mark.parametrize("interval", [9, 0, 12.5, "fast", None])
+@pytest.mark.parametrize("interval", [2, 9, 0, -10, 12.5, "fast", None])
 @pytest.mark.parametrize("editing", [False, True])
 async def test_an_invalid_interval_is_reported_on_its_field_and_nothing_is_saved(
     monkeypatch, interval, *, editing
@@ -1639,8 +1699,20 @@ async def test_an_invalid_interval_is_reported_on_its_field_and_nothing_is_saved
 
     assert result["type"] == "form"
     assert result["errors"] == {"scan_interval": "invalid_scan_interval"}
+    assert _marker(result["data_schema"], "scan_interval").default() == interval
     assert flow.updates == []
     assert flow.created == []
+
+
+@pytest.mark.parametrize("interval", [2, -10, 12.5])
+async def test_group_schema_lets_an_out_of_range_interval_reach_the_step_handler(
+    monkeypatch, interval
+):
+    _use_home_assistant_number_selector(monkeypatch)
+    flow, _ = _group_flow(monkeypatch)
+    schema = (await flow.async_step_user())["data_schema"]
+
+    assert schema(_group_input(scan_interval=interval))["scan_interval"] == interval
 
 
 async def test_a_submission_without_sensors_is_reported_on_the_sensors_field(
@@ -2323,7 +2395,11 @@ async def test_setup_stores_the_normalised_prefix_in_the_entry_options(monkeypat
 
     result = await instance.async_step_user({**INPUT, "prefix": "  House "})
 
-    assert result["options"] == {"scan_interval": 30, "prefix": "house"}
+    assert result["options"] == {
+        "scan_interval": 30,
+        "prefix": "house",
+        "allow_control": False,
+    }
     assert "prefix" not in result["data"]
 
 
@@ -2433,7 +2509,11 @@ async def test_setup_confirmation_creates_the_entry_with_its_prefix(monkeypatch)
 
     result = await instance.async_step_confirm_model({})
 
-    assert result["options"] == {"scan_interval": 30, "prefix": "house"}
+    assert result["options"] == {
+        "scan_interval": 30,
+        "prefix": "house",
+        "allow_control": False,
+    }
 
 
 class FakeEntityRegistry:
@@ -2519,7 +2599,11 @@ async def test_an_unchanged_prefix_skips_confirmation_and_renames_nothing(
     result = await flow.async_step_init(_submission(prefix="house", scan_interval=90))
 
     assert result == _abort(reason="changes_saved")
-    assert entry.options == {"scan_interval": 90, "prefix": "house"}
+    assert entry.options == {
+        "scan_interval": 90,
+        "prefix": "house",
+        "allow_control": False,
+    }
     assert flow.hass.config_entries.events == ["update_entry"]
 
 
@@ -2599,7 +2683,7 @@ async def test_confirming_renames_every_entity_then_saves_the_prefix(
         ("rename", _id(old, "grid_power"), _id(new, "grid_power")),
         "update_entry",
     ]
-    assert entry.options == {"scan_interval": 45, "prefix": new}
+    assert entry.options == {"scan_interval": 45, "prefix": new, "allow_control": False}
     assert entry.update_count == 1
 
 
@@ -2902,7 +2986,11 @@ async def test_a_saved_prefix_that_now_breaks_a_rule_does_not_block_other_change
     result = await flow.async_step_init(_submission(prefix=submitted, scan_interval=90))
 
     assert result == _abort(reason="changes_saved")
-    assert entry.options == {"scan_interval": 90, "prefix": saved}
+    assert entry.options == {
+        "scan_interval": 90,
+        "prefix": saved,
+        "allow_control": False,
+    }
     assert flow.hass.config_entries.events == ["update_entry"]
 
 
@@ -3048,13 +3136,11 @@ async def test_confirming_the_load_saves_the_interval_and_it_is_shown_until_conf
 
     assert again["step_id"] == "confirm_load"
     assert result == _abort(reason="changes_saved")
-    assert entry.options == {"scan_interval": 10, "prefix": ""}
+    assert entry.options == {"scan_interval": 10, "prefix": "", "allow_control": False}
     assert entry.update_count == 1
 
 
-async def test_the_load_is_confirmed_after_the_model_the_replacement_and_the_prefix(
-    monkeypatch,
-):
+def _replacement_flow(monkeypatch):
     entry = _entry_with_group(keys=SIX_KEYS)
     flow = _options_flow(monkeypatch, entry=entry)
     registry = FakeEntityRegistry([], flow.hass.config_entries.events)
@@ -3067,6 +3153,13 @@ async def test_the_load_is_confirmed_after_the_model_the_replacement_and_the_pre
         "identify",
         _identifying(_assumed_device(serial=REPLACEMENT_SERIAL)),
     )
+    return entry, flow
+
+
+async def test_the_load_is_confirmed_after_the_model_the_replacement_and_the_prefix(
+    monkeypatch,
+):
+    entry, flow = _replacement_flow(monkeypatch)
 
     steps = [
         await flow.async_step_init(
@@ -3086,7 +3179,11 @@ async def test_the_load_is_confirmed_after_the_model_the_replacement_and_the_pre
     assert entry.update_count == 0
     result = await flow.async_step_confirm_load({})
     assert result == _abort(reason="changes_saved")
-    assert entry.options == {"scan_interval": 10, "prefix": "house"}
+    assert entry.options == {
+        "scan_interval": 10,
+        "prefix": "house",
+        "allow_control": False,
+    }
 
 
 async def test_the_load_after_a_replacement_is_computed_for_the_new_device(
@@ -3134,3 +3231,347 @@ async def test_setup_checks_the_entity_ids_of_every_domain_the_device_has(monkey
     assert result["description_placeholders"] == {
         "entity_id": "number.saj_house_backup_reserve_soc"
     }
+
+
+EMS_TYPE = 0x0004
+EMS_PROFILE = profile(
+    base=HS3,
+    key="delta",
+    device_types={EMS_TYPE},
+    keys={"pv_power", "ems_battery_control", "ems_battery_power_target"},
+    hand_verified=True,
+)
+
+
+def _ems_flow(monkeypatch, **saved_options):
+    monkeypatch.setattr(config_flow, "PROFILES", (ALPHA, EMS_PROFILE))
+    entry = _saved_entry()
+    entry.data = {**SAVED_DATA, "device_type": EMS_TYPE}
+    entry.options = {"scan_interval": 45, "prefix": "", **saved_options}
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _identifying(_device(profile=EMS_PROFILE, device_type=EMS_TYPE)),
+    )
+    return entry, _options_flow(monkeypatch, entry=entry)
+
+
+async def test_the_heartbeat_field_is_offered_only_for_a_model_with_ems_rows(
+    monkeypatch,
+):
+    plain = await _options_flow(monkeypatch, entry=_saved_entry()).async_step_init()
+    _, flow = _ems_flow(monkeypatch)
+
+    with_ems = await flow.async_step_init()
+
+    assert "ems_heartbeat" not in _field_names(plain["data_schema"])
+    assert _field_names(with_ems["data_schema"])[-2:] == [
+        "allow_control",
+        "ems_heartbeat",
+    ]
+    heartbeat = _marker(with_ems["data_schema"], "ems_heartbeat")
+    assert heartbeat.default() == 60
+    config = with_ems["data_schema"].schema[heartbeat].config
+    assert "min" not in config
+    assert "max" not in config
+
+
+@pytest.mark.parametrize("value", [2, 3601, 60.5])
+async def test_heartbeat_schema_lets_an_out_of_range_value_reach_the_step_handler(
+    monkeypatch, value
+):
+    _use_home_assistant_number_selector(monkeypatch)
+    _, flow = _ems_flow(monkeypatch)
+    schema = (await flow.async_step_init())["data_schema"]
+
+    assert schema({**_submission(), "ems_heartbeat": value})["ems_heartbeat"] == value
+
+
+async def test_the_heartbeat_field_decision_does_not_need_the_installation_loaded(
+    monkeypatch,
+):
+    entry, flow = _ems_flow(monkeypatch, ems_heartbeat=120)
+    assert getattr(entry, "runtime_data", None) is None
+
+    form = await flow.async_step_init()
+
+    assert _marker(form["data_schema"], "ems_heartbeat").default() == 120
+
+
+async def test_the_heartbeat_field_survives_a_redisplayed_submission(monkeypatch):
+    _, flow = _ems_flow(monkeypatch)
+
+    form = await flow.async_step_init(
+        {**_submission(), "ems_heartbeat": 29, "allow_control": True}
+    )
+
+    assert "ems_heartbeat" in _field_names(form["data_schema"])
+    assert _marker(form["data_schema"], "ems_heartbeat").default() == 29
+    assert _marker(form["data_schema"], "allow_control").default() is True
+
+
+@pytest.mark.parametrize("value", [2, 29, 3601, -60, 60.5, "soon", None, 0])
+async def test_a_heartbeat_outside_30_to_3600_whole_seconds_is_refused_on_its_field(
+    monkeypatch, value
+):
+    entry, flow = _ems_flow(monkeypatch)
+
+    result = await flow.async_step_init({**_submission(), "ems_heartbeat": value})
+
+    assert result["errors"] == {"ems_heartbeat": "invalid_ems_heartbeat"}
+    assert _marker(result["data_schema"], "ems_heartbeat").default() == value
+    assert entry.update_count == 0
+    assert FlowClient.instances == []
+
+
+@pytest.mark.parametrize("value", [30, 60, 3600])
+async def test_a_valid_heartbeat_is_saved_with_the_options(monkeypatch, value):
+    entry, flow = _ems_flow(monkeypatch)
+
+    result = await flow.async_step_init({**_submission(), "ems_heartbeat": value})
+
+    assert result == _abort(reason="changes_saved")
+    assert entry.options["ems_heartbeat"] == value
+
+
+async def test_a_model_without_ems_saves_no_heartbeat(monkeypatch):
+    entry = _saved_entry()
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    await flow.async_step_init(_submission())
+
+    assert "ems_heartbeat" not in entry.options
+
+
+async def test_switching_control_on_asks_for_confirmation_and_saves_nothing_first(
+    monkeypatch,
+):
+    entry = _saved_entry()
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    form = await flow.async_step_init({**_submission(), "allow_control": True})
+
+    assert form["step_id"] == "confirm_control"
+    assert entry.update_count == 0
+    _unchanged(entry)
+
+
+async def test_the_control_confirmation_repeats_until_confirmed_then_saves_it_on(
+    monkeypatch,
+):
+    entry = _saved_entry()
+    flow = _options_flow(monkeypatch, entry=entry)
+    await flow.async_step_init({**_submission(), "allow_control": True})
+
+    again = await flow.async_step_confirm_control()
+    saved = await flow.async_step_confirm_control({})
+
+    assert again["step_id"] == "confirm_control"
+    assert saved == _abort(reason="changes_saved")
+    assert entry.update_count == 1
+    assert entry.options["allow_control"] is True
+
+
+@pytest.mark.parametrize(
+    ("saved", "submitted"), [(True, True), (True, False), (False, False)]
+)
+async def test_control_needs_no_confirmation_unless_it_is_being_switched_on(
+    monkeypatch, *, saved, submitted
+):
+    entry = _saved_entry()
+    entry.options = {"scan_interval": 45, "prefix": "", "allow_control": saved}
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    result = await flow.async_step_init({**_submission(), "allow_control": submitted})
+
+    assert result == _abort(reason="changes_saved")
+    assert entry.options["allow_control"] is submitted
+
+
+async def test_control_is_confirmed_after_model_replacement_prefix_and_load(
+    monkeypatch,
+):
+    entry, flow = _replacement_flow(monkeypatch)
+
+    steps = [
+        await flow.async_step_init(
+            {
+                **_submission(model="beta", scan_interval=10, prefix="house"),
+                "allow_control": True,
+            }
+        )
+    ]
+    for step in (
+        flow.async_step_confirm_model,
+        flow.async_step_confirm_replacement,
+        flow.async_step_confirm_prefix,
+        flow.async_step_confirm_load,
+    ):
+        steps.extend([await step({})])
+
+    assert [form["step_id"] for form in steps] == [
+        "confirm_model",
+        "confirm_replacement",
+        "confirm_prefix",
+        "confirm_load",
+        "confirm_control",
+    ]
+    assert entry.update_count == 0
+    assert await flow.async_step_confirm_control({}) == _abort(reason="changes_saved")
+    assert entry.options["allow_control"] is True
+
+
+async def test_the_load_of_an_installation_counts_only_rows_that_are_read(monkeypatch):
+    monkeypatch.setattr(config_flow, "PROFILES", (ALPHA, EMS_PROFILE))
+    entry = _saved_entry()
+    entry.data = {**SAVED_DATA, "device_type": EMS_TYPE}
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    await flow.async_step_init()
+
+    offered = {register.key for register in _nothing_enabled.asked[0]["registers"]}
+    assert offered == {"pv_power", "ems_battery_control"}
+
+
+async def test_polling_group_options_leave_out_rows_that_are_not_read(monkeypatch):
+    monkeypatch.setattr(config_flow, "PROFILES", (EMS_PROFILE,))
+    flow, entry = _group_flow(
+        monkeypatch,
+        registered=[
+            _registered("pv_power"),
+            _registered("ems_battery_control", domain="switch"),
+            _registered("ems_battery_power_target", domain="number"),
+        ],
+    )
+    entry.data = {"model": "automatic", "device_type": EMS_TYPE}
+    monkeypatch.setattr(config_flow, "blocks_by_key", blocks_by_key)
+
+    form = await flow.async_step_user()
+
+    assert set(_offered(form)) == {"pv_power", "ems_battery_control"}
+
+
+def _setup_with_ems(monkeypatch):
+    monkeypatch.setattr(config_flow, "PROFILES", (ALPHA, EMS_PROFILE))
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _identifying(_device(profile=EMS_PROFILE, device_type=EMS_TYPE)),
+    )
+    return _flow(monkeypatch)
+
+
+async def test_setup_with_control_left_off_creates_the_entry_without_confirmation(
+    monkeypatch,
+):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_device()))
+
+    result = await instance.async_step_user({**INPUT, "allow_control": False})
+
+    assert result["type"] == "create_entry"
+    assert result["options"]["allow_control"] is False
+
+
+async def test_setup_with_control_on_confirms_before_creating_anything(monkeypatch):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_device()))
+
+    form = await instance.async_step_user({**INPUT, "allow_control": True})
+    again = await instance.async_step_confirm_control()
+    assert not hasattr(instance, "selected_unique_id")
+    created = await instance.async_step_confirm_control({})
+
+    assert form["step_id"] == "confirm_control"
+    assert again["step_id"] == "confirm_control"
+    assert created["type"] == "create_entry"
+    assert created["options"]["allow_control"] is True
+
+
+async def test_setup_confirms_control_only_after_the_model_confirmation(monkeypatch):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
+
+    model = await instance.async_step_user(
+        {**INPUT, "model": "beta", "allow_control": True}
+    )
+    control = await instance.async_step_confirm_model({})
+    created = await instance.async_step_confirm_control({})
+
+    assert model["step_id"] == "confirm_model"
+    assert control["step_id"] == "confirm_control"
+    assert created["type"] == "create_entry"
+    assert created["options"]["allow_control"] is True
+
+
+async def test_setup_control_confirmation_without_pending_change_aborts(monkeypatch):
+    instance = _flow(monkeypatch)
+
+    result = await instance.async_step_confirm_control({})
+
+    assert result == _abort(reason="confirmation_not_pending")
+
+
+async def test_setup_control_confirmation_asks_an_ems_device_for_the_heartbeat(
+    monkeypatch,
+):
+    instance = _setup_with_ems(monkeypatch)
+
+    form = await instance.async_step_user({**INPUT, "allow_control": True})
+
+    assert form["step_id"] == "confirm_control"
+    assert _field_names(form["data_schema"]) == ["ems_heartbeat"]
+    assert _marker(form["data_schema"], "ems_heartbeat").default() == 60
+
+
+async def test_setup_stores_the_confirmed_heartbeat(monkeypatch):
+    instance = _setup_with_ems(monkeypatch)
+    await instance.async_step_user({**INPUT, "allow_control": True})
+
+    created = await instance.async_step_confirm_control({"ems_heartbeat": 120})
+
+    assert created["type"] == "create_entry"
+    assert created["options"]["allow_control"] is True
+    assert created["options"]["ems_heartbeat"] == 120
+
+
+@pytest.mark.parametrize("value", [2, 29, 3601, -60, 60.5, "x"])
+async def test_setup_refuses_an_invalid_heartbeat_and_creates_nothing(
+    monkeypatch, value
+):
+    instance = _setup_with_ems(monkeypatch)
+    await instance.async_step_user({**INPUT, "allow_control": True})
+
+    form = await instance.async_step_confirm_control({"ems_heartbeat": value})
+
+    assert form["step_id"] == "confirm_control"
+    assert form["errors"] == {"ems_heartbeat": "invalid_ems_heartbeat"}
+    assert _marker(form["data_schema"], "ems_heartbeat").default() == value
+    assert not hasattr(instance, "selected_unique_id")
+
+
+async def test_setup_control_confirmation_has_no_heartbeat_without_ems_rows(
+    monkeypatch,
+):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_device()))
+
+    form = await instance.async_step_user({**INPUT, "allow_control": True})
+    created = await instance.async_step_confirm_control({})
+
+    assert _field_names(form["data_schema"]) == []
+    assert "ems_heartbeat" not in created["options"]
+
+
+async def test_failed_setup_validation_keeps_the_control_tick(monkeypatch):
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _failing_identify(saj_errors.UnsupportedDeviceError(UNRECOGNISED_TYPE)),
+    )
+
+    result = await instance.async_step_user({**INPUT, "allow_control": True})
+
+    assert result["step_id"] == "user"
+    assert _marker(result["data_schema"], "allow_control").default() is True

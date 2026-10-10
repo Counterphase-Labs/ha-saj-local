@@ -17,6 +17,20 @@ TRANSLATIONS = json.loads(
 )
 ENTITY_TRANSLATIONS = TRANSLATIONS["entity"]
 PROFILE_KEYS = sorted(CATALOGUES)
+WRITE_PREFIXES = ("invalid_value_",)
+WRITE_KEYS = {
+    "control_not_enabled",
+    "model_unverified",
+    "protected_setting",
+    "unknown_setting",
+    "separate_registers",
+    "link_unavailable",
+    "write_allowance",
+    "ems_timeout_too_short",
+    "write_rejected",
+    "write_unconfirmed",
+    "write_mismatch",
+}
 
 
 def _shipped_registers(*, profile_key: str):
@@ -82,12 +96,36 @@ def test_there_are_no_option_labels_for_options_a_row_does_not_have():
     assert labelled == options_of
 
 
-def test_only_the_six_entity_platforms_are_translated():
+def test_only_the_seven_entity_platforms_are_translated():
     assert set(ENTITY_TRANSLATIONS) <= {kind.value for kind in EntityKind}
 
 
-def test_the_not_enabled_error_has_a_message():
-    assert TRANSLATIONS["exceptions"]["control_not_enabled"]["message"]
+def test_the_not_enabled_error_names_where_to_switch_control_on():
+    message = TRANSLATIONS["exceptions"]["control_not_enabled"]["message"]
+
+    assert "Configure" in message
+    assert "Allow control" in message
+
+
+def test_every_write_error_message_says_the_state_of_the_inverter():
+    states = ("was not changed", "was changed", "unknown state")
+    messages = {
+        key: entry["message"]
+        for key, entry in TRANSLATIONS["exceptions"].items()
+        if key.startswith(WRITE_PREFIXES) or key in WRITE_KEYS
+    }
+
+    assert messages
+    assert [
+        key for key, text in messages.items() if not any(s in text for s in states)
+    ] == []
+
+
+def test_the_control_confirmation_warns_about_reverse_current_protection():
+    description = TRANSLATIONS["options"]["step"]["confirm_control"]["description"]
+
+    assert "reverse-current protection" in description
+    assert "automations" in description
 
 
 def test_every_block_an_entity_can_be_listed_under_has_a_label():

@@ -102,6 +102,9 @@ The rules are in the Non Functional section of `requirements.md`. The reasons:
 
 `tests/integration/` holds the unit tests of the Home Assistant integration, not integration tests.
 
+- **Writes have one path.** An entity action calls `SajEntity.async_change`, which calls the coordinator's single `write` method. The EMS cleanup uses the same lock and error handling. The heartbeat is not a write: it reads each owned function's target through the library's keep-alive read, then the EMS limits through the library's limits read, under the same cycle lock, and uses no write slot. Only `custom_components/saj_local/errors.py` may import the library's errors; the rest go through it.
+- **The simulator is not a source for write behaviour.** Writes are specified by the SAJ protocol documents and real readings. If the simulator departs from the documented `0x06` and `0x10` behaviour, that is a simulator defect to raise, not something to adjust the integration around.
+
 ## Code style
 
 [code-style.md](../.github/work/code-style.md) is the authority. Its documentation rule shapes this guide: explain why, not how, and let names and types describe the rest.
@@ -111,7 +114,7 @@ The rules are in the Non Functional section of `requirements.md`. The reasons:
 Development runs in containers so Home Assistant is a known, pinned release with a clean configuration.
 
 - [compose.yaml](../compose.yaml): the interactive environment, Home Assistant plus the simulators. The integration is mounted read-only so the container never writes into the source tree.
-- [compose.playwright.yaml](../compose.playwright.yaml): a throwaway Home Assistant with an HS3 simulator and an H2 simulator, for the browser smoke test that proves each endpoint can be added, loads and reports sensor values. It shares no state with the interactive environment.
+- [compose.playwright.yaml](../compose.playwright.yaml): a throwaway Home Assistant with an HS3 simulator and an H2 simulator, for the browser smoke test that proves each endpoint can be added, loads, reports sensor values and, once control is allowed, shows a changed setting. It shares no state with the interactive environment.
 - `compose.override.yaml`: your machine's ports, time zone and scenarios. Ignored by git; `compose.override.yaml.example` shows the shape. Do not edit `compose.yaml` for local needs, because the smoke test starts it too.
 
 Under `config/`, only `configuration.yaml` is tracked. The rest is local Home Assistant state.

@@ -307,12 +307,21 @@ class Poller:
             raise IdentityChangedError
 
     async def _fail(self, *, error: Exception) -> NoReturn:
-        if not (isinstance(error, ModbusError) and error.device_unavailable):
-            await self._client.close()
+        if isinstance(error, ModbusError) and error.device_unavailable:
+            next_wakeup = self._back_off()
+        else:
+            next_wakeup = await self.link_failed()
+        raise CycleFailedError(cause=error, next_wakeup=next_wakeup) from error
+
+    async def link_failed(self) -> float:
+        await self._client.close()
+        return self._back_off()
+
+    def _back_off(self) -> float:
         now = self._services.clock()
         delay = self._guard.failed(now=now, base_delay=self._schedule.shortest_interval)
         self._schedule.require_full_read()
-        raise CycleFailedError(cause=error, next_wakeup=now + delay) from error
+        return now + delay
 
     def _record(self, *, readout: Readout, now: float) -> None:
         for key in readout.values:

@@ -2,8 +2,10 @@ import logging
 from types import SimpleNamespace
 
 import pytest
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.saj_local import (
+    button,
     entity,
     number,
     select,
@@ -14,7 +16,15 @@ from custom_components.saj_local import (
 from custom_components.saj_local import time as time_platform
 from custom_components.saj_local.const import DOMAIN
 from custom_components.saj_local.saj.catalogue import device_registers
-from custom_components.saj_local.saj.definitions import EntityKind, Quantity
+from custom_components.saj_local.saj.definitions import Access, EntityKind, Quantity
+from custom_components.saj_local.saj.errors import (
+    ControlDisabledError,
+    InvalidValueError,
+    ProtectedSettingError,
+    ValueProblem,
+    WriteMismatchError,
+    WriteRejectedError,
+)
 from custom_components.saj_local.saj.models.h2 import PROFILE as H2
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from tests.entities import ENTRY_ID, FakeCoordinator, device, register_of
@@ -26,6 +36,7 @@ PLATFORM_MODULES = {
     EntityKind.SWITCH: switch,
     EntityKind.TIME: time_platform,
     EntityKind.TEXT: text,
+    EntityKind.BUTTON: button,
 }
 ENTITY_CLASSES = {
     EntityKind.SENSOR: sensor.SajSensor,
@@ -34,8 +45,9 @@ ENTITY_CLASSES = {
     EntityKind.SWITCH: switch.SajSwitch,
     EntityKind.TIME: time_platform.SajTime,
     EntityKind.TEXT: text.SajText,
+    EntityKind.BUTTON: button.SajButton,
 }
-ALL_KINDS = list(EntityKind)
+ALL_KINDS = list(PLATFORM_MODULES)
 
 
 def _build(*, kind: EntityKind, prefix: str = "", coordinator=None, **changes):
@@ -135,6 +147,7 @@ def test_only_a_core_row_is_enabled_by_default(kind, *, core):
         (EntityKind.SWITCH, {}, "config"),
         (EntityKind.TIME, {}, "config"),
         (EntityKind.TEXT, {"quantity": Quantity.ADDRESS}, "diagnostic"),
+        (EntityKind.BUTTON, {}, "config"),
     ],
 )
 def test_settings_are_configuration_and_versions_and_commissioning_diagnostic(
@@ -219,6 +232,77 @@ async def test_state_is_written_once_per_availability_change(writes):
     assert writes == ["test_row"] * 4
 
 
+def test_state_is_written_for_a_key_the_coordinator_just_changed(writes):
+    coordinator = FakeCoordinator()
+    coordinator.changed_keys = frozenset({"test_row"})
+
+    _build(kind=EntityKind.NUMBER, coordinator=coordinator)._handle_coordinator_update()
+
+    assert writes == ["test_row"]
+
+
+def test_state_is_not_written_for_a_key_changed_elsewhere(writes):
+    coordinator = FakeCoordinator()
+    coordinator.changed_keys = frozenset({"other_row"})
+    built = _build(kind=EntityKind.NUMBER, coordinator=coordinator)
+    built._written_available = built.available
+
+    built._handle_coordinator_update()
+
+    assert writes == []
+
+
+@pytest.mark.parametrize("kind", ALL_KINDS)
+async def test_an_action_is_one_write_by_key_to_the_coordinator(kind):
+    coordinator = FakeCoordinator()
+
+    await _build(kind=kind, coordinator=coordinator).async_change(value=7)
+
+    coordinator.write.assert_awaited_once_with(key="test_row", value=7)
+
+
+@pytest.mark.parametrize(
+    ("error", "key", "refusal"),
+    [
+        (ControlDisabledError(), "control_not_enabled", True),
+        (ProtectedSettingError("rs485_address"), "protected_setting", True),
+        (
+            InvalidValueError(ValueProblem.OUT_OF_RANGE),
+            "invalid_value_out_of_range",
+            True,
+        ),
+        (WriteRejectedError(exception_code=3), "write_rejected", False),
+        (WriteMismatchError(read_back={}), "write_mismatch", False),
+    ],
+)
+async def test_a_refused_or_failed_action_surfaces_its_own_translated_message(
+    error, key, *, refusal
+):
+    coordinator = FakeCoordinator()
+    coordinator.write.side_effect = error
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await _build(kind=EntityKind.NUMBER, coordinator=coordinator).async_change(
+            value=1
+        )
+
+    assert raised.value.translation_domain == DOMAIN
+    assert raised.value.translation_key == key
+    assert isinstance(raised.value, ServiceValidationError) is refusal
+    assert raised.value.__cause__ is error
+
+
+def test_a_write_only_row_shows_what_was_sent_and_a_read_row_shows_the_reading():
+    coordinator = FakeCoordinator(values={"test_row": 1})
+    coordinator.assumed["test_row"] = 9
+    written = _build(
+        kind=EntityKind.NUMBER, coordinator=coordinator, access=Access.WRITE_ONLY
+    )
+    read = _build(kind=EntityKind.NUMBER, coordinator=coordinator)
+
+    assert (written.read_value, read.read_value) == (9, 1)
+
+
 class FakeRegistry:
     def __init__(self) -> None:
         self.registered: dict[str, str] = {}
@@ -247,7 +331,7 @@ def registry(monkeypatch) -> FakeRegistry:
 @pytest.fixture
 def rows(monkeypatch):
     registers = [
-        register_of(kind=kind, key=f"{kind.value}_row") for kind in EntityKind
+        register_of(kind=kind, key=f"{kind.value}_row") for kind in ALL_KINDS
     ] + [register_of(kind=EntityKind.SENSOR, key="second_sensor_row")]
     monkeypatch.setattr(entity, "device_registers", lambda **_: registers)
     return registers
@@ -367,13 +451,22 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
             0x1610,
             {
                 "sensor": 425,
-                "number": 68,
+                "number": 76,
                 "select": 18,
                 "switch": 36,
                 "time": 42,
                 "text": 5,
+                "button": 5,
             },
-            {"sensor": 36, "number": 2, "select": 1, "switch": 0, "time": 0, "text": 0},
+            {
+                "sensor": 36,
+                "number": 2,
+                "select": 1,
+                "switch": 0,
+                "time": 0,
+                "text": 0,
+                "button": 0,
+            },
         ),
         (
             H2,
@@ -385,8 +478,17 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
                 "switch": 16,
                 "time": 28,
                 "text": 0,
+                "button": 4,
             },
-            {"sensor": 32, "number": 3, "select": 1, "switch": 0, "time": 0, "text": 0},
+            {
+                "sensor": 32,
+                "number": 3,
+                "select": 1,
+                "switch": 0,
+                "time": 0,
+                "text": 0,
+                "button": 0,
+            },
         ),
     ],
 )
@@ -396,9 +498,9 @@ def test_a_recognised_device_gets_the_entities_of_its_shape_with_the_core_enable
     registers = device_registers(profile=profile, device_type=device_type)
 
     assert {
-        kind.value: sum(row.kind is kind for row in registers) for kind in EntityKind
+        kind.value: sum(row.kind is kind for row in registers) for kind in ALL_KINDS
     } == by_kind
     assert {
         kind.value: sum(row.kind is kind and row.core for row in registers)
-        for kind in EntityKind
+        for kind in ALL_KINDS
     } == enabled_by_kind

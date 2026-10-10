@@ -54,13 +54,18 @@ interface EntityState {
     state: string;
 }
 
+interface HassCommand {
+    type: string;
+    [field: string]: unknown;
+}
+
 const callHassWebSocket = async <T>(
     page: Page,
-    command: { type: string },
+    command: HassCommand,
 ): Promise<T> =>
     page.evaluate(async (message) => {
         interface HassApi {
-            callWS: <Result>(command: { type: string }) => Promise<Result>;
+            callWS: <Result>(command: HassCommand) => Promise<Result>;
         }
         interface HomeAssistantElement extends HTMLElement {
             hass?: HassApi;
@@ -160,7 +165,110 @@ const expectCoreEntitiesReportValues = async (
         .toBe(true);
 };
 
-test("an HS3 and an H2 endpoint load and report a sensor, an energy counter and a setting", async ({
+interface OptionsFlow {
+    type: string;
+    flow_id: string;
+    step_id?: string;
+    data_schema?: {
+        name: string;
+        default?: unknown;
+        description?: { suggested_value?: unknown };
+    }[];
+}
+
+const allowControl = async (page: Page, entityId: string): Promise<void> => {
+    const registry = await callHassWebSocket<RegistryEntity[]>(page, {
+        type: "config/entity_registry/list",
+    });
+    const entryId = registry.find(
+        (entity) => entity.entity_id === entityId,
+    )?.config_entry_id;
+    expect(entryId).toBeTruthy();
+    await page.evaluate(async (handler) => {
+        interface HassApi {
+            callApi: <Result>(
+                method: string,
+                path: string,
+                body?: object,
+            ) => Promise<Result>;
+        }
+        interface HomeAssistantElement extends HTMLElement {
+            hass?: HassApi;
+        }
+        const hass =
+            document.querySelector<HomeAssistantElement>(
+                "home-assistant",
+            )?.hass;
+        if (!hass) {
+            throw new Error("Home Assistant API is unavailable");
+        }
+        const path = "config/config_entries/options/flow";
+        const form = await hass.callApi<OptionsFlow>("POST", path, { handler });
+        const defaults: Record<string, unknown> = {};
+        for (const field of form.data_schema ?? []) {
+            const value = field.default ?? field.description?.suggested_value;
+            if (value !== undefined) {
+                defaults[field.name] = value;
+            }
+        }
+        const confirmation = await hass.callApi<OptionsFlow>(
+            "POST",
+            `${path}/${form.flow_id}`,
+            { ...defaults, allow_control: true },
+        );
+        if (confirmation.step_id !== "confirm_control") {
+            throw new Error(`Unexpected step ${JSON.stringify(confirmation)}`);
+        }
+        await hass.callApi<OptionsFlow>(
+            "POST",
+            `${path}/${confirmation.flow_id}`,
+            {},
+        );
+    }, entryId);
+};
+
+const stateOf = async (page: Page, entityId: string): Promise<string> => {
+    const states = await callHassWebSocket<EntityState[]>(page, {
+        type: "get_states",
+    });
+    return states.find((state) => state.entity_id === entityId)?.state ?? "";
+};
+
+const setNumber = async (
+    page: Page,
+    entityId: string,
+    value: number,
+): Promise<void> => {
+    await callHassWebSocket(page, {
+        type: "call_service",
+        domain: "number",
+        service: "set_value",
+        service_data: { entity_id: entityId, value },
+    });
+};
+
+const expectSettingChangeToShow = async (
+    page: Page,
+    entityId: string,
+): Promise<void> => {
+    const before = await stateOf(page, entityId);
+    const wanted = before === "40" ? "41" : "40";
+    await expect(setNumber(page, entityId, Number(wanted))).rejects.toThrow();
+    expect(await stateOf(page, entityId)).toBe(before);
+    await allowControl(page, entityId);
+    await expect
+        .poll(async () => {
+            try {
+                await setNumber(page, entityId, Number(wanted));
+            } catch {
+                return "";
+            }
+            return stateOf(page, entityId);
+        })
+        .toBe(wanted);
+};
+
+test("an HS3 and an H2 endpoint load, report values, refuse a change until control is allowed, then change a setting", async ({
     page,
     browserFailures,
 }) => {
@@ -171,4 +279,11 @@ test("an HS3 and an H2 endpoint load and report a sensor, an energy counter and 
 
     await addIntegration(page, browserFailures, "modbus-mock-h2", "h2");
     await expectCoreEntitiesReportValues(page, ["", "h2"]);
+
+    for (const prefix of ["", "h2"]) {
+        await expectSettingChangeToShow(
+            page,
+            smokeEntityId(prefix, "number.battery_discharge_limit_on_grid"),
+        );
+    }
 });

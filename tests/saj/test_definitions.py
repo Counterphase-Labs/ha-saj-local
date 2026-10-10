@@ -7,6 +7,7 @@ from saj.definitions import (
     DEFINITIONS,
     FAMILIES,
     FAMILY_BY_NAME,
+    Access,
     Category,
     Definition,
     EntityKind,
@@ -153,18 +154,24 @@ def test_a_bit_field_that_follows_the_index_moves_one_bit_per_index():
 
 
 @pytest.mark.parametrize(
-    ("kind", "writable"),
+    ("access", "writable", "readable"),
     [
-        (EntityKind.SENSOR, False),
-        (EntityKind.NUMBER, True),
-        (EntityKind.SELECT, True),
-        (EntityKind.SWITCH, True),
-        (EntityKind.TIME, True),
-        (EntityKind.TEXT, True),
+        (Access.READ_ONLY, False, True),
+        (Access.READ_WRITE, True, True),
+        (Access.WRITE_ONLY, True, False),
     ],
 )
-def test_only_a_sensor_is_read_only(kind: EntityKind, *, writable: bool):
-    assert _definition("x", kind=kind).writable is writable
+def test_access_and_not_the_entity_kind_decides_what_a_row_allows(
+    access: Access, *, writable: bool, readable: bool
+):
+    definition = _definition("x", access=access)
+
+    assert (definition.writable, definition.readable) == (writable, readable)
+
+
+@pytest.mark.parametrize("kind", list(EntityKind))
+def test_the_entity_kind_alone_does_not_make_a_row_writable(kind: EntityKind):
+    assert _definition("x", kind=kind).writable is False
 
 
 @pytest.mark.parametrize(
@@ -173,8 +180,9 @@ def test_only_a_sensor_is_read_only(kind: EntityKind, *, writable: bool):
         ({}, True),
         ({"range": Range(minimum=0, maximum=1)}, True),
         ({"options": {0: "off"}}, True),
-        ({"encoding": Encoding.CLOCK}, False),
+        ({"encoding": Encoding.CLOCK}, True),
         ({"encoding": Encoding.MAC}, False),
+        ({"encoding": Encoding.MAC, "command_value": 1}, True),
         ({"encoding": Encoding.UNIX_TIME}, False),
         ({"encoding": Encoding.CLOCK, "range": Range(minimum=0, maximum=1)}, True),
         ({"encoding": Encoding.TEXT, "words": 4}, True),
@@ -242,8 +250,9 @@ def test_every_shipped_family_has_a_unique_name_and_is_found_by_it():
         ({"quantity": Quantity.VERSION}, Category.DIAGNOSTIC),
         ({"quantity": Quantity.ADDRESS}, Category.DIAGNOSTIC),
         ({"quantity": Quantity.TEXT}, Category.DIAGNOSTIC),
-        ({"kind": EntityKind.NUMBER}, Category.CONFIGURATION),
-        ({"kind": EntityKind.TIME}, Category.CONFIGURATION),
+        ({"access": Access.READ_WRITE}, Category.CONFIGURATION),
+        ({"access": Access.WRITE_ONLY}, Category.CONFIGURATION),
+        ({"kind": EntityKind.NUMBER}, None),
         ({"key": "rs485_address"}, Category.DIAGNOSTIC),
         ({"key": "settings_sequence"}, Category.DIAGNOSTIC),
         (

@@ -10,15 +10,27 @@
           "unit_id": "Unit ID",
           "scan_interval": "Seconds between updates",
           "model": "Model",
-          "prefix": "Prefix"
+          "prefix": "Prefix",
+          "allow_control": "Allow control"
         },
         "data_description": {
-          "prefix": "Optional. Adds a prefix to this installation's entity IDs, for example sensor.saj_house_pv_power instead of sensor.saj_pv_power. Use it when you have more than one SAJ system. Lowercase letters and digits only, no underscores, up to 32 characters, and no two installations can share one."
+          "prefix": "Optional. Adds a prefix to this installation's entity IDs, for example sensor.saj_house_pv_power instead of sensor.saj_pv_power. Use it when you have more than one SAJ system. Lowercase letters and digits only, no underscores, up to 32 characters, and no two installations can share one.",
+          "allow_control": "Off by default. When on, entity changes, buttons and automations can change the inverter's settings. Settings that commission the inverter (meter, RS485, battery protocol, network, EV charger link) stay read-only. You are asked to confirm when you switch this on."
         }
       },
       "confirm_model": {
         "title": "Confirm model",
         "description": "The device reports type {device_type}, which is not recognised as {model}, so it could not be verified as that model. Its required registers answered, but readings may be wrong if it is a different model. Use {model} anyway?"
+      },
+      "confirm_control": {
+        "title": "Confirm that control is allowed",
+        "description": "With control allowed, entity changes and automations will change the settings of your inverter. A wrong setting can stop the inverter, change how it uses the battery or the grid, or cost you money.\n\nEnabling EMS functions disables the inverter's reverse-current protection.\n\nWhen Home Assistant stops or this installation is reloaded, it tries to switch off the functions you switched on from Home Assistant. This is a best effort, not a guarantee. If the inverter cannot be reached or Home Assistant stops abruptly, they can stay on. The inverter's own EMS timeout may then end them, but it has not proved reliable.\n\nAllow control?",
+        "data": {
+          "ems_heartbeat": "EMS heartbeat (seconds)"
+        },
+        "data_description": {
+          "ems_heartbeat": "How often the targets of the EMS functions you switch on from Home Assistant, and the EMS limits, are read to keep them alive, from 30 to 3600 seconds. The inverter's EMS timeout must be longer than this. Shown only for models with EMS."
+        }
       }
     },
     "error": {
@@ -38,7 +50,8 @@
       "invalid_prefix": "Use only lowercase letters and digits, with no underscores, up to 32 characters.",
       "prefix_in_use": "Another SAJ Local installation already uses this prefix. Leaving it empty also counts, so only one installation can have no prefix.",
       "entity_id_taken": "The entity ID {entity_id} is already taken in Home Assistant. Choose a different prefix.",
-      "prefix_shadows_entity": "This prefix would make entity IDs that clash with the name of an entity. Choose a different prefix."
+      "prefix_shadows_entity": "This prefix would make entity IDs that clash with the name of an entity. Choose a different prefix.",
+      "invalid_ems_heartbeat": "Enter a whole-number heartbeat from 30 to 3600 seconds."
     },
     "abort": {
       "already_configured": "This inverter is already configured.",
@@ -49,17 +62,21 @@
     "step": {
       "init": {
         "title": "Connection and polling",
-        "description": "Enter the local Modbus TCP endpoint, polling interval and model. Settings are saved after the endpoint is validated. The current cadences plan {load} of {budget} requests per minute.",
+        "description": "Enter the local Modbus TCP endpoint, polling interval and model. Settings are saved after the endpoint is validated. The integration sends the inverter at most {budget} requests per minute, so that its communication module is not overloaded. This installation currently uses {load} of them.",
         "data": {
           "host": "Host",
           "port": "Port",
           "unit_id": "Unit ID",
           "scan_interval": "Seconds between updates",
           "model": "Model",
-          "prefix": "Prefix"
+          "prefix": "Prefix",
+          "allow_control": "Allow control",
+          "ems_heartbeat": "EMS heartbeat (seconds)"
         },
         "data_description": {
-          "prefix": "Optional. Adds a prefix to this installation's entity IDs, for example sensor.saj_house_pv_power instead of sensor.saj_pv_power. Use it when you have more than one SAJ system. Lowercase letters and digits only, no underscores, up to 32 characters, and no two installations can share one. Changing it renames this installation's entities after you confirm."
+          "prefix": "Optional. Adds a prefix to this installation's entity IDs, for example sensor.saj_house_pv_power instead of sensor.saj_pv_power. Use it when you have more than one SAJ system. Lowercase letters and digits only, no underscores, up to 32 characters, and no two installations can share one. Changing it renames this installation's entities after you confirm.",
+          "allow_control": "Off by default. When on, entity changes, buttons and automations can change the inverter's settings. Settings that commission the inverter (meter, RS485, battery protocol, network, EV charger link) stay read-only. You are asked to confirm when you switch this on.",
+          "ems_heartbeat": "How often the targets of the EMS functions you switch on from Home Assistant, and the EMS limits, are read to keep them alive, from 30 to 3600 seconds. The inverter's EMS timeout must be longer than this. Shown only for models with EMS."
         }
       },
       "confirm_replacement": {
@@ -76,7 +93,11 @@
       },
       "confirm_load": {
         "title": "Confirm slower polling",
-        "description": "With this default interval the installation plans {after} requests per minute, up from {before}, which is above the budget of {budget}. Cadences will run slower than configured to keep the inverter from being overloaded. Save the interval anyway?"
+        "description": "With this default interval the installation would need {after} requests per minute, up from {before}. The integration sends the inverter at most {budget} requests per minute, so that its communication module is not overloaded. Because that is over the limit, entities will be read slower than configured. Save the interval anyway?"
+      },
+      "confirm_control": {
+        "title": "Confirm that control is allowed",
+        "description": "With control allowed, entity changes and automations will change the settings of your inverter. A wrong setting can stop the inverter, change how it uses the battery or the grid, or cost you money.\n\nEnabling EMS functions disables the inverter's reverse-current protection.\n\nWhen Home Assistant stops or this installation is reloaded, it tries to switch off the functions you switched on from Home Assistant. This is a best effort, not a guarantee. If the inverter cannot be reached or Home Assistant stops abruptly, they can stay on. The inverter's own EMS timeout may then end them, but it has not proved reliable.\n\nAllow control?"
       }
     },
     "error": {
@@ -97,7 +118,8 @@
       "prefix_in_use": "Another SAJ Local installation already uses this prefix. Leaving it empty also counts, so only one installation can have no prefix.",
       "entity_id_taken": "The entity ID {entity_id} is already taken in Home Assistant. Choose a different prefix.",
       "statistics_exist": "Home Assistant already holds long-term statistics under {entity_id}, so this installation's history could not be moved there. Choose a different prefix.",
-      "prefix_shadows_entity": "This prefix would make entity IDs that clash with the name of an entity. Choose a different prefix."
+      "prefix_shadows_entity": "This prefix would make entity IDs that clash with the name of an entity. Choose a different prefix.",
+      "invalid_ems_heartbeat": "Enter a whole-number heartbeat from 30 to 3600 seconds."
     },
     "abort": {
       "changes_saved": "SAJ Local settings were saved.",
@@ -115,7 +137,7 @@
       "step": {
         "user": {
           "title": "Add polling group",
-          "description": "Entities in a polling group are read at the group's own interval. All other entities are read at the default interval. The current cadences plan {load} of {budget} requests per minute. Disabled entities can be grouped now and cost nothing until they are enabled.",
+          "description": "Entities in a polling group are read at the group's own interval. All other entities are read at the default interval. The integration sends the inverter at most {budget} requests per minute, so that its communication module is not overloaded. This installation currently uses {load} of them. Disabled entities can be grouped now and cost nothing until they are enabled.",
           "data": {
             "name": "Name",
             "scan_interval": "Seconds between updates",
@@ -127,7 +149,7 @@
         },
         "reconfigure": {
           "title": "Edit polling group",
-          "description": "Entities in a polling group are read at the group's own interval. An entity can belong to one group only. The current cadences plan {load} of {budget} requests per minute. Disabled entities can be grouped now and cost nothing until they are enabled.",
+          "description": "Entities in a polling group are read at the group's own interval. An entity can belong to one group only. The integration sends the inverter at most {budget} requests per minute, so that its communication module is not overloaded. This installation currently uses {load} of them. Disabled entities can be grouped now and cost nothing until they are enabled.",
           "data": {
             "name": "Name",
             "scan_interval": "Seconds between updates",
@@ -139,7 +161,7 @@
         },
         "review_group": {
           "title": "Review the request load",
-          "description": "One read of this group takes {requests} requests. The installation plans {before} of {budget} requests per minute now, and {after} with this group saved.",
+          "description": "Requests needed to read this group once: {requests}.\n\nThe integration sends the inverter at most {budget} requests per minute, so that its communication module is not overloaded. This installation uses {before} of them now, and will use {after} with this group saved.",
           "menu_options": {
             "save_group": "Save the group",
             "change_selection": "Change the selection"
@@ -147,7 +169,7 @@
         },
         "review_group_over_budget": {
           "title": "Review the request load",
-          "description": "One read of this group takes {requests} requests. The installation plans {before} of {budget} requests per minute now, and {after} with this group saved, which is above the budget. Cadences will run slower than configured to keep the inverter from being overloaded. You can still save the group.",
+          "description": "Requests needed to read this group once: {requests}.\n\nThe integration sends the inverter at most {budget} requests per minute, so that its communication module is not overloaded. This installation uses {before} of them now, and would need {after} with this group saved. Because that is over the limit, entities will be read slower than configured. You can still save the group.",
           "menu_options": {
             "save_group": "Save the group",
             "change_selection": "Change the selection"
@@ -1847,6 +1869,30 @@
       },
       "ems_timeout": {
         "name": "EMS timeout"
+      },
+      "ems_inverter_power_target": {
+        "name": "EMS inverter power target"
+      },
+      "ems_battery_charge_current_limit": {
+        "name": "EMS battery charge current limit"
+      },
+      "ems_battery_discharge_current_limit": {
+        "name": "EMS battery discharge current limit"
+      },
+      "ems_battery_power_target": {
+        "name": "EMS battery power target"
+      },
+      "ems_inverter_import_power_limit": {
+        "name": "EMS inverter import power limit"
+      },
+      "ems_inverter_export_power_limit": {
+        "name": "EMS inverter export power limit"
+      },
+      "ems_grid_power_target": {
+        "name": "EMS grid power target"
+      },
+      "ems_pv_power_limit": {
+        "name": "EMS PV power limit"
       }
     },
     "select": {
@@ -1889,7 +1935,9 @@
           "backup": "Backup",
           "ems": "EMS",
           "passive": "Passive",
-          "legacy": "Legacy"
+          "legacy": "Legacy",
+          "time_of_use_bms": "Time-of-use (BMS)",
+          "ai_saving": "AI saving"
         }
       },
       "export_limit_mode": {
@@ -2272,6 +2320,23 @@
       "ethernet_dns_secondary": {
         "name": "Ethernet secondary DNS"
       }
+    },
+    "button": {
+      "clear_fault_history": {
+        "name": "Clear fault history"
+      },
+      "clear_current_fault": {
+        "name": "Clear current fault"
+      },
+      "restart_inverter": {
+        "name": "Restart inverter"
+      },
+      "synchronise_clock": {
+        "name": "Synchronise clock"
+      },
+      "ems_pv_power_limit_remove": {
+        "name": "Remove EMS PV power limit"
+      }
     }
   },
   "exceptions": {
@@ -2303,7 +2368,58 @@
       "message": "The inverter endpoint is backing off after repeated failures, so no connection was attempted. Home Assistant will retry automatically."
     },
     "control_not_enabled": {
-      "message": "Control of this installation is not enabled, so this setting cannot be changed."
+      "message": "Control is not enabled for this installation, so the inverter was not changed. To allow changes, open Settings, Devices & services, SAJ Local, Configure and switch on Allow control."
+    },
+    "model_unverified": {
+      "message": "The model of this inverter could not be verified, so its settings cannot be changed. The inverter was not changed."
+    },
+    "protected_setting": {
+      "message": "{setting} is a commissioning setting and cannot be changed from Home Assistant. The inverter was not changed."
+    },
+    "unknown_setting": {
+      "message": "{setting} cannot be written on this inverter. The inverter was not changed."
+    },
+    "separate_registers": {
+      "message": "These changes are not stored together in one register and cannot be made in one step. The inverter was not changed."
+    },
+    "invalid_value_not_a_number": {
+      "message": "The value is not a number. The inverter was not changed."
+    },
+    "invalid_value_out_of_range": {
+      "message": "The value is outside the range this setting allows. The inverter was not changed."
+    },
+    "invalid_value_not_an_option": {
+      "message": "The value is not one of the options this setting offers. The inverter was not changed."
+    },
+    "invalid_value_not_a_time": {
+      "message": "The value is not a valid time of day. The inverter was not changed."
+    },
+    "invalid_value_not_a_clock": {
+      "message": "The value is not a valid date and time. The inverter was not changed."
+    },
+    "invalid_value_does_not_fit": {
+      "message": "The value does not fit the register it is stored in. The inverter was not changed."
+    },
+    "invalid_value_unsupported_encoding": {
+      "message": "This setting cannot be written from Home Assistant. The inverter was not changed."
+    },
+    "link_unavailable": {
+      "message": "The inverter is not reachable right now, so nothing was sent and the inverter was not changed. Home Assistant reconnects on its own."
+    },
+    "write_allowance": {
+      "message": "Too many changes: no more than {limit} writes are allowed in {window} seconds, to protect the inverter. Nothing was sent and the inverter was not changed. Try again in a moment."
+    },
+    "ems_timeout_too_short": {
+      "message": "The inverter's EMS timeout of {timeout} seconds is not longer than the {interval} second EMS heartbeat, so EMS would drop out between beats. The inverter was not changed. Raise the timeout above the heartbeat, or change the heartbeat in Configure."
+    },
+    "write_rejected": {
+      "message": "The inverter rejected the change with exception code {exception_code}. The inverter was not changed."
+    },
+    "write_unconfirmed": {
+      "message": "The inverter did not confirm the change. It may or may not have been applied, so the inverter is in an unknown state. The change was not sent again. Home Assistant is reconnecting and will read the inverter again."
+    },
+    "write_mismatch": {
+      "message": "The inverter accepted the change but now holds a different value, which is shown. The inverter was changed, but not to the value you asked for."
     }
   },
   "selector": {

@@ -1,24 +1,53 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from functools import singledispatch
+from typing import TYPE_CHECKING
 
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .const import DOMAIN
 from .saj.client import ModbusError, ModbusErrorMessage
 from .saj.device_type import format_device_type
 from .saj.errors import (
+    ControlDisabledError,
+    EmsTimeoutError,
+    InvalidValueError,
+    LinkUnavailableError,
     ModelError,
     ModelMismatchError,
+    ModelUnverifiedError,
+    ProtectedSettingError,
+    SeparateRegistersError,
     UnknownModelError,
+    UnknownSettingError,
     UnsupportedDeviceError,
+    WriteAllowanceError,
+    WriteError,
+    WriteMismatchError,
+    WriteRejectedError,
+    WriteUnconfirmedError,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from .saj.codec import Value
 
 TIMEOUT_MESSAGES = frozenset(
     {ModbusErrorMessage.CONNECTION_TIMEOUT, ModbusErrorMessage.REQUEST_TIMEOUT}
 )
 HANDLED_ERRORS: tuple[type[Exception], ...] = (ModelError, ValueError, ModbusError)
+WRITE_ERRORS: tuple[type[WriteError], ...] = (WriteError,)
+UNKNOWN_EXCEPTION_CODE = "unknown"
+
+
+class WriteOutcome(StrEnum):
+    ACKNOWLEDGED = "acknowledged"
+    REJECTED = "rejected"
+    UNCONFIRMED = "unconfirmed"
+    MISMATCHED = "mismatched"
 
 
 @dataclass(frozen=True)
@@ -82,7 +111,129 @@ def _unknown_model(error: UnknownModelError) -> Translation:
     )
 
 
-def control_not_enabled() -> HomeAssistantError:
-    return HomeAssistantError(
-        translation_domain=DOMAIN, translation_key="control_not_enabled"
+def write_outcome(*, error: WriteError) -> WriteOutcome | None:
+    if isinstance(error, WriteRejectedError):
+        return WriteOutcome.REJECTED
+    if isinstance(error, WriteUnconfirmedError):
+        return WriteOutcome.UNCONFIRMED
+    if isinstance(error, WriteMismatchError):
+        return WriteOutcome.MISMATCHED
+    return None
+
+
+def rejection_code(*, error: WriteError) -> int | None:
+    return error.exception_code if isinstance(error, WriteRejectedError) else None
+
+
+def read_back_values(*, error: WriteError) -> Mapping[str, Value]:
+    return error.read_back if isinstance(error, WriteMismatchError) else {}
+
+
+def write_failure(*, error: WriteError) -> HomeAssistantError:
+    return _write_failure(error)
+
+
+def _refusal(
+    *, key: str, placeholders: dict[str, str] | None = None
+) -> ServiceValidationError:
+    return ServiceValidationError(
+        translation_domain=DOMAIN,
+        translation_key=key,
+        translation_placeholders=placeholders,
     )
+
+
+def _device_failure(
+    *, key: str, placeholders: dict[str, str] | None = None
+) -> HomeAssistantError:
+    return HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key=key,
+        translation_placeholders=placeholders,
+    )
+
+
+@singledispatch
+def _write_failure(error: WriteError) -> HomeAssistantError:
+    message = f"No translation for write error {type(error).__name__}"
+    raise NotImplementedError(message)
+
+
+@_write_failure.register
+def _control_disabled(error: ControlDisabledError) -> HomeAssistantError:
+    del error
+    return _refusal(key="control_not_enabled")
+
+
+@_write_failure.register
+def _model_unverified(error: ModelUnverifiedError) -> HomeAssistantError:
+    del error
+    return _refusal(key="model_unverified")
+
+
+@_write_failure.register
+def _protected_setting(error: ProtectedSettingError) -> HomeAssistantError:
+    return _refusal(key="protected_setting", placeholders={"setting": error.key})
+
+
+@_write_failure.register
+def _unknown_setting(error: UnknownSettingError) -> HomeAssistantError:
+    return _refusal(key="unknown_setting", placeholders={"setting": error.key})
+
+
+@_write_failure.register
+def _separate_registers(error: SeparateRegistersError) -> HomeAssistantError:
+    del error
+    return _refusal(key="separate_registers")
+
+
+@_write_failure.register
+def _invalid_value(error: InvalidValueError) -> HomeAssistantError:
+    return _refusal(key=f"invalid_value_{error.problem}")
+
+
+@_write_failure.register
+def _link_unavailable(error: LinkUnavailableError) -> HomeAssistantError:
+    del error
+    return _refusal(key="link_unavailable")
+
+
+@_write_failure.register
+def _write_allowance(error: WriteAllowanceError) -> HomeAssistantError:
+    return _refusal(
+        key="write_allowance",
+        placeholders={"limit": str(error.limit), "window": f"{error.window:g}"},
+    )
+
+
+@_write_failure.register
+def _ems_timeout(error: EmsTimeoutError) -> HomeAssistantError:
+    return _refusal(
+        key="ems_timeout_too_short",
+        placeholders={
+            "timeout": str(error.timeout),
+            "interval": str(error.interval),
+        },
+    )
+
+
+@_write_failure.register
+def _write_rejected(error: WriteRejectedError) -> HomeAssistantError:
+    code = (
+        UNKNOWN_EXCEPTION_CODE if error.exception_code is None else error.exception_code
+    )
+    return _device_failure(
+        key="write_rejected", placeholders={"exception_code": str(code)}
+    )
+
+
+@_write_failure.register
+def _write_unconfirmed(error: WriteUnconfirmedError) -> HomeAssistantError:
+    del error
+    return _device_failure(key="write_unconfirmed")
+
+
+@_write_failure.register
+def _write_mismatch(error: WriteMismatchError) -> HomeAssistantError:
+    del error
+    return _device_failure(key="write_mismatch")

@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any
 
 from .const import (
+    CONF_ALLOW_CONTROL,
     CONF_MODEL,
     CONF_PREFIX,
     CONF_SCAN_INTERVAL,
@@ -80,6 +81,37 @@ async def async_get_config_entry_diagnostics(
         "unknown_codes": _unknown_codes(coordinator=coordinator),
         "breaks": [_break_summary(block=block) for block in _ordered(poller.breaks)],
         "narrowing": [_region_summary(region=region) for region in poller.narrowing],
+        **_control_summary(entry=entry, coordinator=coordinator, now=now),
+    }
+
+
+def _control_summary(
+    *, entry: ConfigEntry, coordinator: Any, now: float
+) -> dict[str, Any]:
+    allowance = coordinator.guard.allowance
+    writes = coordinator.writes
+    last = writes.last
+    return {
+        "control_enabled": entry.options.get(CONF_ALLOW_CONTROL, False),
+        "write_allowance": {
+            "limit": allowance.limit,
+            "window_seconds": allowance.window,
+            "used": allowance.used(now=now),
+        },
+        "writes_acknowledged": writes.acknowledged,
+        "writes_rejected": writes.rejected,
+        "writes_unconfirmed": writes.unconfirmed,
+        "last_write": None
+        if last is None
+        else {
+            "key": last.key,
+            "outcome": last.outcome,
+            "exception_code": last.exception_code,
+        },
+        "ems_heartbeat_interval_seconds": coordinator.heartbeat_interval,
+        "ems_functions_owned": sorted(coordinator.ems.owned),
+        "ems_beats_sent": writes.beats_sent,
+        "ems_beats_dropped": writes.beats_dropped,
     }
 
 

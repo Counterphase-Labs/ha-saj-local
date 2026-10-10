@@ -34,6 +34,17 @@ Platform stability and correctness is paramount.
 - A prefix can be added, changed or removed later. The user is warned about the consequences before it is applied
 - Changing a prefix renames the entities and must keep their history
 
+### Writing
+
+- Writing is off for every new system. It is switched on per system, with a warning first
+- A system whose model could not be verified is never written to
+- Commissioning settings (meter, RS485, battery protocol, network, EV charger link) are read-only. This may be revisited
+- Actions that cannot be undone (factory reset, clearing energy history) are not offered; the official app covers them. This may be revisited
+- After a change, the entity shows the value the inverter actually holds
+- A failed change says clearly whether the inverter was changed, was not changed, or is in an unknown state
+- Changes are rate limited so they cannot overload the inverter
+- EMS functions switched on from Home Assistant are kept alive by a heartbeat, every 60 seconds by default and configurable, and are switched off when Home Assistant stops
+
 ### Modbus Mock
 
 - A completely stand alone docker service that simulates the behaviour of an actual SAJ modbus device.

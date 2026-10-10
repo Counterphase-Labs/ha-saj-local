@@ -9,11 +9,16 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.saj_local import coordinator as coordinator_module
 from custom_components.saj_local.const import DOMAIN
-from custom_components.saj_local.coordinator import SajCoordinator, wakeup_delay
+from custom_components.saj_local.coordinator import (
+    Installation,
+    SajCoordinator,
+    wakeup_delay,
+)
 from custom_components.saj_local.errors import Translation
 from custom_components.saj_local.saj.budget import BUDGET_PER_MINUTE
 from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessage
 from custom_components.saj_local.saj.device import Device
+from custom_components.saj_local.saj.ems import EmsOwnership
 from custom_components.saj_local.saj.errors import (
     ModelMismatchError,
     UnknownModelError,
@@ -75,6 +80,10 @@ class FakeClient:
         self.closed = True
 
 
+class FakeControl:
+    pass
+
+
 class FakePoller:
     def __init__(self) -> None:
         self.outcomes: list = []
@@ -127,6 +136,8 @@ def _coordinator(
     coordinator._cycle_lock = asyncio.Lock()
     coordinator._initial_refresh = True
     coordinator._update_task = None
+    coordinator._stop_heartbeat = None
+    coordinator.ems = EmsOwnership()
     active_contexts = contexts or set()
     coordinator.async_contexts = lambda: iter(active_contexts)
     return coordinator, client, poller
@@ -221,7 +232,11 @@ def _construct(monkeypatch, entry, *, poller_class=RecordingPoller):
     client = FakeClient()
     guard = object()
     captured["guard"] = guard
-    coordinator = SajCoordinator(hass, client, DEVICE, entry, guard)
+    captured["control"] = FakeControl()
+    installation = Installation(
+        client=client, device=DEVICE, guard=guard, control=captured["control"]
+    )
+    coordinator = SajCoordinator(hass, installation, entry)
     return coordinator, client, captured
 
 

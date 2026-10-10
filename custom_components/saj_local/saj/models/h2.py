@@ -100,6 +100,10 @@ PROFILE = Profile(
                 "battery_charge_current_limit": 0xA037,
             },
             Evidence.DOCUMENTED: {
+                "clear_fault_history": 0x8015,
+                "clear_current_fault": 0x8015,
+                "restart_inverter": 0x801A,
+                "synchronise_clock": 0x8020,
                 "meter_configuration": 0x3630,
                 "meter_address": 0x3631,
                 "rs485_address": 0x3633,
@@ -175,6 +179,7 @@ PROFILE = Profile(
                 1: "time_of_use",
                 2: "backup",
                 3: "passive",
+                12: "ai_saving",
                 14: "legacy",
             },
         ),

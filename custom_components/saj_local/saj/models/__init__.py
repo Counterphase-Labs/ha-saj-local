@@ -40,6 +40,9 @@ class Span:
     def contains(self, *, address: int, words: int) -> bool:
         return self.first <= address and address + words - 1 <= self.last
 
+    def overlaps(self, *, address: int, words: int) -> bool:
+        return address <= self.last and self.first <= address + words - 1
+
 
 @dataclass(frozen=True)
 class Placement:

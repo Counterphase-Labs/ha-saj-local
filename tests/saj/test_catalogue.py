@@ -10,11 +10,14 @@ from saj.catalogue import (
     blocks_by_key,
     catalogue_of,
     device_keys,
+    device_read_registers,
     device_registers,
+    device_unread_registers,
     known_keys,
 )
 from saj.codec import BitRange, Encoding, Range
 from saj.definitions import (
+    Access,
     Combination,
     Definition,
     EntityKind,
@@ -108,6 +111,7 @@ def test_a_register_exposes_what_its_definition_says():
         "alpha",
         quantity=Quantity.POWER,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         unit=Unit.WATT,
         range=Range(minimum=0, maximum=9),
         options={0: "off"},
@@ -226,7 +230,14 @@ def test_registers_are_listed_in_address_order_with_fields_by_bit_and_combined_l
             "lacks sources",
         ),
         (
-            [_definition("setting", kind=EntityKind.NUMBER, encoding=Encoding.CLOCK)],
+            [
+                _definition(
+                    "setting",
+                    kind=EntityKind.NUMBER,
+                    access=Access.READ_WRITE,
+                    encoding=Encoding.MAC,
+                )
+            ],
             [_at("setting", 0x1010)],
             "no range, options or writable encoding",
         ),
@@ -592,10 +603,10 @@ def test_a_device_gets_the_registers_of_its_types_shape():
 
 
 SHIPPED_SHAPES = [
-    ("hs3", Shape(phases=3, strings=2), 537, 594, 39),
-    ("h2", Shape(phases=1, strings=2), 235, 262, 36),
-    ("h2", Shape(phases=1, strings=3), 243, 270, 39),
-    ("h2", Shape(phases=3, strings=4, assumed=True), 327, 354, 36),
+    ("hs3", Shape(phases=3, strings=2), 537, 607, 39),
+    ("h2", Shape(phases=1, strings=2), 235, 266, 36),
+    ("h2", Shape(phases=1, strings=3), 243, 274, 39),
+    ("h2", Shape(phases=3, strings=4, assumed=True), 327, 358, 36),
 ]
 
 
@@ -615,16 +626,16 @@ def test_shipped_profiles_have_the_catalogued_totals(
 def test_the_two_shipped_models_share_274_catalogued_rows():
     hs3 = {
         register.row
-        for register in CATALOGUES["hs3"].registers_for(shape=HS3.maximum_shape)
+        for register in CATALOGUES["hs3"].read_registers_for(shape=HS3.maximum_shape)
         if register.row
     }
     h2 = {
         register.row
-        for register in CATALOGUES["h2"].registers_for(shape=H2.maximum_shape)
+        for register in CATALOGUES["h2"].read_registers_for(shape=H2.maximum_shape)
         if register.row
     }
-    hs3_keys = {register.key for register in CATALOGUES["hs3"].registers}
-    h2_keys = {register.key for register in CATALOGUES["h2"].registers}
+    hs3_keys = {r.key for r in CATALOGUES["hs3"].registers if r.readable}
+    h2_keys = {r.key for r in CATALOGUES["h2"].registers if r.readable}
 
     assert len(hs3 & h2) == 274
     assert len(hs3_keys & h2_keys) == 301
@@ -764,3 +775,213 @@ def test_the_known_keys_cover_every_given_profile():
 
     assert known_keys(profiles=[first, second]) == {"pv_power", "operating_mode"}
     assert known_keys(profiles=[]) == frozenset()
+
+
+def _command(key: str, value: int, **changes: object) -> Definition:
+    return _definition(
+        key,
+        kind=EntityKind.BUTTON,
+        access=Access.WRITE_ONLY,
+        command_value=value,
+        **changes,
+    )
+
+
+def _write_only(key: str, **changes: object) -> Definition:
+    return _definition(
+        key,
+        kind=EntityKind.NUMBER,
+        access=Access.WRITE_ONLY,
+        range=Range(minimum=0, maximum=9),
+        **changes,
+    )
+
+
+OUTSIDE = 0x2010
+SPAN_END = 0x10FF
+
+
+def test_a_write_only_row_outside_every_span_is_accepted():
+    catalogue = _build(
+        _definition("alpha"),
+        _write_only("target"),
+        profile=_profile(_at("alpha", 0x1010), _at("target", OUTSIDE)),
+    )
+
+    assert [register.key for register in catalogue.registers] == ["alpha", "target"]
+
+
+@pytest.mark.parametrize(
+    ("address", "words"),
+    [(0x1010, 1), (SPAN_END, 1), (SPAN_END, 2), (0x0FFF, 2), (0x0FFF, 0x200)],
+)
+def test_a_write_only_row_touching_a_span_is_rejected(address: int, words: int):
+    with pytest.raises(CatalogueError, match="lies inside a span"):
+        _build(
+            _write_only("target", words=words, encoding=Encoding.TEXT),
+            profile=_profile(_at("target", address)),
+        )
+
+
+@pytest.mark.parametrize("address", [0x0FFE, 0x1100])
+def test_a_write_only_row_next_to_a_span_is_accepted(address: int):
+    catalogue = _build(_write_only("target"), profile=_profile(_at("target", address)))
+
+    assert catalogue.registers[0].address == address
+
+
+def test_a_write_only_row_is_not_held_to_the_largest_read_request():
+    catalogue = _build(
+        _write_only("target", words=40, encoding=Encoding.TEXT),
+        profile=_profile(_at("target", OUTSIDE)),
+    )
+
+    assert catalogue.registers[0].words == 40
+
+
+def test_a_row_that_is_read_must_still_lie_inside_a_span():
+    with pytest.raises(CatalogueError, match="outside every span"):
+        _build(_definition("alpha"), profile=_profile(_at("alpha", OUTSIDE)))
+
+
+def test_commands_with_different_values_may_share_a_register():
+    catalogue = _build(
+        _command("clear_history", 1),
+        _command("clear_current", 2),
+        profile=_profile(_at("clear_history", OUTSIDE), _at("clear_current", OUTSIDE)),
+    )
+
+    assert catalogue.unread_rows_for(shape=SHAPE) == (Row(address=OUTSIDE, words=1),)
+    assert {register.command_value for register in catalogue.registers} == {1, 2}
+
+
+def test_a_command_may_share_a_register_with_one_write_only_number():
+    catalogue = _build(
+        _write_only("limit"),
+        _command("limit_remove", 0xFFFF),
+        profile=_profile(_at("limit", OUTSIDE), _at("limit_remove", OUTSIDE)),
+    )
+
+    assert len(catalogue.registers) == 2
+
+
+@pytest.mark.parametrize(
+    "definitions",
+    [
+        [_command("one", 1), _command("same", 1)],
+        [_write_only("one"), _write_only("two")],
+        [_write_only("one"), _write_only("two"), _command("three", 3)],
+        [_definition("one"), _command("two", 2)],
+        [_command("one", 1), _definition("two", field=BitRange(first=0, last=0))],
+    ],
+    ids=[
+        "same-value",
+        "two-numbers",
+        "two-numbers-and-a-command",
+        "read-row-and-command",
+        "command-and-packed-field",
+    ],
+)
+def test_other_ways_of_sharing_a_register_are_rejected(definitions: list[Definition]):
+    placements = [_at(definition.key, OUTSIDE) for definition in definitions]
+
+    with pytest.raises(CatalogueError, match="share"):
+        _build(*definitions, profile=_profile(*placements))
+
+
+def test_a_write_only_row_cannot_be_a_packed_field():
+    with pytest.raises(CatalogueError, match="cannot be a packed field"):
+        _build(
+            _write_only("flag", field=BitRange(first=0, last=0)),
+            profile=_profile(_at("flag", OUTSIDE)),
+        )
+
+
+def test_a_row_with_a_fixed_command_value_must_be_write_only():
+    with pytest.raises(CatalogueError, match="must be write-only"):
+        _build(
+            _definition("alpha", command_value=1),
+            profile=_profile(_at("alpha", 0x1010)),
+        )
+
+
+def test_the_rows_of_a_shape_split_into_those_read_and_those_not_read():
+    catalogue = _build(
+        _definition("alpha"),
+        _definition("wide", encoding=Encoding.U32),
+        _write_only("target"),
+        _command("restart", 1),
+        _command("reset", 2),
+        profile=_profile(
+            _at("alpha", 0x1010),
+            _at("wide", 0x1020),
+            _at("target", OUTSIDE),
+            _at("restart", OUTSIDE + 4),
+            _at("reset", OUTSIDE + 4),
+        ),
+    )
+
+    assert [r.key for r in catalogue.read_registers_for(shape=SHAPE)] == [
+        "alpha",
+        "wide",
+    ]
+    assert [r.key for r in catalogue.unread_registers_for(shape=SHAPE)] == [
+        "target",
+        "reset",
+        "restart",
+    ]
+    assert catalogue.rows_for(shape=SHAPE) == (
+        Row(address=0x1010, words=1),
+        Row(address=0x1020, words=2),
+    )
+    assert catalogue.unread_rows_for(shape=SHAPE) == (
+        Row(address=OUTSIDE, words=1),
+        Row(address=OUTSIDE + 4, words=1),
+    )
+    assert [r.key for r in catalogue.registers_for(shape=SHAPE)] == [
+        "alpha",
+        "wide",
+        "target",
+        "reset",
+        "restart",
+    ]
+
+
+def test_the_keys_a_device_reads_leave_out_the_rows_that_are_only_written():
+    selected = _blocks_profile("pv_power", "operating_mode", "ems_grid_power_target")
+
+    assert device_keys(profile=selected, device_type=1) == {
+        "pv_power",
+        "operating_mode",
+    }
+    assert known_keys(profiles=[selected]) == {
+        "pv_power",
+        "operating_mode",
+        "ems_grid_power_target",
+    }
+
+
+def test_the_registers_of_a_device_split_into_those_read_and_those_not():
+    selected = _blocks_profile(
+        "pv_power", "clear_fault_history", "clear_current_fault", "operating_mode"
+    )
+
+    assert {r.key for r in device_read_registers(profile=selected, device_type=1)} == {
+        "pv_power",
+        "operating_mode",
+    }
+    assert {
+        r.key for r in device_unread_registers(profile=selected, device_type=1)
+    } == {"clear_fault_history", "clear_current_fault"}
+    assert {r.key for r in device_registers(profile=selected, device_type=1)} == {
+        "pv_power",
+        "operating_mode",
+        "clear_fault_history",
+        "clear_current_fault",
+    }
+
+
+def test_blocks_are_listed_only_for_rows_that_are_read():
+    selected = _blocks_profile("pv_power", "ems_grid_power_target")
+
+    assert blocks_by_key(profile=selected, device_type=1) == {"pv_power": "realtime"}

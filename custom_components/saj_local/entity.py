@@ -18,8 +18,9 @@ from .const import (
     object_id,
 )
 from .coordinator import SajCoordinator
+from .errors import WRITE_ERRORS, write_failure
 from .saj.catalogue import device_registers
-from .saj.definitions import Quantity
+from .saj.definitions import Access, Quantity
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
@@ -110,7 +111,15 @@ class SajEntity(CoordinatorEntity[SajCoordinator]):
 
     @property
     def read_value(self) -> Value:
+        if self.register.access is Access.WRITE_ONLY:
+            return self.coordinator.assumed.get(self.key)
         return self.coordinator.data.get(key=self.key)
+
+    async def async_change(self, *, value: Value) -> None:
+        try:
+            await self.coordinator.write(key=self.key, value=value)
+        except WRITE_ERRORS as error:
+            raise write_failure(error=error) from error
 
     @property
     def available(self) -> bool:
@@ -122,8 +131,10 @@ class SajEntity(CoordinatorEntity[SajCoordinator]):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        if self.key in self.coordinator.last_read or (
-            self.available != self._written_available
+        if (
+            self.key in self.coordinator.last_read
+            or self.key in self.coordinator.changed_keys
+            or self.available != self._written_available
         ):
             self._written_available = self.available
             self.async_write_ha_state()

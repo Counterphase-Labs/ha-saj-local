@@ -22,11 +22,14 @@ if TYPE_CHECKING:
 
 FIRST_INDEX = 1
 INVALID_VERSION = 0xFFFF
+NO_LIMIT = 0xFFFF
 EMPTY_TEXT = 0
 SOC_RANGE = Range(minimum=0, maximum=100)
 SWITCH_RANGE = Range(minimum=0, maximum=1)
 DAYS_RANGE = Range(minimum=0, maximum=127)
 PERCENT_RANGE = Range(minimum=0, maximum=100)
+SIGNED_PERCENT_RANGE = Range(minimum=-100, maximum=100)
+EV_POWER_RANGE = Range(minimum=0, maximum=11000)
 PHASE_COUNT = 3
 STRING_COUNT = 4
 PACK_COUNT = 4
@@ -66,6 +69,12 @@ class Quantity(StrEnum):
     TOGGLE = "toggle"
 
 
+class Access(StrEnum):
+    READ_ONLY = "read_only"
+    READ_WRITE = "read_write"
+    WRITE_ONLY = "write_only"
+
+
 class EntityKind(StrEnum):
     SENSOR = "sensor"
     NUMBER = "number"
@@ -73,6 +82,7 @@ class EntityKind(StrEnum):
     SWITCH = "switch"
     TIME = "time"
     TEXT = "text"
+    BUTTON = "button"
 
 
 class Category(StrEnum):
@@ -121,6 +131,7 @@ class Definition:
     quantity: Quantity
     encoding: Encoding
     kind: EntityKind = EntityKind.SENSOR
+    access: Access = Access.READ_ONLY
     scale: float = 1
     unit: Unit | None = None
     invalid: frozenset[int] = frozenset()
@@ -133,6 +144,7 @@ class Definition:
     words: int | None = None
     field: BitRange | None = None
     combination: Combination | None = None
+    command_value: int | None = None
 
     @cached_property
     def format(self) -> Format:
@@ -151,7 +163,11 @@ class Definition:
 
     @property
     def writable(self) -> bool:
-        return self.kind is not EntityKind.SENSOR
+        return self.access is not Access.READ_ONLY
+
+    @property
+    def readable(self) -> bool:
+        return self.access is not Access.WRITE_ONLY
 
     @property
     def category(self) -> Category | None:
@@ -184,7 +200,8 @@ class Definition:
     @property
     def has_writable_form(self) -> bool:
         return (
-            self.range is not None
+            self.command_value is not None
+            or self.range is not None
             or self.options is not None
             or self.encoding in WRITABLE_ENCODINGS
         )
@@ -250,6 +267,13 @@ class Family:
 
 
 DIAGNOSTIC_QUANTITIES = frozenset({Quantity.VERSION, Quantity.ADDRESS, Quantity.TEXT})
+ETHERNET_ADDRESS_NAMES = (
+    "ip_address",
+    "subnet_mask",
+    "gateway",
+    "dns_primary",
+    "dns_secondary",
+)
 COMMISSIONING_KEYS = frozenset(
     {
         "ethernet_mode",
@@ -269,6 +293,8 @@ COMMISSIONING_KEYS = frozenset(
     }
 )
 HEADER_DERIVED_KEYS = frozenset({"settings_sequence"})
+ETHERNET_ADDRESS_KEYS = frozenset(f"ethernet_{name}" for name in ETHERNET_ADDRESS_NAMES)
+PROTECTED_KEYS = COMMISSIONING_KEYS | HEADER_DERIVED_KEYS | ETHERNET_ADDRESS_KEYS
 
 
 OPERATING_MODE_OPTIONS = {
@@ -351,6 +377,22 @@ EMS_CONTROL_BITS = {
     "ems_inverter_control_with_timeout_exit": 3,
     "ems_grid_control": 5,
 }
+EMS_TARGET_KEYS = frozenset(
+    {
+        "ems_inverter_power_target",
+        "ems_battery_power_target",
+        "ems_grid_power_target",
+    }
+)
+EMS_LIMIT_KEYS = frozenset(
+    {
+        "ems_battery_charge_current_limit",
+        "ems_battery_discharge_current_limit",
+        "ems_inverter_import_power_limit",
+        "ems_inverter_export_power_limit",
+        "ems_pv_power_limit",
+    }
+)
 PARALLEL_POWER_SUBJECTS = ("pv", "battery", "grid", "load", "backup_load", "grid_load")
 
 
@@ -877,13 +919,6 @@ EV_PHASE = Family(
         Member(offset=1, definition=_current(encoding=Encoding.U16, scale=0.1)),
     ),
 )
-ETHERNET_ADDRESS_NAMES = (
-    "ip_address",
-    "subnet_mask",
-    "gateway",
-    "dns_primary",
-    "dns_secondary",
-)
 ETHERNET_ADDRESSES = Family(
     name="ethernet_addresses",
     stem="ethernet",
@@ -895,6 +930,7 @@ ETHERNET_ADDRESSES = Family(
                 key=name,
                 quantity=Quantity.ADDRESS,
                 kind=EntityKind.TEXT,
+                access=Access.READ_WRITE,
                 encoding=Encoding.ADDRESS_TEXT,
                 words=ADDRESS_WORDS,
             ),
@@ -911,6 +947,7 @@ def _schedule_time(*, offset: int, key: str) -> Member:
             key=key,
             quantity=Quantity.TIME_OF_DAY,
             kind=EntityKind.TIME,
+            access=Access.READ_WRITE,
             encoding=Encoding.TIME_OF_DAY,
         ),
     )
@@ -923,6 +960,7 @@ def _slot_days(*, offset: int) -> Member:
             key="days",
             quantity=Quantity.WEEKDAYS,
             kind=EntityKind.NUMBER,
+            access=Access.READ_WRITE,
             encoding=Encoding.U16,
             field=SLOT_DAYS_FIELD,
             range=DAYS_RANGE,
@@ -937,6 +975,7 @@ def _slot_switch(*, offset: int, key: str, field: BitRange, follows: bool) -> Me
             key=key,
             quantity=Quantity.TOGGLE,
             kind=EntityKind.SWITCH,
+            access=Access.READ_WRITE,
             encoding=Encoding.U16,
             field=field,
             range=SWITCH_RANGE,
@@ -964,6 +1003,7 @@ def _schedule_slots(
                     key="power",
                     quantity=Quantity.PERCENTAGE,
                     kind=EntityKind.NUMBER,
+                    access=Access.READ_WRITE,
                     encoding=Encoding.U16,
                     unit=Unit.PERCENT,
                     field=SLOT_POWER_FIELD,
@@ -1013,6 +1053,7 @@ EV_SLOTS = Family(
                 key="mode",
                 quantity=Quantity.CODE,
                 kind=EntityKind.SELECT,
+                access=Access.READ_WRITE,
                 encoding=Encoding.U16,
                 field=EV_SLOT_MODE_FIELD,
                 options=EV_SLOT_MODE_OPTIONS,
@@ -1037,8 +1078,10 @@ EV_SLOTS = Family(
                 key="power",
                 quantity=Quantity.POWER,
                 kind=EntityKind.NUMBER,
+                access=Access.READ_WRITE,
                 encoding=Encoding.U32,
                 unit=Unit.WATT,
+                range=EV_POWER_RANGE,
             ),
         ),
     ),
@@ -1088,6 +1131,77 @@ FAMILIES = (
 )
 FAMILY_BY_NAME = {family.name: family for family in FAMILIES}
 
+
+def _power_limit_setting(*, key: str) -> Definition:
+    return Definition(
+        key=key,
+        quantity=Quantity.PERCENTAGE,
+        kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
+        encoding=Encoding.U16,
+        scale=0.1,
+        unit=Unit.PERCENT,
+        range=Range(minimum=0, maximum=110),
+    )
+
+
+def _percent_setting(*, key: str) -> Definition:
+    return Definition(
+        key=key,
+        quantity=Quantity.PERCENTAGE,
+        kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
+        encoding=Encoding.U16,
+        unit=Unit.PERCENT,
+        range=PERCENT_RANGE,
+        core=True,
+    )
+
+
+def _command(*, key: str, value: int) -> Definition:
+    return Definition(
+        key=key,
+        quantity=Quantity.CODE,
+        kind=EntityKind.BUTTON,
+        access=Access.WRITE_ONLY,
+        encoding=Encoding.U16,
+        command_value=value,
+    )
+
+
+def _ems_percentage(
+    *,
+    key: str,
+    encoding: Encoding,
+    value_range: Range,
+    invalid: frozenset[int] = frozenset(),
+) -> Definition:
+    return Definition(
+        key=key,
+        quantity=Quantity.PERCENTAGE,
+        kind=EntityKind.NUMBER,
+        access=Access.WRITE_ONLY,
+        encoding=encoding,
+        scale=0.01,
+        unit=Unit.PERCENT,
+        invalid=invalid,
+        range=value_range,
+    )
+
+
+def _ems_current_limit(*, key: str, maximum: float) -> Definition:
+    return Definition(
+        key=key,
+        quantity=Quantity.CURRENT,
+        kind=EntityKind.NUMBER,
+        access=Access.WRITE_ONLY,
+        encoding=Encoding.U16,
+        scale=0.1,
+        unit=Unit.AMPERE,
+        range=Range(minimum=0, maximum=maximum),
+    )
+
+
 SINGLES: tuple[Definition, ...] = (
     Definition(
         key="ethernet_protocol_version",
@@ -1103,6 +1217,7 @@ SINGLES: tuple[Definition, ...] = (
         key="ethernet_mode",
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=ETHERNET_MODE_OPTIONS,
     ),
@@ -1218,6 +1333,7 @@ SINGLES: tuple[Definition, ...] = (
         key="settings_sequence",
         quantity=Quantity.COUNT,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=Range(minimum=0, maximum=65535),
     ),
@@ -1231,6 +1347,7 @@ SINGLES: tuple[Definition, ...] = (
         key="meter_configuration",
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=METER_CONFIGURATION_OPTIONS,
     ),
@@ -1238,6 +1355,7 @@ SINGLES: tuple[Definition, ...] = (
         key="meter_address",
         quantity=Quantity.COUNT,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=Range(minimum=1, maximum=255),
     ),
@@ -1245,6 +1363,7 @@ SINGLES: tuple[Definition, ...] = (
         key="rs485_address",
         quantity=Quantity.COUNT,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=Range(minimum=1, maximum=127),
     ),
@@ -1252,6 +1371,7 @@ SINGLES: tuple[Definition, ...] = (
         key="rs485_baud_rate",
         quantity=Quantity.COUNT,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=Range(minimum=0, maximum=65535),
     ),
@@ -1259,49 +1379,19 @@ SINGLES: tuple[Definition, ...] = (
         key="passive_mode",
         quantity=Quantity.COUNT,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=Range(minimum=0, maximum=2),
     ),
-    Definition(
-        key="passive_grid_charge_power",
-        quantity=Quantity.PERCENTAGE,
-        kind=EntityKind.NUMBER,
-        encoding=Encoding.U16,
-        scale=0.1,
-        unit=Unit.PERCENT,
-        range=Range(minimum=0, maximum=110),
-    ),
-    Definition(
-        key="passive_grid_discharge_power",
-        quantity=Quantity.PERCENTAGE,
-        kind=EntityKind.NUMBER,
-        encoding=Encoding.U16,
-        scale=0.1,
-        unit=Unit.PERCENT,
-        range=Range(minimum=0, maximum=110),
-    ),
-    Definition(
-        key="passive_battery_charge_power",
-        quantity=Quantity.PERCENTAGE,
-        kind=EntityKind.NUMBER,
-        encoding=Encoding.U16,
-        scale=0.1,
-        unit=Unit.PERCENT,
-        range=Range(minimum=0, maximum=110),
-    ),
-    Definition(
-        key="passive_battery_discharge_power",
-        quantity=Quantity.PERCENTAGE,
-        kind=EntityKind.NUMBER,
-        encoding=Encoding.U16,
-        scale=0.1,
-        unit=Unit.PERCENT,
-        range=Range(minimum=0, maximum=110),
-    ),
+    _power_limit_setting(key="passive_grid_charge_power"),
+    _power_limit_setting(key="passive_grid_discharge_power"),
+    _power_limit_setting(key="passive_battery_charge_power"),
+    _power_limit_setting(key="passive_battery_discharge_power"),
     Definition(
         key="battery_protocol",
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=BATTERY_PROTOCOL_OPTIONS,
     ),
@@ -1309,84 +1399,31 @@ SINGLES: tuple[Definition, ...] = (
         key="battery_auto_wake",
         quantity=Quantity.TOGGLE,
         kind=EntityKind.SWITCH,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=SWITCH_RANGE,
     ),
-    Definition(
-        key="battery_discharge_limit_on_grid",
-        quantity=Quantity.PERCENTAGE,
-        kind=EntityKind.NUMBER,
-        encoding=Encoding.U16,
-        unit=Unit.PERCENT,
-        range=Range(minimum=0, maximum=100),
-        core=True,
-    ),
-    Definition(
-        key="battery_discharge_limit_off_grid",
-        quantity=Quantity.PERCENTAGE,
-        kind=EntityKind.NUMBER,
-        encoding=Encoding.U16,
-        unit=Unit.PERCENT,
-        range=Range(minimum=0, maximum=100),
-        core=True,
-    ),
-    Definition(
-        key="battery_charge_limit",
-        quantity=Quantity.PERCENTAGE,
-        kind=EntityKind.NUMBER,
-        encoding=Encoding.U16,
-        unit=Unit.PERCENT,
-        range=Range(minimum=0, maximum=100),
-        core=True,
-    ),
+    _percent_setting(key="battery_discharge_limit_on_grid"),
+    _percent_setting(key="battery_discharge_limit_off_grid"),
+    _percent_setting(key="battery_charge_limit"),
     Definition(
         key="application_mode",
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=APPLICATION_MODE_OPTIONS,
         core=True,
     ),
-    Definition(
-        key="battery_charge_power_limit",
-        quantity=Quantity.PERCENTAGE,
-        kind=EntityKind.NUMBER,
-        encoding=Encoding.U16,
-        scale=0.1,
-        unit=Unit.PERCENT,
-        range=Range(minimum=0, maximum=110),
-    ),
-    Definition(
-        key="battery_discharge_power_limit",
-        quantity=Quantity.PERCENTAGE,
-        kind=EntityKind.NUMBER,
-        encoding=Encoding.U16,
-        scale=0.1,
-        unit=Unit.PERCENT,
-        range=Range(minimum=0, maximum=110),
-    ),
-    Definition(
-        key="grid_import_power_limit",
-        quantity=Quantity.PERCENTAGE,
-        kind=EntityKind.NUMBER,
-        encoding=Encoding.U16,
-        scale=0.1,
-        unit=Unit.PERCENT,
-        range=Range(minimum=0, maximum=110),
-    ),
-    Definition(
-        key="grid_export_power_limit",
-        quantity=Quantity.PERCENTAGE,
-        kind=EntityKind.NUMBER,
-        encoding=Encoding.U16,
-        scale=0.1,
-        unit=Unit.PERCENT,
-        range=Range(minimum=0, maximum=110),
-    ),
+    _power_limit_setting(key="battery_charge_power_limit"),
+    _power_limit_setting(key="battery_discharge_power_limit"),
+    _power_limit_setting(key="grid_import_power_limit"),
+    _power_limit_setting(key="grid_export_power_limit"),
     Definition(
         key="backup_reserve_soc",
         quantity=Quantity.STATE_OF_CHARGE,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         unit=Unit.PERCENT,
         range=Range(minimum=0, maximum=100),
@@ -1396,6 +1433,7 @@ SINGLES: tuple[Definition, ...] = (
         key="export_limit_power",
         quantity=Quantity.PERCENTAGE,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         scale=0.1,
         unit=Unit.PERCENT,
@@ -1405,6 +1443,7 @@ SINGLES: tuple[Definition, ...] = (
         key="export_limit_current",
         quantity=Quantity.CURRENT,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         scale=0.01,
         unit=Unit.AMPERE,
@@ -1414,6 +1453,7 @@ SINGLES: tuple[Definition, ...] = (
         key="export_limit_mode",
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=EXPORT_LIMIT_MODE_OPTIONS,
     ),
@@ -1421,6 +1461,7 @@ SINGLES: tuple[Definition, ...] = (
         key="time_of_use_idle_mode",
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=TIME_OF_USE_IDLE_MODE_OPTIONS,
     ),
@@ -1428,6 +1469,7 @@ SINGLES: tuple[Definition, ...] = (
         key="time_of_use_grid_discharge",
         quantity=Quantity.TOGGLE,
         kind=EntityKind.SWITCH,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=SWITCH_RANGE,
     ),
@@ -1435,6 +1477,7 @@ SINGLES: tuple[Definition, ...] = (
         key="led_mode",
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=LED_MODE_OPTIONS,
     ),
@@ -1442,6 +1485,7 @@ SINGLES: tuple[Definition, ...] = (
         key="rs485_slave_address",
         quantity=Quantity.COUNT,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=Range(minimum=1, maximum=1),
     ),
@@ -1449,6 +1493,7 @@ SINGLES: tuple[Definition, ...] = (
         key="rs485_slave_baud_rate",
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=BAUD_RATE_OPTIONS,
     ),
@@ -1750,6 +1795,7 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_enabled",
         quantity=Quantity.TOGGLE,
         kind=EntityKind.SWITCH,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=SWITCH_RANGE,
     ),
@@ -1757,6 +1803,7 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_address",
         quantity=Quantity.COUNT,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=Range(minimum=1, maximum=127),
     ),
@@ -1764,6 +1811,7 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_baud_rate",
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=BAUD_RATE_OPTIONS,
     ),
@@ -1771,6 +1819,7 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_charger_count",
         quantity=Quantity.COUNT,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=Range(minimum=1, maximum=3),
     ),
@@ -1778,6 +1827,7 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_communication_timeout",
         quantity=Quantity.DURATION,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         unit=Unit.SECOND,
         range=Range(minimum=1, maximum=6),
@@ -1786,6 +1836,7 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_port_mode",
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=EV_PORT_MODE_OPTIONS,
     ),
@@ -1793,6 +1844,7 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_port_address",
         quantity=Quantity.COUNT,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=Range(minimum=1, maximum=254),
     ),
@@ -1800,6 +1852,7 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_mode",
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=EV_MODE_OPTIONS,
     ),
@@ -1807,8 +1860,10 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_charge_power",
         quantity=Quantity.POWER,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U32,
         unit=Unit.WATT,
+        range=EV_POWER_RANGE,
     ),
     Definition(
         key="average_pv_power",
@@ -1833,10 +1888,55 @@ SINGLES: tuple[Definition, ...] = (
         key="ems_timeout",
         quantity=Quantity.DURATION,
         kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         unit=Unit.SECOND,
         range=Range(minimum=0, maximum=65534),
     ),
+    _command(key="clear_fault_history", value=1),
+    _command(key="clear_current_fault", value=2),
+    _command(key="restart_inverter", value=1),
+    Definition(
+        key="synchronise_clock",
+        quantity=Quantity.TIMESTAMP,
+        kind=EntityKind.BUTTON,
+        access=Access.WRITE_ONLY,
+        encoding=Encoding.CLOCK,
+    ),
+    _ems_percentage(
+        key="ems_inverter_power_target",
+        encoding=Encoding.I16,
+        value_range=SIGNED_PERCENT_RANGE,
+    ),
+    _ems_current_limit(key="ems_battery_charge_current_limit", maximum=200),
+    _ems_current_limit(key="ems_battery_discharge_current_limit", maximum=20),
+    _ems_percentage(
+        key="ems_battery_power_target",
+        encoding=Encoding.I16,
+        value_range=SIGNED_PERCENT_RANGE,
+    ),
+    _ems_percentage(
+        key="ems_inverter_import_power_limit",
+        encoding=Encoding.U16,
+        value_range=PERCENT_RANGE,
+    ),
+    _ems_percentage(
+        key="ems_inverter_export_power_limit",
+        encoding=Encoding.U16,
+        value_range=PERCENT_RANGE,
+    ),
+    _ems_percentage(
+        key="ems_grid_power_target",
+        encoding=Encoding.I16,
+        value_range=SIGNED_PERCENT_RANGE,
+    ),
+    _ems_percentage(
+        key="ems_pv_power_limit",
+        encoding=Encoding.U16,
+        value_range=PERCENT_RANGE,
+        invalid=frozenset({NO_LIMIT}),
+    ),
+    _command(key="ems_pv_power_limit_remove", value=NO_LIMIT),
     Definition(
         key="product_code",
         quantity=Quantity.TEXT,
@@ -2005,6 +2105,7 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_minimum_current_charging",
         quantity=Quantity.TOGGLE,
         kind=EntityKind.SWITCH,
+        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         field=EV_MINIMUM_CURRENT_CHARGING_FIELD,
         range=SWITCH_RANGE,
@@ -2014,6 +2115,7 @@ SINGLES: tuple[Definition, ...] = (
             key=key,
             quantity=Quantity.TOGGLE,
             kind=EntityKind.SWITCH,
+            access=Access.READ_WRITE,
             encoding=Encoding.U16,
             field=BitRange(first=bit, last=bit),
             range=SWITCH_RANGE,

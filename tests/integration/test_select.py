@@ -1,7 +1,5 @@
 import pytest
-from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.saj_local.const import DOMAIN
 from custom_components.saj_local.saj.definitions import EntityKind
 from custom_components.saj_local.select import SajSelect
 from tests.entities import FakeCoordinator, register_of
@@ -31,13 +29,10 @@ def test_a_select_offers_its_named_options():
     assert _select().options == ["first", "second", "sixth"]
 
 
-@pytest.mark.parametrize("option", ["first", "sixth", "not an option"])
-async def test_changing_a_select_is_refused_and_no_request_is_sent(option):
+@pytest.mark.parametrize(("option", "code"), [("first", 0), ("sixth", 5)])
+async def test_choosing_an_option_sends_its_code_to_the_coordinator(option, code):
     coordinator = FakeCoordinator(values={"test_row": 0})
 
-    with pytest.raises(HomeAssistantError) as refusal:
-        await _select(coordinator=coordinator).async_select_option(option)
+    await _select(coordinator=coordinator).async_select_option(option)
 
-    assert refusal.value.translation_domain == DOMAIN
-    assert refusal.value.translation_key == "control_not_enabled"
-    assert coordinator.requests_sent() == 0
+    coordinator.write.assert_awaited_once_with(key="test_row", value=code)

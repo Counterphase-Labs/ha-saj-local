@@ -541,3 +541,192 @@ def test_the_worst_case_duration_counts_each_request_and_the_budget_wait():
 
     assert durations[1] - durations[0] == pace
     assert durations[2] - durations[1] == pace + 10
+
+
+async def test_a_single_register_write_sends_function_six_with_address_and_value():
+    device = FakeDevice(_frame("06 4647 0002"))
+    client = _client(device)
+
+    await client.write_single_register(0x4647, 2)
+
+    assert device.writer.requests == [bytes.fromhex("0001 0000 0006 01 06 4647 0002")]
+    assert client.is_connected()
+
+
+async def test_a_multiple_register_write_sends_function_sixteen_with_count_and_data():
+    device = FakeDevice(_frame("10 8020 0004"))
+    client = _client(device)
+
+    await client.write_multiple_registers(0x8020, (2024, 0x0309, 0x0E05, 0x3B00))
+
+    assert device.writer.requests == [
+        bytes.fromhex(
+            "0001 0000 000f 01 10 8020 0004 08 07e8 0309 0e05 3b00",
+        )
+    ]
+
+
+def _single_write(client):
+    return client.write_single_register(0x4647, 2)
+
+
+def _multiple_write(client):
+    return client.write_multiple_registers(0x8020, (1, 2, 3, 4))
+
+
+@pytest.mark.parametrize(
+    ("call", "reply"),
+    [
+        (_single_write, "06 4647 0003"),
+        (_single_write, "06 4648 0002"),
+        (_single_write, "06 4647"),
+        (_single_write, "06 4647 0002 00"),
+        (_single_write, "03 4647 0002"),
+        (_single_write, "07 4647 0002"),
+        (_multiple_write, "10 8020 0003"),
+        (_multiple_write, "10 8021 0004"),
+        (_multiple_write, "10 8020"),
+        (_multiple_write, "10 8020 0004 08"),
+        (_multiple_write, "06 8020 0004"),
+    ],
+)
+async def test_a_write_acknowledgement_must_echo_address_and_value_or_count(
+    call, reply: str
+):
+    device = FakeDevice(_frame(reply))
+    client = _client(device)
+
+    with pytest.raises(ModbusError, match="write acknowledgement") as caught:
+        await call(client)
+
+    assert caught.value.exception_code is None
+    assert device.writer.closed
+
+
+@pytest.mark.parametrize(
+    ("function", "call"),
+    [
+        (0x86, lambda client: client.write_single_register(0x4647, 2)),
+        (0x90, lambda client: client.write_multiple_registers(0x8020, (1, 2))),
+    ],
+)
+@pytest.mark.parametrize("code", [0x02, 0x03, 0x10, 0x12, 0x13])
+async def test_a_write_exception_response_keeps_the_connection_and_the_code(
+    function: int, call, code: int
+):
+    device = FakeDevice(_frame(f"{function:02x}{code:02x}"))
+    client = _client(device)
+
+    with pytest.raises(ModbusError) as caught:
+        await call(client)
+
+    assert caught.value.exception_code == code
+    assert not device.writer.closed
+    assert client.is_connected()
+
+
+async def test_a_read_exception_function_is_not_an_exception_for_a_write():
+    device = FakeDevice(_frame("8302"))
+    client = _client(device)
+
+    with pytest.raises(ModbusError, match="write acknowledgement") as caught:
+        await client.write_single_register(0x4647, 2)
+
+    assert caught.value.exception_code is None
+    assert device.writer.closed
+
+
+@pytest.mark.parametrize(
+    ("call", "message"),
+    [
+        (lambda client: client.write_single_register(0x10000, 1), "range"),
+        (lambda client: client.write_single_register(-1, 1), "range"),
+        (lambda client: client.write_single_register(1, 0x10000), "value"),
+        (lambda client: client.write_single_register(1, -1), "value"),
+        (lambda client: client.write_multiple_registers(1, ()), "range"),
+        (lambda client: client.write_multiple_registers(1, (0,) * 124), "range"),
+        (lambda client: client.write_multiple_registers(0xFFFF, (1, 2)), "range"),
+        (lambda client: client.write_multiple_registers(1, (1, 0x10000)), "value"),
+    ],
+)
+async def test_a_write_that_cannot_be_framed_is_refused_before_anything_is_sent(
+    call, message: str
+):
+    device = FakeDevice()
+    client = _client(device)
+
+    with pytest.raises(ModbusError, match=message):
+        await call(client)
+
+    assert device.writer.requests == []
+    assert not client.is_connected()
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda client: client.write_single_register(0x4647, 2),
+        lambda client: client.write_multiple_registers(0x8020, (1, 2)),
+    ],
+)
+async def test_a_write_that_gets_no_answer_closes_the_connection(call, exchange_stalls):
+    device = FakeDevice()
+    client = _client(device)
+
+    with pytest.raises(ModbusError, match="Modbus request timed out"):
+        await call(client)
+
+    assert device.writer.closed
+
+
+async def test_a_write_is_sent_only_once_when_no_answer_arrives(exchange_stalls):
+    device = FakeDevice()
+    client = _client(device)
+
+    with pytest.raises(ModbusError):
+        await client.write_single_register(0x4647, 2)
+
+    assert len(device.writer.requests) == 1
+
+
+async def test_writes_are_charged_to_the_budget_and_paced_like_reads():
+    events: list[str] = []
+    budget = RecordingBudget(delay=1.5, events=events)
+    device = FakeDevice(_frame(ANSWER), _frame("06 4647 0002", transaction=2))
+    sleeps: list[float] = []
+    client = _client(device, budget=budget, sleeps=sleeps)
+
+    await client.read_holding_registers(0x4004, 1)
+    await client.write_single_register(0x4647, 2)
+
+    assert [event for event in events if event.startswith("record")] == [
+        "record@7.0",
+        "record@7.0",
+    ]
+    assert sleeps == [1.5, 1.5, REQUEST_PAUSE]
+
+
+async def test_unsolicited_input_is_discarded_before_a_write_is_sent():
+    device = FakeDevice(_frame("06 4647 0002"))
+    client = _client(device)
+    await client.connect()
+    device.reader.feed_data(_frame("0302 beef", transaction=1))
+
+    await client.write_single_register(0x4647, 2)
+
+    assert len(device.writer.requests) == 1
+
+
+async def test_a_late_frame_for_an_earlier_read_is_discarded_while_a_write_is_pending():
+    device = FakeDevice(
+        _frame("8302"),
+        _frame("0302 beef", transaction=1) + _frame("06 4647 0002", transaction=2),
+    )
+    client = _client(device)
+    with pytest.raises(ModbusError):
+        await client.read_holding_registers(0x4004, 1)
+
+    await client.write_single_register(0x4647, 2)
+
+    assert client.late_frames_discarded == 1
+    assert not device.writer.closed

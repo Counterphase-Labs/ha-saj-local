@@ -8,20 +8,26 @@ from collections import deque
 from contextlib import suppress
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import partial
 from typing import TYPE_CHECKING, Protocol
 
 from .budget import RequestBudget
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Sequence
 
 _LOGGER = logging.getLogger(__name__)
 
 MBAP_HEADER_SIZE = 7
 PROTOCOL_IDENTIFIER = 0
 READ_HOLDING_REGISTERS = 0x03
-READ_EXCEPTION_FUNCTION = 0x83
+WRITE_SINGLE_REGISTER = 0x06
+WRITE_MULTIPLE_REGISTERS = 0x10
+EXCEPTION_FLAG = 0x80
 MAX_READ_REGISTERS = 125
+MAX_WRITE_REGISTERS = 123
+MAX_REGISTER_VALUE = 0xFFFF
+MULTIPLE_WRITE_ACKNOWLEDGEMENT_LENGTH = 5
 MAX_REGISTER_ADDRESS = 0xFFFF
 TRANSACTION_ID_MASK = 0xFFFF
 MIN_RESPONSE_LENGTH = 2
@@ -45,6 +51,8 @@ class ModbusErrorMessage(StrEnum):
     MALFORMED_LENGTH = "Malformed Modbus response length"
     EXCEPTION_RESPONSE = "Modbus exception response"
     MALFORMED_REGISTERS = "Malformed Modbus register response"
+    MALFORMED_ACKNOWLEDGEMENT = "Malformed Modbus write acknowledgement"
+    INVALID_VALUE = "Invalid register value"
     CONNECTION_CLOSED = "Connection closed by the device"
 
 
@@ -69,6 +77,14 @@ class RegisterReader(Protocol):
     async def read_holding_registers(
         self, address: int, count: int
     ) -> tuple[int, ...]: ...
+
+
+class RegisterWriter(Protocol):
+    async def write_single_register(self, address: int, value: int) -> None: ...
+
+    async def write_multiple_registers(
+        self, address: int, values: Sequence[int]
+    ) -> None: ...
 
 
 type Connector = Callable[
@@ -101,7 +117,7 @@ class ModbusTcpClient:
         self._environment = ClientEnvironment() if environment is None else environment
         self._retired: deque[int] = deque(maxlen=LATE_FRAME_MEMORY)
         self.late_frames_discarded = 0
-        self._has_read = False
+        self._has_answered = False
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._transaction = 0
@@ -118,16 +134,59 @@ class ModbusTcpClient:
             raise ModbusError(ModbusErrorMessage.CONNECTION_TIMEOUT) from err
         except OSError as err:
             raise ModbusError(ModbusErrorMessage.CONNECTION_FAILED) from err
-        self._has_read = False
+        self._has_answered = False
         self._retired.clear()
 
     async def read_holding_registers(self, address: int, count: int) -> tuple[int, ...]:
+        self._require_span(address=address, count=count, limit=MAX_READ_REGISTERS)
+        pdu = struct.pack(">BHH", READ_HOLDING_REGISTERS, address, count)
+        return await self._request(
+            pdu=pdu, interpret=partial(_registers_of, count=count)
+        )
+
+    async def write_single_register(self, address: int, value: int) -> None:
+        self._require_span(address=address, count=1, limit=1)
+        self._require_values(values=(value,))
+        pdu = struct.pack(">BHH", WRITE_SINGLE_REGISTER, address, value)
+        await self._request(pdu=pdu, interpret=partial(_echoes, expected=pdu))
+
+    async def write_multiple_registers(
+        self, address: int, values: Sequence[int]
+    ) -> None:
+        self._require_span(
+            address=address, count=len(values), limit=MAX_WRITE_REGISTERS
+        )
+        self._require_values(values=values)
+        pdu = struct.pack(
+            f">BHHB{len(values)}H",
+            WRITE_MULTIPLE_REGISTERS,
+            address,
+            len(values),
+            len(values) * REGISTER_WORD_SIZE,
+            *values,
+        )
+        await self._request(
+            pdu=pdu,
+            interpret=partial(
+                _echoes, expected=pdu[:MULTIPLE_WRITE_ACKNOWLEDGEMENT_LENGTH]
+            ),
+        )
+
+    def _require_span(self, *, address: int, count: int, limit: int) -> None:
         if (
-            not 1 <= count <= MAX_READ_REGISTERS
+            not 1 <= count <= limit
             or not 0 <= address <= MAX_REGISTER_ADDRESS
             or address + count - 1 > MAX_REGISTER_ADDRESS
         ):
             raise ModbusError(ModbusErrorMessage.INVALID_RANGE)
+
+    def _require_values(self, *, values: Sequence[int]) -> None:
+        if not all(0 <= value <= MAX_REGISTER_VALUE for value in values):
+            raise ModbusError(ModbusErrorMessage.INVALID_VALUE)
+
+    async def _request[Result](
+        self, *, pdu: bytes, interpret: Callable[[bytes], Result]
+    ) -> Result:
         async with self._lock:
             await self.connect()
             if self._reader is None or self._writer is None:
@@ -136,13 +195,13 @@ class ModbusTcpClient:
             transaction = self._transaction
             try:
                 await self._await_budget()
-                if self._has_read:
+                if self._has_answered:
                     await self._environment.sleep(REQUEST_PAUSE)
                 await self._discard_unsolicited(reader=self._reader)
                 result = await asyncio.wait_for(
                     self._exchange(
-                        address=address,
-                        count=count,
+                        pdu=pdu,
+                        interpret=interpret,
                         transaction=transaction,
                         reader=self._reader,
                         writer=self._writer,
@@ -180,14 +239,14 @@ class ModbusTcpClient:
         )
 
     def _answered(self, *, transaction: int) -> None:
-        self._has_read = True
+        self._has_answered = True
         self._retired.append(transaction)
 
     def _peer_closed(self, *, error: BaseException) -> bool:
         ended = isinstance(error, ConnectionResetError | BrokenPipeError) or (
             isinstance(error, asyncio.IncompleteReadError) and not error.partial
         )
-        return ended and self._has_read
+        return ended and self._has_answered
 
     async def _await_budget(self) -> None:
         delay = self._environment.budget.delay(now=self._environment.clock())
@@ -205,16 +264,15 @@ class ModbusTcpClient:
             if not chunk:
                 raise ConnectionResetError
 
-    async def _exchange(
+    async def _exchange[Result](
         self,
         *,
-        address: int,
-        count: int,
+        pdu: bytes,
+        interpret: Callable[[bytes], Result],
         transaction: int,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
-    ) -> tuple[int, ...]:
-        pdu = struct.pack(">BHH", READ_HOLDING_REGISTERS, address, count)
+    ) -> Result:
         request = (
             struct.pack(
                 ">HHHB", transaction, PROTOCOL_IDENTIFIER, len(pdu) + 1, self.unit_id
@@ -224,19 +282,11 @@ class ModbusTcpClient:
         writer.write(request)
         await writer.drain()
         body = await self._outstanding_body(reader=reader, transaction=transaction)
-        function = body[0]
-        if function == READ_EXCEPTION_FUNCTION and len(body) == EXCEPTION_BODY_LENGTH:
+        if body[0] == pdu[0] | EXCEPTION_FLAG and len(body) == EXCEPTION_BODY_LENGTH:
             raise ModbusError(
                 ModbusErrorMessage.EXCEPTION_RESPONSE, exception_code=body[1]
             )
-        expected_bytes = count * REGISTER_WORD_SIZE
-        if (
-            function != READ_HOLDING_REGISTERS
-            or len(body) != expected_bytes + 2
-            or body[1] != expected_bytes
-        ):
-            raise ModbusError(ModbusErrorMessage.MALFORMED_REGISTERS)
-        return struct.unpack(f">{count}H", body[2:])
+        return interpret(body)
 
     async def _outstanding_body(
         self, *, reader: asyncio.StreamReader, transaction: int
@@ -264,10 +314,26 @@ class ModbusTcpClient:
     async def close(self) -> None:
         writer, self._writer = self._writer, None
         self._reader = None
-        self._has_read = False
+        self._has_answered = False
         self._retired.clear()
         if writer is None:
             return
         writer.close()
         with suppress(TimeoutError, OSError):
             await asyncio.wait_for(writer.wait_closed(), timeout=self.timeout)
+
+
+def _registers_of(body: bytes, *, count: int) -> tuple[int, ...]:
+    expected_bytes = count * REGISTER_WORD_SIZE
+    if (
+        body[0] != READ_HOLDING_REGISTERS
+        or len(body) != expected_bytes + 2
+        or body[1] != expected_bytes
+    ):
+        raise ModbusError(ModbusErrorMessage.MALFORMED_REGISTERS)
+    return struct.unpack(f">{count}H", body[2:])
+
+
+def _echoes(body: bytes, *, expected: bytes) -> None:
+    if body != expected:
+        raise ModbusError(ModbusErrorMessage.MALFORMED_ACKNOWLEDGEMENT)

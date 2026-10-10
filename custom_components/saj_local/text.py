@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 from homeassistant.components.text import TextEntity
 
 from .entity import SajEntity, platform_setup
-from .errors import control_not_enabled
 from .saj.definitions import EntityKind
 
 if TYPE_CHECKING:
@@ -26,8 +25,7 @@ class SajText(SajEntity, TextEntity):
         return value if isinstance(value, str) else None
 
     async def async_set_value(self, value: str) -> None:
-        del value
-        raise control_not_enabled()
+        await self.async_change(value=value)
 
 
 async_setup_entry = platform_setup(kind=EntityKind.TEXT, entity_class=SajText)

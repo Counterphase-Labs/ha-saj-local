@@ -2,10 +2,13 @@ from types import SimpleNamespace
 
 import pytest
 
+from custom_components.saj_local.coordinator import LastWrite, WriteStatistics
 from custom_components.saj_local.diagnostics import async_get_config_entry_diagnostics
+from custom_components.saj_local.errors import WriteOutcome
 from custom_components.saj_local.saj.budget import BUDGET_PER_MINUTE
 from custom_components.saj_local.saj.catalogue import Row
 from custom_components.saj_local.saj.device import Device
+from custom_components.saj_local.saj.ems import EmsOwnership
 from custom_components.saj_local.saj.health import Break, Refusal, Region
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from custom_components.saj_local.saj.poller import CadencePlan
@@ -62,6 +65,15 @@ class FakePoller:
         return self.load
 
 
+class FakeAllowance:
+    limit = 10
+    window = 60.0
+
+    def used(self, *, now):
+        assert now == NOW
+        return 4
+
+
 class FakeCoordinator:
     def __init__(self, contexts, telemetry) -> None:
         self._contexts = contexts
@@ -71,6 +83,10 @@ class FakeCoordinator:
         self.last_read = frozenset()
         self.device = DEVICE
         self.poller = FakePoller()
+        self.guard = SimpleNamespace(allowance=FakeAllowance())
+        self.writes = WriteStatistics()
+        self.ems = EmsOwnership()
+        self.heartbeat_interval = 60
 
     def async_contexts(self):
         return iter(self._contexts)
@@ -373,3 +389,78 @@ async def test_diagnostics_never_include_the_value_of_a_private_row(key):
 
     assert PRIVATE_VALUES[key] not in str(result)
     assert "PRIVATE-SERIAL" not in str(result)
+
+
+def _entry_of(coordinator, **options):
+    return SimpleNamespace(
+        data={"host": "private-host", "port": 502, "unit_id": 1, "model": "automatic"},
+        options=options,
+        runtime_data=SimpleNamespace(
+            device=DEVICE, client=FakeClient(), coordinator=coordinator
+        ),
+    )
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+async def test_diagnostics_say_whether_control_is_on_and_how_much_allowance_is_used(
+    *, allowed
+):
+    coordinator = FakeCoordinator(set(), None)
+
+    result = await async_get_config_entry_diagnostics(
+        HASS, _entry_of(coordinator, allow_control=allowed)
+    )
+
+    assert result["control_enabled"] is allowed
+    assert result["write_allowance"] == {
+        "limit": 10,
+        "window_seconds": 60.0,
+        "used": 4,
+    }
+
+
+async def test_diagnostics_default_to_control_off_and_no_write_history():
+    result = await async_get_config_entry_diagnostics(
+        HASS, _entry_of(FakeCoordinator(set(), None))
+    )
+
+    assert result["control_enabled"] is False
+    assert result["last_write"] is None
+    assert result["writes_acknowledged"] == 0
+    assert result["ems_functions_owned"] == []
+
+
+async def test_diagnostics_count_writes_beats_and_name_the_last_write_without_a_value():
+    coordinator = FakeCoordinator(set(), None)
+    coordinator.writes = WriteStatistics(
+        acknowledged=5,
+        rejected=2,
+        unconfirmed=1,
+        last=LastWrite(
+            key="backup_reserve_soc",
+            outcome=WriteOutcome.REJECTED,
+            exception_code=3,
+        ),
+        beats_sent=7,
+        beats_dropped=1,
+    )
+    coordinator.heartbeat_interval = 90
+    coordinator.ems.switched(key="ems_grid_control", on=True)
+    coordinator.ems.switched(key="ems_battery_control", on=True)
+
+    result = await async_get_config_entry_diagnostics(
+        HASS, _entry_of(coordinator, allow_control=True)
+    )
+
+    assert result["writes_acknowledged"] == 5
+    assert result["writes_rejected"] == 2
+    assert result["writes_unconfirmed"] == 1
+    assert result["last_write"] == {
+        "key": "backup_reserve_soc",
+        "outcome": "rejected",
+        "exception_code": 3,
+    }
+    assert result["ems_heartbeat_interval_seconds"] == 90
+    assert result["ems_functions_owned"] == ["battery", "grid"]
+    assert result["ems_beats_sent"] == 7
+    assert result["ems_beats_dropped"] == 1

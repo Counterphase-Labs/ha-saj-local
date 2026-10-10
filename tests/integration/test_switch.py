@@ -1,7 +1,5 @@
 import pytest
-from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.saj_local.const import DOMAIN
 from custom_components.saj_local.saj.definitions import EntityKind
 from custom_components.saj_local.switch import SajSwitch
 from tests.entities import FakeCoordinator, register_of
@@ -22,13 +20,12 @@ def test_a_switch_shows_whether_the_value_read_is_on(value, expected):
     assert _switch(value=value).is_on is expected
 
 
-@pytest.mark.parametrize("action", ["async_turn_on", "async_turn_off"])
-async def test_changing_a_switch_is_refused_and_no_request_is_sent(action):
+@pytest.mark.parametrize(
+    ("action", "sent"), [("async_turn_on", 1), ("async_turn_off", 0)]
+)
+async def test_turning_a_switch_sends_one_or_zero_to_the_coordinator(action, sent):
     coordinator = FakeCoordinator(values={"test_row": 1})
 
-    with pytest.raises(HomeAssistantError) as refusal:
-        await getattr(_switch(coordinator=coordinator), action)()
+    await getattr(_switch(coordinator=coordinator), action)()
 
-    assert refusal.value.translation_domain == DOMAIN
-    assert refusal.value.translation_key == "control_not_enabled"
-    assert coordinator.requests_sent() == 0
+    coordinator.write.assert_awaited_once_with(key="test_row", value=sent)

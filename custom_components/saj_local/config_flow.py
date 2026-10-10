@@ -30,7 +30,9 @@ if TYPE_CHECKING:
     from .saj.models import Profile
 
 from .const import (
+    CONF_ALLOW_CONTROL,
     CONF_DEVICE_TYPE,
+    CONF_EMS_HEARTBEAT,
     CONF_MODEL,
     CONF_PREFIX,
     CONF_SCAN_INTERVAL,
@@ -56,10 +58,20 @@ from .const import (
 )
 from .errors import HANDLED_ERRORS, translate_error
 from .saj.budget import BUDGET_PER_MINUTE
-from .saj.catalogue import blocks_by_key, device_registers, known_keys
+from .saj.catalogue import (
+    blocks_by_key,
+    device_read_registers,
+    device_registers,
+    known_keys,
+)
 from .saj.client import ClientEnvironment, ModbusTcpClient
 from .saj.device import Device, identify
 from .saj.device_type import format_device_type
+from .saj.ems import (
+    DEFAULT_HEARTBEAT_INTERVAL,
+    FUNCTION_BY_ENABLE_KEY,
+    valid_heartbeat_interval,
+)
 from .saj.load import installation_load, requests_per_read
 from .saj.profiles import AUTOMATIC, PROFILES, resolve_profile
 from .saj.schedule import MIN_INTERVAL, Cadence
@@ -70,6 +82,7 @@ STEP_CONFIRM_MODEL = "confirm_model"
 STEP_CONFIRM_REPLACEMENT = "confirm_replacement"
 STEP_CONFIRM_PREFIX = "confirm_prefix"
 STEP_CONFIRM_LOAD = "confirm_load"
+STEP_CONFIRM_CONTROL = "confirm_control"
 STEP_REVIEW_GROUP = "review_group"
 STEP_REVIEW_GROUP_OVER_BUDGET = "review_group_over_budget"
 STEP_SAVE_GROUP = "save_group"
@@ -90,6 +103,7 @@ ERROR_PREFIX_SHADOWS_ENTITY = "prefix_shadows_entity"
 ERROR_PREFIX_IN_USE = "prefix_in_use"
 ERROR_ENTITY_ID_TAKEN = "entity_id_taken"
 ERROR_STATISTICS_EXIST = "statistics_exist"
+ERROR_INVALID_EMS_HEARTBEAT = "invalid_ems_heartbeat"
 PREFIX_SHAPE = re.compile(r"[a-z0-9]+")
 MAX_PREFIX_LENGTH = 32
 RECORDER_COMPONENT = "recorder"
@@ -141,6 +155,8 @@ class Submission:
     scan_interval: int
     model: str
     prefix: str
+    allow_control: bool = False
+    ems_heartbeat: int | None = None
 
     @property
     def entry_data(self) -> dict[str, Any]:
@@ -153,7 +169,14 @@ class Submission:
 
     @property
     def entry_options(self) -> dict[str, Any]:
-        return {CONF_SCAN_INTERVAL: self.scan_interval, CONF_PREFIX: self.prefix}
+        options: dict[str, Any] = {
+            CONF_SCAN_INTERVAL: self.scan_interval,
+            CONF_PREFIX: self.prefix,
+            CONF_ALLOW_CONTROL: self.allow_control,
+        }
+        if self.ems_heartbeat is not None:
+            options[CONF_EMS_HEARTBEAT] = self.ems_heartbeat
+        return options
 
     @property
     def form_values(self) -> dict[str, Any]:
@@ -168,6 +191,7 @@ class PendingChange:
     replacement_confirmed: bool = False
     prefix_confirmed: bool = False
     load_confirmed: bool = False
+    control_confirmed: bool = False
 
     @property
     def entry_data(self) -> dict[str, Any]:
@@ -209,9 +233,7 @@ class SajLocalConfigFlow(ConfigFlow, domain=DOMAIN):
             conflict = await self._prefix_conflict(change=validation.change)
             if conflict is None:
                 self._pending = validation.change
-                if not validation.change.device.detected:
-                    return self._show_model_confirmation(change=validation.change)
-                return await self._async_create_entry(change=validation.change)
+                return await self._async_advance(change=validation.change)
             validation = conflict
         return self._show_user_form(defaults=user_input, validation=validation)
 
@@ -233,14 +255,58 @@ class SajLocalConfigFlow(ConfigFlow, domain=DOMAIN):
             return self._show_user_form(
                 defaults=submission.form_values, validation=conflict
             )
+        change.model_confirmed = True
+        return await self._async_advance(change=change)
+
+    async def async_step_confirm_control(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        change = self._pending
+        if change is None:
+            return self.async_abort(reason=ABORT_NOT_PENDING)
+        if user_input is None:
+            return self._show_control_confirmation(change=change)
+        errors: dict[str, str] = {}
+        if offers_ems_device(device=change.device):
+            heartbeat = _normalized_heartbeat(user_input=user_input)
+            if heartbeat is None:
+                errors[CONF_EMS_HEARTBEAT] = ERROR_INVALID_EMS_HEARTBEAT
+                return self._show_control_confirmation(
+                    change=change, submitted=user_input, errors=errors
+                )
+            change.submission = replace(change.submission, ems_heartbeat=heartbeat)
+        change.control_confirmed = True
+        return await self._async_advance(change=change)
+
+    async def _async_advance(self, *, change: PendingChange) -> ConfigFlowResult:
+        if not change.device.detected and not change.model_confirmed:
+            return self._show_model_confirmation(change=change)
+        if change.submission.allow_control and not change.control_confirmed:
+            return self._show_control_confirmation(change=change)
         return await self._async_create_entry(change=change)
+
+    def _show_control_confirmation(
+        self,
+        *,
+        change: PendingChange,
+        submitted: Mapping[str, Any] | None = None,
+        errors: dict[str, str] | None = None,
+    ) -> ConfigFlowResult:
+        return self.async_show_form(
+            step_id=STEP_CONFIRM_CONTROL,
+            data_schema=_control_confirmation_schema(
+                ems=offers_ems_device(device=change.device), submitted=submitted
+            ),
+            errors=errors or {},
+            description_placeholders={},
+        )
 
     def _show_user_form(
         self, *, defaults: dict[str, Any] | None, validation: Validation
     ) -> ConfigFlowResult:
         return self.async_show_form(
             step_id="user",
-            data_schema=_endpoint_schema(defaults=defaults),
+            data_schema=_endpoint_schema(defaults=defaults, control=True),
             **validation.feedback,
         )
 
@@ -318,7 +384,11 @@ class SajOptionsFlow(OptionsFlow):
                 validation = conflict
         return self.async_show_form(
             step_id="init",
-            data_schema=_options_schema(entry=self.config_entry, submitted=user_input),
+            data_schema=_options_schema(
+                entry=self.config_entry,
+                submitted=user_input,
+                ems=offers_ems(entry=self.config_entry),
+            ),
             errors=validation.errors,
             description_placeholders={
                 **load_placeholders(
@@ -356,6 +426,13 @@ class SajOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         return await self._async_confirm(
             submitted=user_input is not None, confirm=_confirm_load
+        )
+
+    async def async_step_confirm_control(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return await self._async_confirm(
+            submitted=user_input is not None, confirm=_confirm_control
         )
 
     async def _async_confirm(
@@ -401,7 +478,19 @@ class SajOptionsFlow(OptionsFlow):
                     errors={},
                     description_placeholders=load_change.placeholders,
                 )
+        if self._control_switched_on(change=change) and not change.control_confirmed:
+            return self.async_show_form(
+                step_id=STEP_CONFIRM_CONTROL,
+                data_schema=vol.Schema({}),
+                errors={},
+                description_placeholders={},
+            )
         return await self._save_changes(change=change)
+
+    def _control_switched_on(self, *, change: PendingChange) -> bool:
+        return change.submission.allow_control and not self.config_entry.options.get(
+            CONF_ALLOW_CONTROL, False
+        )
 
     def _interval_load_change(self, *, change: PendingChange) -> LoadChange | None:
         entry = self.config_entry
@@ -603,7 +692,7 @@ def installation_load_of(
         enabled=enabled_entity_keys(
             hass=hass,
             entry_id=entry.entry_id,
-            registers=device_registers(profile=profile, device_type=device_type),
+            registers=device_read_registers(profile=profile, device_type=device_type),
         ),
         default_interval=default_interval,
         groups=tuple(group_cadences(entry=entry)),
@@ -613,14 +702,11 @@ def installation_load_of(
 def stored_installation_load(
     *, hass: HomeAssistant, entry: ConfigEntry
 ) -> InstallationLoad:
-    device_type = entry.data[CONF_DEVICE_TYPE]
-    resolution = resolve_profile(
-        device_type=device_type, selection=entry.data[CONF_MODEL], profiles=PROFILES
-    )
+    profile, device_type = _stored_profile(entry=entry)
     return installation_load_of(
         hass=hass,
         entry=entry,
-        profile=resolution.profile,
+        profile=profile,
         device_type=device_type,
         default_interval=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
     )
@@ -902,7 +988,7 @@ def _group_schema(
             vol.Required(
                 CONF_SCAN_INTERVAL,
                 default=defaults.get(CONF_SCAN_INTERVAL, MIN_INTERVAL),
-            ): _number_box(minimum=MIN_INTERVAL),
+            ): _number_box(),
             vol.Required(
                 CONF_SENSORS, default=defaults.get(CONF_SENSORS, [])
             ): selector.SelectSelector(
@@ -933,7 +1019,10 @@ async def validate_submission(
     endpoint = _normalized_endpoint(user_input=user_input, errors=errors)
     interval = _normalized_interval(user_input=user_input)
     if interval is None:
-        errors["base"] = "invalid_scan_interval"
+        errors[CONF_SCAN_INTERVAL] = "invalid_scan_interval"
+    heartbeat = _normalized_heartbeat(user_input=user_input)
+    if heartbeat is None and CONF_EMS_HEARTBEAT in user_input:
+        errors[CONF_EMS_HEARTBEAT] = ERROR_INVALID_EMS_HEARTBEAT
     checked_prefix = _checked_prefix(
         value=user_input.get(CONF_PREFIX, ""), context=prefix_context
     )
@@ -949,6 +1038,8 @@ async def validate_submission(
         scan_interval=interval,
         model=user_input[CONF_MODEL],
         prefix=checked_prefix.prefix,
+        allow_control=bool(user_input.get(CONF_ALLOW_CONTROL, False)),
+        ems_heartbeat=heartbeat,
     )
     if endpoint_taken(host=host, port=port, unit_id=unit_id):
         return Validation(errors={"base": ABORT_ALREADY_CONFIGURED})
@@ -1021,6 +1112,10 @@ def _confirm_prefix(change: PendingChange) -> None:
 
 def _confirm_load(change: PendingChange) -> None:
     change.load_confirmed = True
+
+
+def _confirm_control(change: PendingChange) -> None:
+    change.control_confirmed = True
 
 
 def prefix_context(
@@ -1183,7 +1278,12 @@ def _device_domains(*, device: Device) -> dict[str, str]:
     }
 
 
-def _endpoint_schema(*, defaults: dict[str, Any] | None = None) -> vol.Schema:
+def _endpoint_schema(
+    *,
+    defaults: dict[str, Any] | None = None,
+    control: bool = False,
+    ems: bool = False,
+) -> vol.Schema:
     values = defaults or {}
     host_marker = (
         vol.Required(CONF_HOST, default=values[CONF_HOST])
@@ -1194,14 +1294,14 @@ def _endpoint_schema(*, defaults: dict[str, Any] | None = None) -> vol.Schema:
         host_marker: str,
         vol.Required(
             CONF_PORT, default=values.get(CONF_PORT, DEFAULT_PORT)
-        ): _number_box(minimum=1, maximum=MAX_PORT),
+        ): _number_box(),
         vol.Required(
             CONF_UNIT_ID, default=values.get(CONF_UNIT_ID, DEFAULT_UNIT_ID)
-        ): _number_box(minimum=MIN_UNIT_ID, maximum=MAX_UNIT_ID),
+        ): _number_box(),
         vol.Required(
             CONF_SCAN_INTERVAL,
             default=values.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-        ): _number_box(minimum=MIN_INTERVAL),
+        ): _number_box(),
         vol.Required(CONF_MODEL, default=values.get(CONF_MODEL, AUTOMATIC)): (
             _model_selector()
         ),
@@ -1209,22 +1309,51 @@ def _endpoint_schema(*, defaults: dict[str, Any] | None = None) -> vol.Schema:
             CONF_PREFIX, description={"suggested_value": values.get(CONF_PREFIX, "")}
         ): str,
     }
+    if control:
+        schema[
+            vol.Required(
+                CONF_ALLOW_CONTROL, default=values.get(CONF_ALLOW_CONTROL, False)
+            )
+        ] = selector.BooleanSelector()
+    if ems:
+        schema.update(_heartbeat_field(values=values))
     return vol.Schema(schema)
 
 
+def _heartbeat_field(*, values: Mapping[str, Any]) -> dict[vol.Marker, Any]:
+    return {
+        vol.Required(
+            CONF_EMS_HEARTBEAT,
+            default=values.get(CONF_EMS_HEARTBEAT, DEFAULT_HEARTBEAT_INTERVAL),
+        ): _number_box()
+    }
+
+
+def _control_confirmation_schema(
+    *, ems: bool, submitted: Mapping[str, Any] | None
+) -> vol.Schema:
+    if not ems:
+        return vol.Schema({})
+    return vol.Schema(_heartbeat_field(values=submitted or {}))
+
+
 def _options_schema(
-    *, entry: ConfigEntry, submitted: dict[str, Any] | None
+    *, entry: ConfigEntry, submitted: dict[str, Any] | None, ems: bool
 ) -> vol.Schema:
     if submitted is not None:
-        return _endpoint_schema(defaults=submitted)
+        return _endpoint_schema(defaults=submitted, control=True, ems=ems)
     defaults = {
         **entry.data,
         CONF_SCAN_INTERVAL: entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
         ),
         CONF_PREFIX: entry.options.get(CONF_PREFIX, ""),
+        CONF_ALLOW_CONTROL: entry.options.get(CONF_ALLOW_CONTROL, False),
+        CONF_EMS_HEARTBEAT: entry.options.get(
+            CONF_EMS_HEARTBEAT, DEFAULT_HEARTBEAT_INTERVAL
+        ),
     }
-    return _endpoint_schema(defaults=defaults)
+    return _endpoint_schema(defaults=defaults, control=True, ems=ems)
 
 
 def _model_selector() -> selector.SelectSelector:
@@ -1237,15 +1366,10 @@ def _model_selector() -> selector.SelectSelector:
     )
 
 
-def _number_box(*, minimum: int, maximum: int | None = None) -> Any:
-    config: selector.NumberSelectorConfig = {
-        "min": float(minimum),
-        "step": 1,
-        "mode": selector.NumberSelectorMode.BOX,
-    }
-    if maximum is not None:
-        config["max"] = float(maximum)
-    return selector.NumberSelector(config)
+def _number_box() -> Any:
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(step="any", mode=selector.NumberSelectorMode.BOX)
+    )
 
 
 def _normalized_endpoint(
@@ -1264,10 +1388,10 @@ def _normalized_endpoint(
         errors["base"] = "invalid_endpoint"
         return None
     if port_value != port or not 1 <= port <= MAX_PORT:
-        errors["base"] = "invalid_port"
+        errors[CONF_PORT] = "invalid_port"
         return None
     if unit_id_value != unit_id or not MIN_UNIT_ID <= unit_id <= MAX_UNIT_ID:
-        errors["base"] = "invalid_unit_id"
+        errors[CONF_UNIT_ID] = "invalid_unit_id"
         return None
     return host.strip(), port, unit_id
 
@@ -1281,6 +1405,41 @@ def _normalized_interval(*, user_input: Mapping[str, Any]) -> int | None:
     if interval_value != interval or interval < MIN_INTERVAL:
         return None
     return interval
+
+
+def _normalized_heartbeat(*, user_input: Mapping[str, Any]) -> int | None:
+    try:
+        heartbeat_value = user_input[CONF_EMS_HEARTBEAT]
+        heartbeat = int(heartbeat_value)
+    except KeyError, TypeError, ValueError, OverflowError:
+        return None
+    if heartbeat_value != heartbeat or not valid_heartbeat_interval(seconds=heartbeat):
+        return None
+    return heartbeat
+
+
+def offers_ems(*, entry: ConfigEntry) -> bool:
+    profile, device_type = _stored_profile(entry=entry)
+    return _has_ems_rows(profile=profile, device_type=device_type)
+
+
+def offers_ems_device(*, device: Device) -> bool:
+    return _has_ems_rows(profile=device.profile, device_type=device.device_type)
+
+
+def _has_ems_rows(*, profile: Profile, device_type: int) -> bool:
+    return any(
+        register.key in FUNCTION_BY_ENABLE_KEY
+        for register in device_registers(profile=profile, device_type=device_type)
+    )
+
+
+def _stored_profile(*, entry: ConfigEntry) -> tuple[Profile, int]:
+    device_type = entry.data[CONF_DEVICE_TYPE]
+    resolution = resolve_profile(
+        device_type=device_type, selection=entry.data[CONF_MODEL], profiles=PROFILES
+    )
+    return resolution.profile, device_type
 
 
 def _entry_owns_endpoint(

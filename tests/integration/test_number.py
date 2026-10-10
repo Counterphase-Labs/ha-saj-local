@@ -1,11 +1,14 @@
 import pytest
 from homeassistant.components.number import NumberDeviceClass, NumberMode
-from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.saj_local.const import DOMAIN
 from custom_components.saj_local.number import SajNumber
 from custom_components.saj_local.saj.codec import Encoding, Range
-from custom_components.saj_local.saj.definitions import EntityKind, Quantity, Unit
+from custom_components.saj_local.saj.definitions import (
+    Access,
+    EntityKind,
+    Quantity,
+    Unit,
+)
 from tests.entities import FakeCoordinator, register_of
 
 LIMITS = Range(minimum=10, maximum=90)
@@ -80,14 +83,34 @@ def test_a_number_without_a_quantity_class_or_unit_has_neither():
     assert built.device_class is None
 
 
-@pytest.mark.parametrize("value", [0, 50, 1000])
-async def test_changing_a_number_is_refused_and_no_request_is_sent(value):
+@pytest.mark.parametrize("value", [0, 50.5, 1000])
+async def test_changing_a_number_sends_the_value_to_the_coordinator(value):
     coordinator = FakeCoordinator(values={"test_row": 50})
-    built = _number(coordinator=coordinator, range=LIMITS)
 
-    with pytest.raises(HomeAssistantError) as refusal:
-        await built.async_set_native_value(value)
+    await _number(coordinator=coordinator, range=LIMITS).async_set_native_value(value)
 
-    assert refusal.value.translation_domain == DOMAIN
-    assert refusal.value.translation_key == "control_not_enabled"
-    assert coordinator.requests_sent() == 0
+    coordinator.write.assert_awaited_once_with(key="test_row", value=value)
+
+
+def test_a_write_only_number_is_unknown_until_something_is_sent_then_assumed():
+    coordinator = FakeCoordinator()
+    built = _number(coordinator=coordinator, range=LIMITS, access=Access.WRITE_ONLY)
+
+    assert built.assumed_state is True
+    assert built.native_value is None
+
+    coordinator.assumed["test_row"] = 42.5
+
+    assert built.native_value == 42.5
+
+
+def test_a_number_that_is_read_does_not_claim_an_assumed_state():
+    assert _number(value=5, range=LIMITS).assumed_state is False
+
+
+def test_a_write_only_number_ignores_the_snapshot_of_readings():
+    coordinator = FakeCoordinator(values={"test_row": 99})
+
+    built = _number(coordinator=coordinator, range=LIMITS, access=Access.WRITE_ONLY)
+
+    assert built.native_value is None

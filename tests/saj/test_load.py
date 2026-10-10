@@ -123,3 +123,37 @@ def test_the_installation_load_defaults_what_no_group_claims_and_counts_enabled_
     )
 
     assert load == expected
+
+
+def test_a_write_only_key_adds_no_load_to_a_cadence():
+    selected = profile(
+        base=HS3,
+        key="beta",
+        device_types={DEVICE_TYPE},
+        keys=("pv_power", "ems_grid_power_target"),
+        hand_verified=True,
+    )
+    cadences = [
+        Cadence(interval=60, keys=frozenset({"pv_power", "ems_grid_power_target"}))
+    ]
+
+    assert (
+        installation_load(
+            profile=selected,
+            device_type=DEVICE_TYPE,
+            enabled={"pv_power", "ems_grid_power_target"},
+            default_interval=60,
+            groups=[
+                Cadence(interval=10, keys=frozenset({"ems_grid_power_target"})),
+            ],
+        )
+        == 1
+    )
+    assert (
+        requests_per_read(
+            profile=selected,
+            device_type=DEVICE_TYPE,
+            keys=cadences[0].keys,
+        )
+        == 1
+    )

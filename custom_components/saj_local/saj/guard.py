@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .budget import RequestBudget
+from .budget import RequestBudget, WriteAllowance
 
 BACKOFF_CAP = 300
 
@@ -8,6 +8,7 @@ BACKOFF_CAP = 300
 class EndpointGuard:
     def __init__(self) -> None:
         self.budget = RequestBudget()
+        self.allowance = WriteAllowance()
         self.consecutive_failures = 0
         self.backoff_delay = 0.0
         self._next_attempt = 0.0

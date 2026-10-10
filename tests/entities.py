@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 from custom_components.saj_local.saj.catalogue import Register
 from custom_components.saj_local.saj.codec import Encoding, Range
 from custom_components.saj_local.saj.definitions import (
+    Access,
     Definition,
     EntityKind,
     Quantity,
@@ -70,6 +71,9 @@ class FakeCoordinator:
         self.last_update_success = True
         self.unavailable_keys: frozenset[str] = frozenset()
         self.last_read: frozenset[str] = frozenset()
+        self.changed_keys: frozenset[str] = frozenset()
+        self.assumed: dict[str, Value] = {}
+        self.write = AsyncMock()
         self.client = SimpleNamespace(
             read_holding_registers=AsyncMock(), write_registers=AsyncMock()
         )
@@ -93,5 +97,9 @@ def register_of(*, kind: EntityKind, **changes: object) -> Register:
         EntityKind.SWITCH: {"range": Range(minimum=0, maximum=1)},
         EntityKind.TIME: {"encoding": Encoding.TIME_OF_DAY},
         EntityKind.TEXT: {"encoding": Encoding.ADDRESS_TEXT, "words": 8},
+        EntityKind.BUTTON: {"access": Access.WRITE_ONLY, "command_value": 1},
     }
-    return register(kind=kind, **{**forms[kind], **changes})
+    access = {
+        "access": Access.READ_ONLY if kind is EntityKind.SENSOR else Access.READ_WRITE
+    }
+    return register(kind=kind, **{**access, **forms[kind], **changes})

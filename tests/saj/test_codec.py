@@ -9,9 +9,15 @@ from saj.codec import (
     Range,
     combine_words,
     decode,
+    encode,
     option_name,
+    raw_step,
+    replace_bits,
+    require_number,
     scaled,
+    split_words,
 )
+from saj.errors import InvalidValueError, ValueProblem
 
 
 def _text_words(text: bytes, *, words: int) -> list[int]:
@@ -318,3 +324,229 @@ def test_a_bit_range_knows_its_width_and_mask(
 )
 def test_a_range_contains_its_limits(value: float, *, expected: bool):
     assert Range(minimum=0, maximum=100).contains(value=value) is expected
+
+
+@pytest.mark.parametrize(
+    ("encoding", "scale", "value", "words"),
+    [
+        (Encoding.U16, 1, 0, [0]),
+        (Encoding.U16, 1, 1, [1]),
+        (Encoding.U16, 1, 65535, [0xFFFF]),
+        (Encoding.U16, 0.1, 230.5, [2305]),
+        (Encoding.U16, 0.001, 0.989, [989]),
+        (Encoding.I16, 1, -1, [0xFFFF]),
+        (Encoding.I16, 1, -32768, [0x8000]),
+        (Encoding.I16, 0.01, -1.0, [0xFF9C]),
+        (Encoding.U32, 1, 65538, [1, 2]),
+        (Encoding.U32, 0.01, 655.38, [1, 2]),
+        (Encoding.I32, 1, -2, [0xFFFF, 0xFFFE]),
+        (Encoding.I32, 1, -2147483648, [0x8000, 0]),
+    ],
+)
+def test_a_number_encodes_to_the_words_that_decode_back_to_it(
+    encoding: Encoding, scale: float, value: float, words: list[int]
+):
+    format_ = Format(encoding=encoding, scale=scale)
+
+    assert list(encode(value=value, encoding_format=format_)) == words
+    assert decode(words=words, encoding_format=format_) == value
+
+
+@pytest.mark.parametrize(
+    ("scale", "value", "expected"),
+    [
+        (0.1, 4.2, 42),
+        (0.1, 4.24, 42),
+        (0.1, 4.25, 43),
+        (0.1, 4.26, 43),
+        (0.1, -4.25, -43),
+        (0.01, 0.07, 7),
+        (0.001, 1.0005, 1001),
+        (1, 7.5, 8),
+        (1, 7, 7),
+        (5, 12, 2),
+    ],
+)
+def test_a_value_is_rounded_to_the_nearest_raw_step_without_float_drift(
+    scale: float, value: float, expected: int
+):
+    assert raw_step(value=value, scale=scale) == expected
+
+
+@pytest.mark.parametrize(
+    "value", ["1", None, float("nan"), float("inf"), float("-inf"), time(1, 2), []]
+)
+def test_a_non_number_cannot_be_encoded_as_a_number(value: object):
+    with pytest.raises(InvalidValueError) as caught:
+        encode(value=value, encoding_format=Format(encoding=Encoding.U16))
+
+    assert caught.value.problem is ValueProblem.NOT_A_NUMBER
+
+
+@pytest.mark.parametrize(
+    ("encoding", "scale", "value"),
+    [
+        (Encoding.U16, 1, 65536),
+        (Encoding.U16, 1, -1),
+        (Encoding.U16, 0.1, 6553.6),
+        (Encoding.I16, 1, 32768),
+        (Encoding.I16, 1, -32769),
+        (Encoding.U32, 1, 4294967296),
+        (Encoding.I32, 1, -2147483649),
+        (Encoding.U16, 1, 10**400),
+    ],
+)
+def test_a_number_outside_what_the_encoding_holds_is_refused(
+    encoding: Encoding, scale: float, value: float
+):
+    with pytest.raises(InvalidValueError) as caught:
+        encode(value=value, encoding_format=Format(encoding=encoding, scale=scale))
+
+    assert caught.value.problem is ValueProblem.DOES_NOT_FIT
+
+
+@pytest.mark.parametrize(
+    ("field", "encoding", "value", "words"),
+    [
+        (BitRange(first=0, last=0), Encoding.U16, 1, [0b1]),
+        (BitRange(first=3, last=3), Encoding.U16, 1, [0b1000]),
+        (BitRange(first=8, last=14), Encoding.U16, 127, [0x7F00]),
+        (BitRange(first=0, last=7), Encoding.U16, 100, [100]),
+        (BitRange(first=2, last=3), Encoding.I16, -1, [0b1100]),
+    ],
+)
+def test_a_packed_field_encodes_to_its_bits_in_position(
+    field: BitRange, encoding: Encoding, value: int, words: list[int]
+):
+    format_ = Format(encoding=encoding, field=field)
+
+    assert list(encode(value=value, encoding_format=format_)) == words
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        (BitRange(first=0, last=0), 2),
+        (BitRange(first=8, last=14), 128),
+        (BitRange(first=0, last=0), -1),
+    ],
+)
+def test_a_value_wider_than_its_packed_field_is_refused(field: BitRange, value: int):
+    with pytest.raises(InvalidValueError) as caught:
+        encode(
+            value=value,
+            encoding_format=Format(encoding=Encoding.U16, field=field),
+        )
+
+    assert caught.value.problem is ValueProblem.DOES_NOT_FIT
+
+
+@pytest.mark.parametrize(
+    ("current", "bits", "field", "expected"),
+    [
+        ([0xFFFF], [0], BitRange(first=0, last=0), [0xFFFE]),
+        ([0x0000], [0x0008], BitRange(first=3, last=3), [0x0008]),
+        ([0x8003], [0x0100], BitRange(first=8, last=14), [0x8103]),
+        ([0xFFFF], [0x0000], BitRange(first=8, last=14), [0x80FF]),
+        ([0x1234, 0x5678], [0, 0x0F00], BitRange(first=8, last=11), [0x1234, 0x5F78]),
+    ],
+)
+def test_replacing_a_field_leaves_every_other_bit_as_it_was(
+    current: list[int], bits: list[int], field: BitRange, expected: list[int]
+):
+    assert list(replace_bits(current=current, bits=bits, field=field)) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "count", "expected"),
+    [(5, 1, (5,)), (0x00010002, 2, (1, 2)), (1, 4, (0, 0, 0, 1))],
+)
+def test_a_raw_number_splits_into_words_most_significant_first(
+    raw: int, count: int, expected: tuple[int, ...]
+):
+    assert split_words(raw=raw, word_count=count) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "word"),
+    [
+        (time(0, 0), 0x0000),
+        (time(6, 30), 0x061E),
+        (time(23, 59), 0x173B),
+        (time(6, 30, 59), 0x061E),
+        (time(6, 30, 0, 999999), 0x061E),
+    ],
+)
+def test_a_time_of_day_is_hours_then_minutes_and_drops_the_seconds(
+    value: time, word: int
+):
+    format_ = Format(encoding=Encoding.TIME_OF_DAY)
+
+    assert encode(value=value, encoding_format=format_) == (word,)
+    assert decode(words=[word], encoding_format=format_) == value.replace(
+        second=0, microsecond=0
+    )
+
+
+@pytest.mark.parametrize(
+    "value", ["06:30", 630, None, datetime(2024, 1, 1, 6, 30, tzinfo=UTC)]
+)
+def test_only_a_time_can_be_encoded_as_a_time_of_day(value: object):
+    with pytest.raises(InvalidValueError) as caught:
+        encode(value=value, encoding_format=Format(encoding=Encoding.TIME_OF_DAY))
+
+    assert caught.value.problem is ValueProblem.NOT_A_TIME
+
+
+@pytest.mark.parametrize(
+    ("value", "words"),
+    [
+        (datetime(2024, 3, 9, 14, 5, 59, tzinfo=UTC), (2024, 0x0309, 0x0E05, 0x3B00)),
+        (datetime(2031, 12, 31, 0, 0, 0, tzinfo=UTC), (2031, 0x0C1F, 0x0000, 0x0000)),
+    ],
+)
+def test_the_clock_is_year_month_day_hour_minute_second_with_a_zero_byte(
+    value: datetime, words: tuple[int, ...]
+):
+    format_ = Format(encoding=Encoding.CLOCK)
+
+    assert encode(value=value, encoding_format=format_) == words
+    assert decode(words=words, encoding_format=format_) == value.replace(tzinfo=None)
+
+
+@pytest.mark.parametrize("value", [time(1, 2), date(2024, 1, 1), 5, None])
+def test_only_a_date_and_time_can_be_encoded_as_the_clock(value: object):
+    with pytest.raises(InvalidValueError) as caught:
+        encode(value=value, encoding_format=Format(encoding=Encoding.CLOCK))
+
+    assert caught.value.problem is ValueProblem.NOT_A_CLOCK
+
+
+@pytest.mark.parametrize(
+    "encoding",
+    [Encoding.TEXT, Encoding.ADDRESS_TEXT, Encoding.MAC, Encoding.UNIX_TIME],
+)
+def test_text_address_mac_and_unix_time_can_only_be_decoded(encoding: Encoding):
+    with pytest.raises(InvalidValueError) as caught:
+        encode(value="x", encoding_format=Format(encoding=encoding, words=8))
+
+    assert caught.value.problem is ValueProblem.UNSUPPORTED_ENCODING
+
+
+def test_a_value_that_cannot_be_encoded_is_not_the_value_error_of_bad_device_data():
+    with pytest.raises(InvalidValueError) as caught:
+        encode(value=-1, encoding_format=Format(encoding=Encoding.U16))
+
+    assert not isinstance(caught.value, ValueError)
+
+
+@pytest.mark.parametrize(("value", "expected"), [(True, 1), (False, 0)])
+def test_a_boolean_encodes_as_the_number_it_is(*, value: bool, expected: int):
+    assert encode(value=value, encoding_format=Format(encoding=Encoding.U16)) == (
+        expected,
+    )
+
+
+@pytest.mark.parametrize("value", [0, -3, 2.5, 10**400])
+def test_a_finite_number_is_accepted_as_it_is(value: float):
+    assert require_number(value=value) == value

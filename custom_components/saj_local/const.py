@@ -22,6 +22,9 @@ CONF_UNIT_ID = "unit_id"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_SENSORS = "sensors"
 CONF_PREFIX = "prefix"
+CONF_ALLOW_CONTROL = "allow_control"
+CONF_EMS_HEARTBEAT = "ems_heartbeat"
+EMS_TIMEOUT_KEY = "ems_timeout"
 OBJECT_ID_ROOT = "saj"
 KEY_PLACEHOLDER = "<key>"
 DOMAIN_PLACEHOLDER = "<domain>"
@@ -33,6 +36,7 @@ MAX_UNIT_ID = 247
 DEFAULT_UNIT_ID = 1
 DEFAULT_SCAN_INTERVAL = 60
 REQUEST_TIMEOUT = 5
+EMS_RELEASE_TIMEOUT = 5
 PLATFORMS = (
     Platform.SENSOR,
     Platform.NUMBER,
@@ -40,6 +44,7 @@ PLATFORMS = (
     Platform.SWITCH,
     Platform.TIME,
     Platform.TEXT,
+    Platform.BUTTON,
 )
 
 

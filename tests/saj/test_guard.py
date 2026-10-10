@@ -72,3 +72,33 @@ def test_each_guard_has_its_own_budget():
 
     assert one.budget.delay(now=1) > 0
     assert other.budget.delay(now=1) == 0
+
+
+def test_each_guard_has_its_own_write_allowance():
+    one, other = EndpointGuard(), EndpointGuard()
+    for _ in range(one.allowance.limit):
+        one.allowance.record(now=0)
+
+    assert not one.allowance.has_room(now=1)
+    assert other.allowance.has_room(now=1)
+
+
+def test_the_write_allowance_survives_a_second_client_and_failures():
+    guard = EndpointGuard()
+    for _ in range(guard.allowance.limit - 1):
+        guard.allowance.record(now=0)
+    guard.failed(now=0, base_delay=10)
+    guard.succeeded()
+
+    assert guard.allowance.has_room(now=1)
+    guard.allowance.record(now=1)
+    assert not guard.allowance.has_room(now=2)
+    assert guard.allowance.has_room(now=guard.allowance.window + 1)
+
+
+def test_writes_are_counted_apart_from_the_request_budget():
+    guard = EndpointGuard()
+    for _ in range(guard.allowance.limit):
+        guard.allowance.record(now=0)
+
+    assert guard.budget.delay(now=1) == 0

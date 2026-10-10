@@ -673,3 +673,47 @@ def test_an_incomplete_readout_reports_the_refusal_code():
         readout.require_complete()
 
     assert caught.value.exception_code == 0
+
+
+WRITE_ONLY_KEYS = {"ems_grid_power_target", "ems_pv_power_limit", "clear_fault_history"}
+
+
+@pytest.mark.parametrize(
+    ("enabled", "planned"),
+    [
+        (None, [("pv_power",)]),
+        (WRITE_ONLY_KEYS, []),
+        (WRITE_ONLY_KEYS | {"pv_power"}, [("pv_power",)]),
+        ({"ems_grid_power_target"}, []),
+    ],
+)
+def test_an_enabled_write_only_key_is_never_planned_for_reading(
+    enabled: set[str] | None, planned: list[tuple[str, ...]]
+):
+    device = _device("pv_power", *WRITE_ONLY_KEYS)
+
+    assert [r.keys for r in plan_reads(device, enabled)] == planned
+
+
+@pytest.mark.parametrize("enabled", [None, WRITE_ONLY_KEYS | {"pv_power"}])
+async def test_an_enabled_write_only_key_causes_no_read_request(
+    enabled: set[str] | None,
+):
+    client = MemoryClient()
+    device = _device("pv_power", *WRITE_ONLY_KEYS)
+
+    telemetry = await read_telemetry(client=client, device=device, enabled=enabled)
+
+    assert client.reads == [(0x40A5, 1)]
+    assert set(telemetry.values) == {"pv_power"}
+
+
+async def test_only_write_only_keys_enabled_means_nothing_is_read():
+    client = MemoryClient()
+
+    telemetry = await read_telemetry(
+        client=client, device=_device(*WRITE_ONLY_KEYS), enabled=WRITE_ONLY_KEYS
+    )
+
+    assert client.reads == []
+    assert telemetry.values == {}

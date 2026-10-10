@@ -95,6 +95,14 @@ PROFILE = Profile(
                 "ems_inverter_control": 0x8400,
                 "ems_inverter_control_with_timeout_exit": 0x8400,
                 "ems_timeout": 0x8401,
+                "ems_inverter_power_target": 0x8402,
+                "ems_battery_charge_current_limit": 0x8403,
+                "ems_battery_discharge_current_limit": 0x8404,
+                "ems_battery_power_target": 0x8405,
+                "ems_inverter_import_power_limit": 0x840F,
+                "ems_inverter_export_power_limit": 0x8410,
+                "ems_grid_power_target": 0x8411,
+                "ems_pv_power_limit": 0x8412,
                 "product_code": 0x8F0D,
                 "display_software_version": 0x8F17,
                 "master_software_version": 0x8F18,
@@ -162,6 +170,11 @@ PROFILE = Profile(
                 "battery_charge_current_limit": 0xA037,
             },
             Evidence.DOCUMENTED: {
+                "clear_fault_history": 0x8015,
+                "clear_current_fault": 0x8015,
+                "restart_inverter": 0x801A,
+                "synchronise_clock": 0x8020,
+                "ems_pv_power_limit_remove": 0x8412,
                 "ev_serial_number": 0x3024,
                 "ev_model": 0x3034,
                 "ev_software_version": 0x303C,
@@ -307,7 +320,13 @@ PROFILE = Profile(
     replacements=(
         Replacement(
             key="application_mode",
-            options={0: "self_use", 1: "time_of_use", 2: "backup", 6: "ems"},
+            options={
+                0: "self_use",
+                1: "time_of_use",
+                2: "backup",
+                6: "ems",
+                11: "time_of_use_bms",
+            },
         ),
     ),
 )

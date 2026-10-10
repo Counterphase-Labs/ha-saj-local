@@ -2,15 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, time
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from ipaddress import AddressValueError, IPv4Address
+from math import isfinite
 from typing import TYPE_CHECKING
+
+from .errors import InvalidValueError, ValueProblem
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
 WORD_BITS = 16
+WORD_MASK = 0xFFFF
 BYTE_BITS = 8
 BYTE_MASK = 0xFF
 UNSCALED = 1
@@ -45,6 +49,7 @@ SIGNED_ENCODINGS = frozenset({Encoding.I16, Encoding.I32})
 NUMERIC_ENCODINGS = frozenset({Encoding.U16, Encoding.I16, Encoding.U32, Encoding.I32})
 WRITABLE_ENCODINGS = NUMERIC_ENCODINGS | {
     Encoding.TIME_OF_DAY,
+    Encoding.CLOCK,
     Encoding.ADDRESS_TEXT,
     Encoding.TEXT,
 }
@@ -199,4 +204,83 @@ _STRUCTURED_DECODERS: dict[Encoding, Callable[[Sequence[int]], Value]] = {
     Encoding.UNIX_TIME: _decode_unix_time,
     Encoding.TIME_OF_DAY: _decode_time_of_day,
     Encoding.CLOCK: _decode_clock,
+}
+
+
+def split_words(*, raw: int, word_count: int) -> tuple[int, ...]:
+    return tuple(
+        (raw >> (WORD_BITS * (word_count - 1 - position))) & WORD_MASK
+        for position in range(word_count)
+    )
+
+
+def replace_bits(
+    *, current: Sequence[int], bits: Sequence[int], field: BitRange
+) -> tuple[int, ...]:
+    mask = field.mask << field.first
+    replaced = (combine_words(words=current) & ~mask) | combine_words(words=bits)
+    return split_words(raw=replaced, word_count=len(current))
+
+
+def require_number(*, value: Value) -> int | float:
+    if not isinstance(value, int | float) or (
+        isinstance(value, float) and not isfinite(value)
+    ):
+        raise InvalidValueError(ValueProblem.NOT_A_NUMBER)
+    return value
+
+
+def raw_step(*, value: Value, scale: float) -> int:
+    number = require_number(value=value)
+    exact = Decimal(number) if isinstance(number, int) else Decimal(repr(number))
+    return int((exact / Decimal(repr(scale))).to_integral_value(ROUND_HALF_UP))
+
+
+def encode(*, value: Value, encoding_format: Format) -> tuple[int, ...]:
+    if encoding_format.encoding in NUMERIC_ENCODINGS:
+        return _encode_number(value=value, encoding_format=encoding_format)
+    encoder = _STRUCTURED_ENCODERS.get(encoding_format.encoding)
+    if encoder is None:
+        raise InvalidValueError(ValueProblem.UNSUPPORTED_ENCODING)
+    return encoder(value)
+
+
+def _encode_number(*, value: Value, encoding_format: Format) -> tuple[int, ...]:
+    raw = raw_step(value=value, scale=encoding_format.scale)
+    field = encoding_format.field
+    bit_count = WORD_BITS * encoding_format.word_count
+    if field is not None:
+        bit_count = field.width
+    if encoding_format.encoding in SIGNED_ENCODINGS:
+        lowest, highest = -(1 << (bit_count - 1)), (1 << (bit_count - 1)) - 1
+    else:
+        lowest, highest = 0, (1 << bit_count) - 1
+    if not lowest <= raw <= highest:
+        raise InvalidValueError(ValueProblem.DOES_NOT_FIT)
+    raw &= (1 << bit_count) - 1
+    if field is not None:
+        raw <<= field.first
+    return split_words(raw=raw, word_count=encoding_format.word_count)
+
+
+def _encode_time_of_day(value: Value) -> tuple[int, ...]:
+    if not isinstance(value, time):
+        raise InvalidValueError(ValueProblem.NOT_A_TIME)
+    return ((value.hour << BYTE_BITS) | value.minute,)
+
+
+def _encode_clock(value: Value) -> tuple[int, ...]:
+    if not isinstance(value, datetime):
+        raise InvalidValueError(ValueProblem.NOT_A_CLOCK)
+    return (
+        value.year,
+        (value.month << BYTE_BITS) | value.day,
+        (value.hour << BYTE_BITS) | value.minute,
+        value.second << BYTE_BITS,
+    )
+
+
+_STRUCTURED_ENCODERS: dict[Encoding, Callable[[Value], tuple[int, ...]]] = {
+    Encoding.TIME_OF_DAY: _encode_time_of_day,
+    Encoding.CLOCK: _encode_clock,
 }

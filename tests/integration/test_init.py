@@ -49,15 +49,23 @@ class FakeCoordinator:
 
     def __init__(self, *_args, **kwargs) -> None:
         self.entry = kwargs.get("entry")
+        self.installation = kwargs.get("installation")
         self.refreshed = False
         self.shutdown = False
+        self.released = 0
+        self.events: list[str] = []
         self.instances.append(self)
+
+    async def async_release_ems(self) -> None:
+        self.released += 1
+        self.events.append("release")
 
     async def async_config_entry_first_refresh(self) -> None:
         self.refreshed = True
 
     async def async_shutdown(self) -> None:
         self.shutdown = True
+        self.events.append("shutdown")
 
 
 @dataclass
@@ -68,12 +76,27 @@ class FakeEntry:
     subentries: dict[str, object] = field(default_factory=dict)
     runtime_data: SajRuntimeData | None = None
     entry_id: str = "entry-1"
+    unload_callbacks: list = field(default_factory=list)
 
     def add_update_listener(self, _listener):
         return lambda: None
 
-    def async_on_unload(self, _callback) -> None:
-        return
+    def async_on_unload(self, callback) -> None:
+        self.unload_callbacks.append(callback)
+
+
+class FakeBus:
+    def __init__(self) -> None:
+        self.listeners: list[tuple[str, object]] = []
+        self.removed = 0
+
+    def async_listen_once(self, event_type, listener):
+        self.listeners.append((event_type, listener))
+
+        def remove() -> None:
+            self.removed += 1
+
+        return remove
 
 
 class FakeConfigEntries:
@@ -100,6 +123,7 @@ def _hass():
     return SimpleNamespace(
         config_entries=FakeConfigEntries(),
         data={},
+        bus=FakeBus(),
         loop=SimpleNamespace(time=lambda: NOW),
     )
 
@@ -483,3 +507,75 @@ async def test_different_endpoints_have_separate_guards(monkeypatch):
     assert _guard(hass, "inverter-b").budget is not _guard(hass, "inverter-a").budget
     assert _guard(hass, "INVERTER-A") is _guard(hass, "inverter-a")
     assert _guard(hass, "inverter-a", 503) is not _guard(hass, "inverter-a")
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+async def test_the_library_control_is_built_with_the_entry_option(
+    monkeypatch, *, allowed
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    entry = _entry()
+    entry.options = {"allow_control": allowed}
+
+    assert await integration.async_setup_entry(hass, entry)
+
+    installation = FakeCoordinator.instances[0].installation
+    assert installation.control._enabled is allowed
+    assert installation.control._link is installation.client
+    assert installation.control._clock() == NOW
+
+
+async def test_control_is_off_when_the_entry_never_saved_the_option(monkeypatch):
+    hass = _hass()
+    _patch_success(monkeypatch)
+
+    assert await integration.async_setup_entry(hass, _entry())
+
+    assert FakeCoordinator.instances[0].installation.control._enabled is False
+
+
+async def test_ems_is_released_when_home_assistant_stops_and_the_listener_is_removed(
+    monkeypatch,
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    entry = _entry()
+    assert await integration.async_setup_entry(hass, entry)
+    ((event_type, listener),) = hass.bus.listeners
+
+    await listener(None)
+
+    assert event_type == "homeassistant_stop"
+    assert FakeCoordinator.instances[0].released == 1
+    for callback in entry.unload_callbacks:
+        callback()
+    assert hass.bus.removed == 1
+
+
+async def test_ems_is_released_before_the_coordinator_shuts_down_on_unload(
+    monkeypatch,
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    entry = _entry()
+    assert await integration.async_setup_entry(hass, entry)
+
+    assert await integration.async_unload_entry(hass, entry)
+
+    assert FakeCoordinator.instances[0].events == ["release", "shutdown"]
+
+
+async def test_nothing_is_released_when_the_platforms_fail_to_unload(monkeypatch):
+    hass = _hass()
+    entry = _entry()
+    coordinator = FakeCoordinator()
+    entry.runtime_data = SajRuntimeData(FakeClient(), DEVICE, coordinator)
+
+    async def fail_unload(_entry, _platforms):
+        return False
+
+    monkeypatch.setattr(hass.config_entries, "async_unload_platforms", fail_unload)
+    assert not await integration.async_unload_entry(hass, entry)
+
+    assert coordinator.released == 0

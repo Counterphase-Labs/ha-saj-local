@@ -15,7 +15,7 @@ Your SAJ solar system in Home Assistant, read straight from the inverter over yo
 
 This is an unofficial, community-built integration. It is not made, supported or endorsed by SAJ. See the [disclaimer](#disclaimer).
 
-> **Status: in active development and not yet released.** The current iteration reads every register it knows for one or more SAJ HS3 or H2 inverters over local Modbus TCP and shows settings with their current value. Changing a setting is not possible yet. There is no published release yet.
+> **Status: in active development and not yet released.** The current iteration reads every register it knows for one or more SAJ HS3 or H2 inverters over local Modbus TCP and shows settings with their current value. Once you switch on **Allow control** in setup or Configure, the settings can be changed from Home Assistant. There is no published release yet.
 
 ## What it is being built to deliver
 
@@ -35,7 +35,7 @@ This is an unofficial, community-built integration. It is not made, supported or
 
 ### Read, and when you want it, write
 
-- **Read-only unless you say otherwise.** Writing registers is opt-in, so nothing changes on your inverter by accident. Until that opt-in exists, settings are shown as their real control type but refuse every change with a message saying that control of the installation is not enabled, and nothing is sent to the inverter.
+- **Read-only unless you say otherwise.** Writing is opt-in per installation, so nothing changes on your inverter by accident. Until you switch on **Allow control**, settings are shown as their real control type but refuse every change with a message saying where to switch control on, and nothing is sent to the inverter. See [Changing settings](#changing-settings).
 
 ### Lovelace cards
 
@@ -67,11 +67,11 @@ The goal is wide coverage of common SAJ household inverters, batteries and relat
 
 ✅ supported, ❌ not supported, – not implemented yet.
 
-**Sensors** covers reading values from the inverter and **Controls** covers changing its settings. Controls are shown with their current value, but changing one is refused until writing is available.
+**Sensors** covers reading values from the inverter and **Controls** covers changing its settings. Controls are shown with their current value and can be changed once control is allowed for the installation. See [Changing settings](#changing-settings) for what has been exercised on real hardware.
 
 ### What is exposed
 
-Every register the integration knows for a model becomes an entity, one of six types so that each setting has the control Home Assistant users expect:
+Every register the integration knows for a model becomes an entity, one of seven types so that each setting has the control Home Assistant users expect:
 
 | Entity type | What it is |
 | --- | --- |
@@ -80,9 +80,10 @@ Every register the integration knows for a model becomes an entity, one of six t
 | `select` | A setting with named options |
 | `switch` | A setting that is off or on, and each named bit of a packed register |
 | `time` | A time of day, such as the start or end of a schedule |
-| `text` | A text setting, such as a network address |
+| `text` | A text setting, such as a network address. Every text row is a commissioning setting and read-only |
+| `button` | A command with nothing to read, such as restart. Created disabled |
 
-An HS3 has 594 entities and a single-phase H2 with two PV strings has 262. Only the core set is enabled by default, 39 on the HS3 and 36 on the H2: power, voltage, temperature and state of charge readings, the energy counters and the main battery limits. The rest is created disabled, so a new installation stays light on the inverter and you enable what you want. A packed register that holds several values is read once and each value is its own entity. Equipment a unit may not have, such as an EV charger or a second meter, is created disabled on every unit.
+An HS3 has 607 entities and a single-phase H2 with two PV strings has 266. Only the core set is enabled by default, 39 on the HS3 and 36 on the H2: power, voltage, temperature and state of charge readings, the energy counters and the main battery limits. The rest is created disabled, so a new installation stays light on the inverter and you enable what you want. A packed register that holds several values is read once and each value is its own entity. Equipment a unit may not have, such as an EV charger or a second meter, is created disabled on every unit.
 
 A device only gets the entities that fit it: an H2 with one PV string has no second-string entities. A device running on a manually chosen model that is not recognised gets every entity of the model, since its shape is unknown, with those beyond one phase and two strings disabled.
 
@@ -143,6 +144,28 @@ If a later release adds an entity and its ID is already taken, Home Assistant gi
 
 Diagnostics never contain the prefix. They show the pattern as `<domain>.saj_<key>` or `<domain>.saj_[redacted]_<key>`, which tells you whether a prefix is set.
 
+### Changing settings
+
+Control is off by default. You can switch on **Allow control** during setup or later in Configure; either way you are asked to confirm, after any model confirmation (and, in Configure, any replacement, prefix and load confirmations), because entity changes and automations will then change inverter settings, and because enabling EMS functions disables the inverter's reverse-current protection. On an HS3, the confirmation during setup also asks for the EMS heartbeat; in Configure the heartbeat is a field on the main form. Switching it off needs no confirmation. The installation reloads when the option changes.
+
+With control on, a change is checked before anything is sent, in this order: control is on, the model was verified (an installation on a manually chosen model that could not be verified is never written to), the setting is not a commissioning setting, the value is valid, the inverter is reachable, and the write allowance has room. Each refusal has its own message saying that the inverter was not changed. Then the change is written once and read back, and the entity shows the value the inverter actually holds. If the inverter accepts the request but holds a different value, the entity shows that value and the action fails. If the inverter answers with an exception, the message gives its code and says the inverter was not changed. If there is no answer, the message says the change may or may not have been applied, nothing is sent again, and the connection is reopened with a full read.
+
+A packed register that holds several settings is read, only the changed field is replaced and the register is written back, so the other fields are never disturbed. One change writes one register: changing `charge_slot_1_power` leaves `charge_slot_1_days` as it was. Schedule slots do nothing unless the application mode is time-of-use; the integration does not switch the mode for you. Application mode `ems` on its own leaves the inverter idle with the house running from the grid and there is no automatic exit. The application mode also offers `time_of_use_bms` on the HS3 and `ai_saving` on the H2, which those units report when the SAJ app selects those modes; neither has been written over Modbus.
+
+**Commissioning settings stay read-only for now.** The meter and its address, RS485, the battery protocol, the network, the EV charger link and the settings sequence number are refused whatever you do, because a wrong value can cut the inverter off from its meter, battery, charger or from Home Assistant itself. This may be revisited. Clearing the energy history and factory reset are not offered; the official app covers them. This may be revisited too.
+
+**Commands** are buttons, created disabled and in the configuration category: clear fault history, clear current fault, restart inverter, synchronise clock (which sends Home Assistant's local time) and, on the HS3, remove the EMS PV power limit. A command is sent once; when no acknowledgement arrives the message says it may or may not have run. After a restart the inverter stops answering for a while and the normal back-off applies.
+
+#### EMS on the HS3
+
+The HS3 can be put under external control. The EMS enable switches, the EMS timeout and eight write-only numbers (inverter, battery and grid power targets, battery current limits, import and export power limits and the PV power limit) are available. A positive target sells or discharges and a negative one buys or charges. The targets and limits are read only by the heartbeat while you own an EMS function, and then show the value the inverter holds, marked as assumed; otherwise they show the last value this installation sent and are unknown before the first write. A PV power limit of "no limit" shows as unknown. Grid-point control needs a meter; this is not checked.
+
+EMS functions you switch on from Home Assistant are kept alive by a heartbeat: every **EMS heartbeat** interval (60 seconds by default, 30 to 3600, asked for in the setup confirmation and shown in Configure, only for a model with EMS) the target of each function you own is read once, followed by the five limits in three more read requests. Reading counts as EMS activity, so nothing is written and no write slot is used, and the entities show the values the inverter holds, even if they were cleared or changed elsewhere. A function you own gets beats whether or not its target was ever set from Home Assistant. A beat counts against the request budget and its pacing but not against the write allowance; one that is refused or answered with an exception is dropped and the next is sent on time. A limits read is not a beat: if the inverter answers it with an exception it is skipped without a warning, and if it gets no answer it is handled like any lost connection. The two inverter switches exclude each other. A function cannot be switched on while the inverter's EMS timeout is at or below the heartbeat interval, and the timeout cannot be set that low. Ownership survives a lost connection: while the inverter is unreachable beats are dropped, and they resume by themselves when it is back. The first dropped beat of a function logs a warning, because the inverter's EMS timeout ends the function if beats keep failing, and the recovery is logged once. Ownership ends when you switch the function off, or when a poll finds the function switched off in the inverter. A function that was already on when the integration loaded is left alone: no beat, and it is not switched off. When the integration unloads or Home Assistant stops, it tries to switch off the functions you switched on, clearing only those bits. This is a best effort, not a guarantee: it cannot happen when the inverter is unreachable or Home Assistant stops abruptly. The switch-off works only for the EMS functions and is the one write the allowance does not refuse, though it is counted against it. It waits for a read in progress before its 5 seconds start; if that fails a warning names the inverter's timeout as the fallback. Whether the timeout can be relied on is not settled: on the real unit it fired at 5 seconds but did not at 20 or 60 seconds while another client polled, so the integration does not rely on it.
+
+#### What has been exercised on real hardware
+
+Verified on a real HS3 with single-register writes: the application mode, the backup reserve, the passive battery charge power, the four EMS enable switches, the EMS timeout and the eight EMS targets and limits. Implemented from field reports of H2 units, not exercised by this project: the H2 schedule slots, application mode, passive mode and its powers, the battery limits, the power limits and the export limit. Documented only, never exercised on real hardware: every other writable setting, every write of more than one register, and every command.
+
 ### Protecting the inverter
 
 Communication modules can stop serving a client that polls too hard, so the limits below apply to everything the integration sends and cannot be configured away.
@@ -152,7 +175,8 @@ Communication modules can stop serving a client that polls too hard, so the limi
 - No retries inside a cycle. After a failed cycle the wait before the next attempt doubles from the shortest interval up to 5 minutes, then the first cycle that succeeds reads everything again. The wait also survives reloads and applies to loading the integration: a load attempted too early reports not ready without contacting the inverter, and a failed load counts as a failure. Checking a connection yourself in setup or Configure is never held back by the wait and still counts towards the 40 requests; a check that passes clears the wait, because the inverter has just answered, and one that fails leaves it as it was.
 - Every wait is time-limited, so a stalled inverter ends a cycle as a failure instead of stopping polling silently. A late or stray response is discarded and never read as a value.
 - Registers that sit close together are read in one request, and the few words between them are read and discarded. Only registers inside a block the device documents are ever bridged, a request never leaves its block, and a request is never larger than the sizes already in sustained use on each model: 32 registers on the HS3 and 56 on the H2. Without this, disabling an entity would split a block in two and make the load worse. A full read of the core set is 9 requests on an HS3 and 5 on an H2, and a full read of every row is 36 on an HS3 and 11 on an H2.
-- Some registers are never read, whatever is enabled. The HS3 EMS targets and limits count as EMS activity when read, which keeps the inverter under external control, so they have no entity. Write-only commands and one HS3 identity register are never read either.
+- Some registers are never polled, whatever is enabled. The HS3 EMS targets and limits count as EMS activity when read, which keeps the inverter under external control, so they are write-only entities. Only the heartbeat reads them, once per interval while you own an EMS function: the target of each owned function, then the five limits. Without an owned function they show the last value you sent. Write-only commands and one HS3 identity register are never read at all. Entities that are not read are not offered in polling groups.
+- Writes draw on the same 40 requests as reads and have a smaller allowance inside it: at most 20 write requests in any 60 seconds per inverter address. A change over the allowance is refused, not queued, because a setting applied a minute late is worse than one refused. A change is sent once and never retried or replayed after a reconnect. The switch-off of EMS functions when Home Assistant stops is the one write the allowance does not refuse, though it is counted against it; it works only for EMS functions. The heartbeat reads and so uses no write slot.
 - A connection the inverter has closed in the meantime is reopened once and the device is verified; that cycle then reads every enabled entity again, so no value predates the reconnect.
 
 ### When the inverter refuses a register
