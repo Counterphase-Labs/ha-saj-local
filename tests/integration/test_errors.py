@@ -12,22 +12,11 @@ from custom_components.saj_local.saj.errors import (
     UnknownModelError,
     UnsupportedDeviceError,
 )
-from custom_components.saj_local.saj.profiles import Profile
+from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
+from tests.profiles import profile
 
-ALPHA = Profile(
-    key="alpha",
-    display_name="Alpha",
-    device_types=frozenset({1}),
-    measurement_keys=frozenset(),
-    hand_verified=True,
-)
-BETA = Profile(
-    key="beta",
-    display_name="Beta",
-    device_types=frozenset({2}),
-    measurement_keys=frozenset(),
-    hand_verified=False,
-)
+ALPHA = profile(base=HS3, key="alpha", device_types={1}, keys=(), hand_verified=True)
+BETA = profile(base=HS3, key="beta", device_types={2}, keys=(), hand_verified=False)
 
 
 @pytest.mark.parametrize(

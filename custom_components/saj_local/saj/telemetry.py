@@ -1,14 +1,21 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .catalogue import device_registers
 from .client import ModbusError, ModbusErrorMessage
+from .codec import Value, decode
+from .definitions import Combination, Operation
 
 if TYPE_CHECKING:
+    from collections.abc import Collection, Iterable, Mapping, Sequence
+
+    from .catalogue import Register, Row
     from .client import RegisterReader
     from .device import Device
+    from .health import Break, Region
+    from .models import Profile
 
 OPERATING_MODE = "operating_mode"
 BATTERY_SOC = "battery_soc"
@@ -16,32 +23,14 @@ LOAD_POWER = "load_power"
 PV_POWER = "pv_power"
 BATTERY_POWER = "battery_power"
 GRID_POWER = "grid_power"
-
-SOC_SCALE = 100
-MAX_SOC_RAW = 10000
-SIGN_BIT = 0x8000
-WORD_MODULUS = 0x10000
-OPERATING_MODE_NAMES = {
-    0: "initialisation",
-    1: "standby",
-    2: "operating",
-    3: "off_grid",
-    4: "grid_connected_load_bypass",
-    5: "fault",
-    6: "upgrade",
-    7: "debugging",
-    8: "self_check",
-    9: "reset",
-}
-
-type Decoder = Callable[[int], int | float | None]
+SETUP_KEYS = frozenset(
+    {OPERATING_MODE, BATTERY_SOC, LOAD_POWER, PV_POWER, BATTERY_POWER, GRID_POWER}
+)
 
 
-@dataclass(frozen=True)
-class Measurement:
-    key: str
-    address: int
-    decoder: Decoder
+def setup_keys(device: Device) -> frozenset[str]:
+    registers = device_registers(profile=device.profile, device_type=device.device_type)
+    return SETUP_KEYS & {register.key for register in registers}
 
 
 @dataclass(frozen=True)
@@ -49,20 +38,29 @@ class ReadRange:
     address: int
     count: int
     keys: tuple[str, ...]
+    rows: tuple[Row, ...] = ()
 
 
 @dataclass(frozen=True)
 class Telemetry:
-    values: Mapping[str, int | float | None]
+    values: Mapping[str, Value]
 
-    def get(self, key: str) -> int | float | None:
+    def get(self, key: str) -> Value:
         return self.values.get(key)
 
 
 @dataclass(frozen=True)
+class RequestOutcome:
+    rows: tuple[Row, ...]
+    keys: frozenset[str]
+    code: int | None
+
+
+@dataclass(frozen=True)
 class Readout:
-    values: Mapping[str, int | float | None]
+    values: Mapping[str, Value]
     refusals: Mapping[str, int]
+    outcomes: tuple[RequestOutcome, ...] = ()
 
     def require_complete(self) -> None:
         if self.refusals:
@@ -72,91 +70,207 @@ class Readout:
             )
 
 
-def decode_unsigned(raw: int) -> int:
-    return raw
+def _keys_by_row(registers: Iterable[Register]) -> dict[Row, tuple[str, ...]]:
+    keys_by_row: dict[Row, list[str]] = {}
+    for register in registers:
+        if register.row is not None:
+            keys_by_row.setdefault(register.row, []).append(register.key)
+    return {
+        row: tuple(keys_by_row[row])
+        for row in sorted(keys_by_row, key=lambda row: (row.address, row.words))
+    }
 
 
-def decode_signed(raw: int) -> int:
-    return raw - WORD_MODULUS if raw & SIGN_BIT else raw
-
-
-def decode_percent(raw: int) -> float | None:
-    return raw / SOC_SCALE if 0 <= raw <= MAX_SOC_RAW else None
-
-
-MEASUREMENTS = {
-    measurement.key: measurement
-    for measurement in (
-        Measurement(key=OPERATING_MODE, address=0x4004, decoder=decode_unsigned),
-        Measurement(key=BATTERY_SOC, address=0x406F, decoder=decode_percent),
-        Measurement(key=LOAD_POWER, address=0x40A0, decoder=decode_signed),
-        Measurement(key=PV_POWER, address=0x40A5, decoder=decode_signed),
-        Measurement(key=BATTERY_POWER, address=0x40A6, decoder=decode_signed),
-        Measurement(key=GRID_POWER, address=0x40A7, decoder=decode_signed),
+def _fits(*, profile: Profile, blocks: Iterable[Break], start: int, end: int) -> bool:
+    return (
+        end - start <= profile.largest_request
+        and any(
+            span.contains(address=start, words=end - start) for span in profile.spans
+        )
+        and not any(block.crossed_by(start=start, end=end) for block in blocks)
     )
-}
+
+
+def _request(
+    *, members: Sequence[Row], keys_by_row: Mapping[Row, tuple[str, ...]]
+) -> ReadRange:
+    return ReadRange(
+        address=members[0].address,
+        count=members[-1].end - members[0].address,
+        keys=tuple(key for row in members for key in keys_by_row[row]),
+        rows=tuple(members),
+    )
+
+
+def _pack(
+    *,
+    rows: Iterable[Row],
+    keys_by_row: Mapping[Row, tuple[str, ...]],
+    profile: Profile,
+    blocks: Collection[Break],
+) -> list[ReadRange]:
+    ranges: list[ReadRange] = []
+    members: list[Row] = []
+    for row in sorted(rows, key=lambda row: (row.address, row.words)):
+        if members and _fits(
+            profile=profile, blocks=blocks, start=members[0].address, end=row.end
+        ):
+            members.append(row)
+            continue
+        if members:
+            ranges.append(_request(members=members, keys_by_row=keys_by_row))
+        members = [row]
+    if members:
+        ranges.append(_request(members=members, keys_by_row=keys_by_row))
+    return ranges
 
 
 def plan_ranges(
-    measurements: Iterable[Measurement], isolated: Collection[str] = frozenset()
+    *,
+    registers: Iterable[Register],
+    profile: Profile,
+    narrowing: Collection[Region] = (),
+    breaks: Collection[Break] = (),
 ) -> list[ReadRange]:
+    keys_by_row = _keys_by_row(registers)
+    regions = tuple(narrowing)
     ranges: list[ReadRange] = []
-    for measurement in sorted(measurements, key=lambda item: item.address):
-        if (
-            ranges
-            and ranges[-1].address + ranges[-1].count == measurement.address
-            and measurement.key not in isolated
-            and ranges[-1].keys[-1] not in isolated
-        ):
-            last = ranges[-1]
-            ranges[-1] = ReadRange(
-                address=last.address,
-                count=last.count + 1,
-                keys=(*last.keys, measurement.key),
+    claimed: set[Row] = set()
+    for region in regions:
+        rows = [row for row in region.rows if row in keys_by_row]
+        claimed.update(rows)
+        others = [other.hull for other in regions if other is not region]
+        ranges.extend(
+            _pack(
+                rows=rows,
+                keys_by_row=keys_by_row,
+                profile=profile,
+                blocks=[*breaks, *others],
             )
-        else:
-            ranges.append(
-                ReadRange(address=measurement.address, count=1, keys=(measurement.key,))
-            )
-    return ranges
+        )
+    ranges.extend(
+        _pack(
+            rows=[row for row in keys_by_row if row not in claimed],
+            keys_by_row=keys_by_row,
+            profile=profile,
+            blocks=[*breaks, *(region.hull for region in regions)],
+        )
+    )
+    return sorted(ranges, key=lambda read_range: read_range.address)
+
+
+def _needed(
+    registers: Sequence[Register], enabled: Collection[str] | None
+) -> list[Register]:
+    by_key = {register.key: register for register in registers}
+    wanted = set(by_key) if enabled is None else set(enabled) & set(by_key)
+    for key in tuple(wanted):
+        wanted.update(by_key[key].sources)
+    return [register for register in registers if register.key in wanted]
+
+
+def plan_requests(
+    *,
+    profile: Profile,
+    device_type: int,
+    enabled: Collection[str] | None = None,
+    narrowing: Collection[Region] = (),
+    breaks: Collection[Break] = (),
+) -> list[ReadRange]:
+    registers = device_registers(profile=profile, device_type=device_type)
+    return plan_ranges(
+        registers=_needed(registers, enabled),
+        profile=profile,
+        narrowing=narrowing,
+        breaks=breaks,
+    )
 
 
 def plan_reads(
     device: Device,
     enabled: Collection[str] | None = None,
-    isolated: Collection[str] = frozenset(),
-    measurements: Mapping[str, Measurement] = MEASUREMENTS,
+    narrowing: Collection[Region] = (),
+    breaks: Collection[Break] = (),
 ) -> list[ReadRange]:
-    requested = measurements.keys() if enabled is None else enabled
-    selected = [
-        measurement
-        for key, measurement in measurements.items()
-        if key in requested and key in device.profile.measurement_keys
-    ]
-    return plan_ranges(measurements=selected, isolated=isolated)
+    return plan_requests(
+        profile=device.profile,
+        device_type=device.device_type,
+        enabled=enabled,
+        narrowing=narrowing,
+        breaks=breaks,
+    )
+
+
+def _combined_value(
+    *,
+    register: Register,
+    combination: Combination,
+    raw: Mapping[str, Sequence[int]],
+    decoded: Mapping[str, Value],
+) -> Value:
+    if combination.operation is Operation.WORDS:
+        words = [word for source in combination.sources for word in raw[source]]
+        return decode(words=words, encoding_format=register.format)
+    parts = [decoded[source] for source in combination.sources]
+    numbers = [part for part in parts if isinstance(part, int | float)]
+    return sum(numbers) if len(numbers) == len(parts) else None
 
 
 def decode_values(
-    raw: Mapping[str, int], measurements: Mapping[str, Measurement]
-) -> dict[str, int | float | None]:
-    return {key: measurements[key].decoder(word) for key, word in raw.items()}
+    *, registers: Iterable[Register], raw: Mapping[str, Sequence[int]]
+) -> dict[str, Value]:
+    registers = list(registers)
+    decoded = {
+        register.key: decode(words=raw[register.key], encoding_format=register.format)
+        for register in registers
+        if register.combination is None and register.key in raw
+    }
+    combined = {
+        register.key: _combined_value(
+            register=register, combination=combination, raw=raw, decoded=decoded
+        )
+        for register in registers
+        if (combination := register.combination) is not None
+        and all(source in raw for source in combination.sources)
+    }
+    return {**decoded, **combined}
+
+
+def _outcome_keys(
+    *,
+    read_range: ReadRange,
+    needed: Iterable[Register],
+    requested: Collection[str],
+) -> frozenset[str]:
+    dependents = {
+        register.key
+        for register in needed
+        if any(source in read_range.keys for source in register.sources)
+    }
+    return frozenset((set(read_range.keys) | dependents) & set(requested))
 
 
 async def read_telemetry(
     client: RegisterReader,
     device: Device,
     enabled: Collection[str] | None = None,
-    isolated: Collection[str] = frozenset(),
-    measurements: Mapping[str, Measurement] = MEASUREMENTS,
+    narrowing: Collection[Region] = (),
+    breaks: Collection[Break] = (),
 ) -> Readout:
-    raw: dict[str, int] = {}
+    registers = device_registers(profile=device.profile, device_type=device.device_type)
+    needed = _needed(registers, enabled)
+    by_key = {register.key: register for register in needed}
+    requested = set(by_key) if enabled is None else set(enabled)
+    raw: dict[str, Sequence[int]] = {}
     refusals: dict[str, int] = {}
-    for read_range in plan_reads(
-        device=device,
-        enabled=enabled,
-        isolated=isolated,
-        measurements=measurements,
+    outcomes: list[RequestOutcome] = []
+    for read_range in plan_ranges(
+        registers=needed,
+        profile=device.profile,
+        narrowing=narrowing,
+        breaks=breaks,
     ):
+        code: int | None = None
         try:
             words = await client.read_holding_registers(
                 address=read_range.address, count=read_range.count
@@ -164,9 +278,23 @@ async def read_telemetry(
         except ModbusError as err:
             if err.exception_code is None or err.device_unavailable:
                 raise
-            refusals.update(dict.fromkeys(read_range.keys, err.exception_code))
-            continue
-        raw.update(zip(read_range.keys, words, strict=True))
+            code = err.exception_code
+        else:
+            for key in read_range.keys:
+                register = by_key[key]
+                start = (register.address or 0) - read_range.address
+                raw[key] = words[start : start + register.words]
+        keys = _outcome_keys(read_range=read_range, needed=needed, requested=requested)
+        outcomes.append(RequestOutcome(rows=read_range.rows, keys=keys, code=code))
+        if code is not None:
+            for key in sorted(keys):
+                refusals.setdefault(key, code)
     return Readout(
-        values=decode_values(raw=raw, measurements=measurements), refusals=refusals
+        values={
+            key: value
+            for key, value in decode_values(registers=needed, raw=raw).items()
+            if key in requested
+        },
+        refusals=refusals,
+        outcomes=tuple(outcomes),
     )

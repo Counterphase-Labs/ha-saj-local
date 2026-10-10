@@ -1,6 +1,7 @@
 import pytest
 
-from saj.health import REFUSAL_THRESHOLD, RETEST_PERIOD, ReadHealth
+from saj.catalogue import Row
+from saj.health import REFUSAL_THRESHOLD, RETEST_PERIOD, Break, ReadHealth, Region
 
 
 def _refuse(
@@ -124,3 +125,206 @@ def test_the_exposed_refusals_are_a_copy():
     health.refusals.clear()
 
     assert health.refused() == {"pv"}
+
+
+def _rows(*addresses: int) -> tuple[Row, ...]:
+    return tuple(Row(address=address, words=1) for address in addresses)
+
+
+def _regions(*groups: tuple[int, ...]) -> tuple[Region, ...]:
+    return tuple(Region(rows=_rows(*group)) for group in groups)
+
+
+def _refuse_request(
+    health: ReadHealth, rows: tuple[Row, ...], *, now: float = 0
+) -> frozenset[str]:
+    keys = {f"k{row.address}" for row in rows}
+    return health.record_request_refused(rows=rows, keys=keys, code=2, now=now)
+
+
+@pytest.mark.parametrize(
+    ("addresses", "lower", "upper"),
+    [
+        ((10, 11), (10,), (11,)),
+        ((10, 11, 12, 13), (10, 11), (12, 13)),
+        ((10, 11, 12), (10,), (11, 12)),
+        ((10, 11, 30), (10, 11), (30,)),
+        ((10, 40, 41, 42), (10,), (40, 41, 42)),
+    ],
+)
+def test_a_refused_request_is_halved_at_the_row_boundary_nearest_the_middle(
+    addresses: tuple[int, ...], lower: tuple[int, ...], upper: tuple[int, ...]
+):
+    health = ReadHealth()
+
+    _refuse_request(health, _rows(*addresses))
+
+    assert health.narrowing == _regions(lower, upper)
+
+
+def test_the_rows_of_a_refused_request_are_unavailable_but_not_counted():
+    health = ReadHealth()
+
+    outcomes = [
+        _refuse_request(health, _rows(10, 11)) for _ in range(REFUSAL_THRESHOLD)
+    ]
+
+    assert outcomes == [frozenset()] * REFUSAL_THRESHOLD
+    assert health.refused() == {"k10", "k11"}
+    assert health.suspended() == frozenset()
+    assert health.refusals["k10"].count == 0
+    assert health.refusals["k10"].code == 2
+
+
+def test_a_half_that_reads_returns_to_normal_planning():
+    health = ReadHealth()
+    _refuse_request(health, _rows(10, 11, 12, 13))
+
+    health.record_request_read(rows=_rows(10, 11))
+
+    assert health.narrowing == _regions((12, 13))
+    assert health.breaks == frozenset()
+
+
+def test_a_half_that_is_refused_is_halved_again_until_one_row_remains():
+    health = ReadHealth()
+    _refuse_request(health, _rows(10, 11, 12, 13))
+
+    _refuse_request(health, _rows(10, 11))
+    _refuse_request(health, _rows(10))
+
+    assert health.narrowing == _regions((12, 13), (11,), (10,))
+    assert health.refusals["k10"].count == 1
+
+
+def test_both_halves_reading_records_a_break_in_the_gap_between_them():
+    health = ReadHealth()
+    _refuse_request(health, _rows(10, 11, 30, 31))
+
+    health.record_request_read(rows=_rows(10, 11))
+    health.record_request_read(rows=_rows(30, 31))
+
+    assert health.breaks == {Break(before=12, after=30)}
+    assert health.narrowing == ()
+
+
+def test_a_break_is_found_when_the_halves_read_in_different_cycles_and_orders():
+    health = ReadHealth()
+    _refuse_request(health, _rows(10, 20))
+
+    health.record_request_read(rows=_rows(20))
+    assert health.breaks == frozenset()
+    health.record_request_read(rows=_rows(10))
+
+    assert health.breaks == {Break(before=11, after=20)}
+
+
+@pytest.mark.parametrize("refused_half", [(10, 11), (12, 13)])
+def test_no_break_is_recorded_when_a_half_is_refused(refused_half: tuple[int, ...]):
+    health = ReadHealth()
+    _refuse_request(health, _rows(10, 11, 12, 13))
+    other = (12, 13) if refused_half == (10, 11) else (10, 11)
+
+    _refuse_request(health, _rows(*refused_half))
+    health.record_request_read(rows=_rows(*other))
+
+    assert health.breaks == frozenset()
+    assert health.narrowing == _regions(*[(address,) for address in refused_half])
+
+
+def test_a_half_read_in_part_stays_narrowed_for_the_rows_not_yet_read():
+    health = ReadHealth()
+    _refuse_request(health, _rows(10, 11, 12, 13))
+
+    health.record_request_read(rows=_rows(12))
+
+    assert health.narrowing == _regions((10, 11), (13,))
+
+
+def test_reading_rows_that_are_not_narrowed_changes_nothing():
+    health = ReadHealth()
+    _refuse_request(health, _rows(10, 11))
+
+    health.record_request_read(rows=_rows(50))
+
+    assert health.narrowing == _regions((10,), (11,))
+
+
+def test_a_single_row_refusal_counts_and_the_third_suspends_it():
+    health = ReadHealth()
+
+    outcomes = [
+        _refuse_request(health, _rows(10)) for _ in range(REFUSAL_THRESHOLD + 1)
+    ]
+
+    assert outcomes == [frozenset()] * (REFUSAL_THRESHOLD - 1) + [
+        frozenset({"k10"}),
+        frozenset(),
+    ]
+    assert health.suspended() == {"k10"}
+
+
+def test_a_suspended_row_stays_narrowed_so_nothing_is_planned_across_it():
+    health = ReadHealth()
+    for _ in range(REFUSAL_THRESHOLD):
+        _refuse_request(health, _rows(10))
+
+    assert health.narrowing == _regions((10,))
+
+
+def test_a_row_with_several_packed_keys_counts_every_key():
+    health = ReadHealth()
+
+    suspended = frozenset().union(
+        *(
+            health.record_request_refused(
+                rows=_rows(10), keys={"flag_a", "flag_b"}, code=2, now=0
+            )
+            for _ in range(REFUSAL_THRESHOLD)
+        )
+    )
+
+    assert suspended == {"flag_a", "flag_b"}
+
+
+def test_a_row_that_reads_again_is_no_longer_narrowed():
+    health = ReadHealth()
+    _refuse_request(health, _rows(10))
+
+    health.record_request_read(rows=_rows(10))
+
+    assert health.narrowing == ()
+    assert health.breaks == frozenset()
+
+
+def test_a_refusal_after_unavailable_keys_keeps_a_suspension_in_force():
+    health = ReadHealth()
+    for _ in range(REFUSAL_THRESHOLD):
+        health.record_refusal(key="k10", code=2, now=0)
+
+    _refuse_request(health, _rows(10, 11))
+
+    assert health.refusals["k10"].retest_at == RETEST_PERIOD
+    assert health.refusals["k10"].count == REFUSAL_THRESHOLD
+
+
+def test_the_exposed_narrowing_and_breaks_are_copies():
+    health = ReadHealth()
+    _refuse_request(health, _rows(10, 11))
+
+    snapshot = health.narrowing
+    health.record_request_read(rows=_rows(10, 11))
+
+    assert snapshot == _regions((10,), (11,))
+    assert health.narrowing == ()
+
+
+def test_a_refused_part_of_a_narrowed_half_leaves_the_other_rows_narrowed():
+    health = ReadHealth()
+    _refuse_request(health, _rows(10, 11, 12, 13))
+
+    _refuse_request(health, _rows(10))
+    health.record_request_read(rows=_rows(11))
+
+    assert health.narrowing == _regions((12, 13), (10,))
+    assert health.breaks == frozenset()

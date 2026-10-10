@@ -13,13 +13,14 @@ from homeassistant.helpers.update_coordinator import (
 from .const import (
     CONF_MODEL,
     CONF_SCAN_INTERVAL,
-    CONF_SENSORS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
-    SUBENTRY_POLLING_GROUP,
+    enabled_entity_keys,
+    group_cadences,
 )
 from .errors import has_safe_message, translate_error
 from .saj.budget import BUDGET_PER_MINUTE
+from .saj.catalogue import device_keys, device_registers
 from .saj.client import ModbusError, ModbusTcpClient
 from .saj.health import ReadHealth
 from .saj.poller import (
@@ -31,7 +32,7 @@ from .saj.poller import (
     Target,
     Tracking,
 )
-from .saj.schedule import Cadence, Schedule, build_cadences
+from .saj.schedule import Schedule, build_cadences
 from .saj.telemetry import Telemetry
 
 if TYPE_CHECKING:
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
+    from .saj.codec import Value
     from .saj.device import Device
     from .saj.guard import EndpointGuard
 
@@ -51,17 +53,6 @@ def wakeup_delay(*, target: float, now: float) -> timedelta:
     # so rounding the distance up from that second lands on or after the target.
     # A zero interval would mean no schedule at all, hence the one second floor.
     return timedelta(seconds=max(1, math.ceil(target - math.floor(now))))
-
-
-def _group_cadences(*, entry: ConfigEntry) -> list[Cadence]:
-    return [
-        Cadence(
-            interval=int(subentry.data[CONF_SCAN_INTERVAL]),
-            keys=frozenset(subentry.data[CONF_SENSORS]),
-        )
-        for subentry in entry.subentries.values()
-        if subentry.subentry_type == SUBENTRY_POLLING_GROUP
-    ]
 
 
 class SajCoordinator(DataUpdateCoordinator[Telemetry]):
@@ -81,6 +72,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         self.last_error: dict[str, int | str | None] | None = None
         self.last_read: frozenset[str] = frozenset()
         self.unavailable_keys: frozenset[str] = frozenset()
+        self._initial_refresh = True
         self.poller = Poller(
             target=Target(client=client, device=device, selection=self.model_selection),
             tracking=Tracking(
@@ -89,8 +81,10 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                         default_interval=entry.options.get(
                             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
                         ),
-                        groups=_group_cadences(entry=entry),
-                        supported=device.profile.measurement_keys,
+                        groups=group_cadences(entry=entry),
+                        supported=device_keys(
+                            profile=device.profile, device_type=device.device_type
+                        ),
                     ),
                     origin=hass.loop.time(),
                 ),
@@ -98,10 +92,10 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                 guard=guard,
             ),
             services=Services(clock=hass.loop.time, bound=asyncio.wait_for),
+            enabled=self.enabled_keys,
         )
-        self._values: dict[str, int | float | None] = {}
+        self._values: dict[str, Value] = {}
         self._cycle_lock = asyncio.Lock()
-        self._initial_refresh = True
         self._update_task: asyncio.Task[object] | None = None
         self._log_plan()
 
@@ -133,7 +127,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         async with self._cycle_lock:
             self._update_task = asyncio.current_task()
             try:
-                enabled = self._enabled_keys()
+                enabled = self.enabled_keys
                 try:
                     result = await self.poller.run(enabled=enabled)
                 except CycleFailedError as failure:
@@ -193,14 +187,20 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                 await task
         await self.client.close()
 
-    def _enabled_keys(self) -> set[str]:
-        if self._initial_refresh:
-            return set(self.device.profile.measurement_keys)
-        return {str(context) for context in self.async_contexts()}
-
     @property
-    def enabled_sensor_keys(self) -> set[str]:
-        return self._enabled_keys()
+    def enabled_keys(self) -> set[str]:
+        if self._initial_refresh:
+            return set(
+                enabled_entity_keys(
+                    hass=self.hass,
+                    entry_id=self.entry_id,
+                    registers=device_registers(
+                        profile=self.device.profile,
+                        device_type=self.device.device_type,
+                    ),
+                )
+            )
+        return {str(context) for context in self.async_contexts()}
 
 
 def _raise_update_failed(error: Exception) -> NoReturn:

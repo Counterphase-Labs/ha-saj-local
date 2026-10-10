@@ -11,7 +11,7 @@ from custom_components.saj_local import config_flow
 from custom_components.saj_local.const import (
     DOMAIN,
     SUBENTRY_POLLING_GROUP,
-    sensor_unique_id,
+    entity_unique_id,
 )
 from custom_components.saj_local.saj.device import Device
 from custom_components.saj_local.saj.profiles import PROFILES
@@ -43,7 +43,13 @@ def entry(hass) -> ConfigEntry:
     config_entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id="H2-SERIAL",
-        data={"host": "inverter", "port": 502, "unit_id": 1, "model": "automatic"},
+        data={
+            "host": "inverter",
+            "port": 502,
+            "unit_id": 1,
+            "model": "automatic",
+            "device_type": min(H2.device_types),
+        },
         options={"scan_interval": 60},
     )
     config_entry.add_to_hass(hass)
@@ -57,7 +63,7 @@ def entities(hass, entry) -> er.EntityRegistry:
         registered = registry.async_get_or_create(
             "sensor",
             DOMAIN,
-            sensor_unique_id(entry_id=entry.entry_id, key=key),
+            entity_unique_id(entry_id=entry.entry_id, key=key),
             config_entry=entry,
             suggested_object_id=f"saj_{key}",
             original_name=key.replace("_", " ").title(),
@@ -99,6 +105,10 @@ async def _save_group(hass, entry, *, name, sensors, subentry_id=None):
     result = await manager.async_configure(
         result["flow_id"],
         {"name": name, "scan_interval": 10, "sensors": list(sensors)},
+    )
+    assert result["type"] is FlowResultType.MENU
+    result = await manager.async_configure(
+        result["flow_id"], {"next_step_id": "save_group"}
     )
     assert result["type"] in {FlowResultType.CREATE_ENTRY, FlowResultType.ABORT}
 
@@ -182,8 +192,8 @@ async def test_replacing_the_model_while_groups_exist_leaves_entities_alone(
         del client, selection
         return replacement
 
-    async def read(client, device):
-        del client, device
+    async def read(client, device, enabled):
+        del client, device, enabled
         return Readout(values={}, refusals={})
 
     monkeypatch.setattr(config_flow, "ModbusTcpClient", QuietClient)

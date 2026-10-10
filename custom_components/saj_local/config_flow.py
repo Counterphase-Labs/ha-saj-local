@@ -1,12 +1,11 @@
 import re
 from contextlib import nullcontext
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Any, Protocol
 
 import voluptuous as vol
 from homeassistant.components.recorder.statistics import async_list_statistic_ids
-from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
@@ -18,6 +17,7 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
+from homeassistant.helpers.translation import async_get_translations
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Collection, Iterable, Mapping
@@ -27,8 +27,10 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from .saj.guard import EndpointGuard
+    from .saj.models import Profile
 
 from .const import (
+    CONF_DEVICE_TYPE,
     CONF_MODEL,
     CONF_PREFIX,
     CONF_SCAN_INTERVAL,
@@ -38,29 +40,44 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_UNIT_ID,
     DOMAIN,
+    DOMAIN_PLACEHOLDER,
     KEY_PLACEHOLDER,
     MAX_PORT,
     MAX_UNIT_ID,
     MIN_UNIT_ID,
     REQUEST_TIMEOUT,
     SUBENTRY_POLLING_GROUP,
+    enabled_entity_keys,
     endpoint_guard,
     entity_id_in_use,
-    sensor_entity_id,
-    sensor_key,
+    fixed_entity_id,
+    group_cadences,
+    installation_entities,
 )
 from .errors import HANDLED_ERRORS, translate_error
+from .saj.budget import BUDGET_PER_MINUTE
+from .saj.catalogue import blocks_by_key, device_registers, known_keys
 from .saj.client import ClientEnvironment, ModbusTcpClient
 from .saj.device import Device, identify
 from .saj.device_type import format_device_type
-from .saj.profiles import AUTOMATIC, PROFILES
-from .saj.schedule import MIN_INTERVAL
-from .saj.telemetry import read_telemetry
+from .saj.load import installation_load, requests_per_read
+from .saj.profiles import AUTOMATIC, PROFILES, resolve_profile
+from .saj.schedule import MIN_INTERVAL, Cadence
+from .saj.telemetry import read_telemetry, setup_keys
 
 MODEL_TRANSLATION_KEY = "model"
 STEP_CONFIRM_MODEL = "confirm_model"
 STEP_CONFIRM_REPLACEMENT = "confirm_replacement"
 STEP_CONFIRM_PREFIX = "confirm_prefix"
+STEP_CONFIRM_LOAD = "confirm_load"
+STEP_REVIEW_GROUP = "review_group"
+STEP_REVIEW_GROUP_OVER_BUDGET = "review_group_over_budget"
+STEP_SAVE_GROUP = "save_group"
+STEP_CHANGE_SELECTION = "change_selection"
+BLOCK_SELECTOR = "block"
+ENTITY_STATE_SELECTOR = "entity_state"
+DISABLED_STATE = "disabled"
+LOAD_DECIMALS = 1
 ABORT_NOT_PENDING = "confirmation_not_pending"
 ABORT_ALREADY_CONFIGURED = "already_configured"
 ABORT_NO_SENSORS = "no_sensors"
@@ -69,7 +86,7 @@ ABORT_PREFIX_UNAVAILABLE = "prefix_unavailable"
 ERROR_NO_SENSORS_SELECTED = "no_sensors_selected"
 ERROR_SENSOR_IN_OTHER_GROUP = "sensor_in_other_group"
 ERROR_INVALID_PREFIX = "invalid_prefix"
-ERROR_PREFIX_SHADOWS_SENSOR = "prefix_shadows_sensor"
+ERROR_PREFIX_SHADOWS_ENTITY = "prefix_shadows_entity"
 ERROR_PREFIX_IN_USE = "prefix_in_use"
 ERROR_ENTITY_ID_TAKEN = "entity_id_taken"
 ERROR_STATISTICS_EXIST = "statistics_exist"
@@ -106,7 +123,7 @@ class StatisticsLookup(Protocol):
 @dataclass(frozen=True)
 class PrefixContext:
     other_prefixes: frozenset[str]
-    sensor_keys: frozenset[str]
+    catalogue_keys: frozenset[str]
     saved_prefix: str | None = None
 
 
@@ -150,6 +167,14 @@ class PendingChange:
     model_confirmed: bool = False
     replacement_confirmed: bool = False
     prefix_confirmed: bool = False
+    load_confirmed: bool = False
+
+    @property
+    def entry_data(self) -> dict[str, Any]:
+        return {
+            **self.submission.entry_data,
+            CONF_DEVICE_TYPE: self.device.device_type,
+        }
 
 
 @dataclass(frozen=True)
@@ -227,7 +252,7 @@ class SajLocalConfigFlow(ConfigFlow, domain=DOMAIN):
             hass=self.hass,
             context=self._prefix_context(),
             prefix=change.submission.prefix,
-            keys=change.device.profile.measurement_keys,
+            domains=_device_domains(device=change.device),
             check_statistics=False,
         )
 
@@ -240,7 +265,7 @@ class SajLocalConfigFlow(ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
         return self.async_create_entry(
             title=f"SAJ {change.device.serial}",
-            data=submission.entry_data,
+            data=change.entry_data,
             options=submission.entry_options,
         )
 
@@ -294,7 +319,15 @@ class SajOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=_options_schema(entry=self.config_entry, submitted=user_input),
-            **validation.feedback,
+            errors=validation.errors,
+            description_placeholders={
+                **load_placeholders(
+                    installation=stored_installation_load(
+                        hass=self.hass, entry=self.config_entry
+                    )
+                ),
+                **validation.placeholders,
+            },
         )
 
     async def async_step_confirm_model(
@@ -316,6 +349,13 @@ class SajOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         return await self._async_confirm(
             submitted=user_input is not None, confirm=_confirm_prefix
+        )
+
+    async def async_step_confirm_load(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return await self._async_confirm(
+            submitted=user_input is not None, confirm=_confirm_load
         )
 
     async def _async_confirm(
@@ -352,7 +392,37 @@ class SajOptionsFlow(OptionsFlow):
                     new_prefix=change.submission.prefix,
                 )
             )
+        if not change.load_confirmed:
+            load_change = self._interval_load_change(change=change)
+            if load_change is not None:
+                return self.async_show_form(
+                    step_id=STEP_CONFIRM_LOAD,
+                    data_schema=vol.Schema({}),
+                    errors={},
+                    description_placeholders=load_change.placeholders,
+                )
         return await self._save_changes(change=change)
+
+    def _interval_load_change(self, *, change: PendingChange) -> LoadChange | None:
+        entry = self.config_entry
+        submitted_interval = change.submission.scan_interval
+        if submitted_interval == entry.options.get(
+            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+        ):
+            return None
+        after = installation_load_of(
+            hass=self.hass,
+            entry=entry,
+            profile=change.device.profile,
+            device_type=change.device.device_type,
+            default_interval=submitted_interval,
+        ).per_minute
+        if after <= BUDGET_PER_MINUTE:
+            return None
+        return LoadChange(
+            before=stored_installation_load(hass=self.hass, entry=entry).per_minute,
+            after=after,
+        )
 
     @property
     def _current_prefix(self) -> str:
@@ -376,31 +446,32 @@ class SajOptionsFlow(OptionsFlow):
     async def _prefix_conflict(self, *, change: PendingChange) -> Validation | None:
         if not self._prefix_changed(change=change):
             return None
-        keys = change.device.profile.measurement_keys | frozenset(
-            _sensor_labels(hass=self.hass, entry_id=self.config_entry.entry_id)
+        registered = installation_entities(
+            hass=self.hass, entry_id=self.config_entry.entry_id
         )
+        domains = {
+            **_device_domains(device=change.device),
+            **{key: entity.domain for key, entity in registered.items()},
+        }
         return await find_prefix_conflict(
             hass=self.hass,
             context=self._prefix_context(),
             prefix=change.submission.prefix,
-            keys=keys,
+            domains=domains,
             check_statistics=True,
         )
 
     def _rename_entities(self, *, new_prefix: str) -> None:
         registry = er.async_get(self.hass)
-        entry_id = self.config_entry.entry_id
         renames: dict[str, str] = {}
-        for registered in er.async_entries_for_config_entry(registry, entry_id):
-            key = sensor_key(entry_id=entry_id, unique_id=registered.unique_id)
-            if (
-                registered.domain == SENSOR_DOMAIN
-                and key is not None
-                and registered.entity_id
-                == sensor_entity_id(prefix=self._current_prefix, key=key)
+        for key, registered in installation_entities(
+            hass=self.hass, entry_id=self.config_entry.entry_id
+        ).items():
+            if registered.entity_id == fixed_entity_id(
+                domain=registered.domain, prefix=self._current_prefix, key=key
             ):
-                renames[registered.entity_id] = sensor_entity_id(
-                    prefix=new_prefix, key=key
+                renames[registered.entity_id] = fixed_entity_id(
+                    domain=registered.domain, prefix=new_prefix, key=key
                 )
         for entity_id, new_entity_id in renames.items():
             registry.async_update_entity(entity_id, new_entity_id=new_entity_id)
@@ -445,7 +516,7 @@ class SajOptionsFlow(OptionsFlow):
             self._rename_entities(new_prefix=submission.prefix)
         self.hass.config_entries.async_update_entry(
             self.config_entry,
-            data=submission.entry_data,
+            data=change.entry_data,
             options=submission.entry_options,
             unique_id=change.device.serial,
         )
@@ -463,50 +534,258 @@ class PollingGroup:
         return {CONF_SCAN_INTERVAL: self.interval, CONF_SENSORS: list(self.sensors)}
 
 
+@dataclass(frozen=True)
+class InstallationLoad:
+    profile: Profile
+    device_type: int
+    enabled: frozenset[str]
+    default_interval: int
+    groups: tuple[Cadence, ...]
+
+    @property
+    def per_minute(self) -> float:
+        return installation_load(
+            profile=self.profile,
+            device_type=self.device_type,
+            enabled=self.enabled,
+            default_interval=self.default_interval,
+            groups=self.groups,
+        )
+
+    def requests_per_read(self, *, keys: Collection[str]) -> int:
+        return requests_per_read(
+            profile=self.profile,
+            device_type=self.device_type,
+            keys=self.enabled & frozenset(keys),
+        )
+
+
+@dataclass(frozen=True)
+class LoadChange:
+    before: float
+    after: float
+
+    @property
+    def over_budget(self) -> bool:
+        return self.after > BUDGET_PER_MINUTE
+
+    @property
+    def placeholders(self) -> dict[str, str]:
+        return {
+            "before": format_load(load=self.before),
+            "after": format_load(load=self.after),
+            "budget": format_load(load=BUDGET_PER_MINUTE),
+        }
+
+
+def format_load(*, load: float) -> str:
+    return f"{round(load, LOAD_DECIMALS):g}"
+
+
+def load_placeholders(*, installation: InstallationLoad) -> dict[str, str]:
+    return {
+        "load": format_load(load=installation.per_minute),
+        "budget": format_load(load=BUDGET_PER_MINUTE),
+    }
+
+
+def installation_load_of(
+    *,
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    profile: Profile,
+    device_type: int,
+    default_interval: int,
+) -> InstallationLoad:
+    return InstallationLoad(
+        profile=profile,
+        device_type=device_type,
+        enabled=enabled_entity_keys(
+            hass=hass,
+            entry_id=entry.entry_id,
+            registers=device_registers(profile=profile, device_type=device_type),
+        ),
+        default_interval=default_interval,
+        groups=tuple(group_cadences(entry=entry)),
+    )
+
+
+def stored_installation_load(
+    *, hass: HomeAssistant, entry: ConfigEntry
+) -> InstallationLoad:
+    device_type = entry.data[CONF_DEVICE_TYPE]
+    resolution = resolve_profile(
+        device_type=device_type, selection=entry.data[CONF_MODEL], profiles=PROFILES
+    )
+    return installation_load_of(
+        hass=hass,
+        entry=entry,
+        profile=resolution.profile,
+        device_type=device_type,
+        default_interval=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+    )
+
+
+@dataclass(frozen=True)
+class PendingGroup:
+    group: PollingGroup
+    submitted: dict[str, Any]
+    subentry: ConfigSubentry | None
+
+
+@dataclass(frozen=True)
+class GroupContext:
+    entry: ConfigEntry
+    installation: InstallationLoad
+    labels: dict[str, str]
+    claimed: frozenset[str]
+
+
 class SajPollingGroupFlow(ConfigSubentryFlow):
+    _pending: PendingGroup | None = None
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        return self._group_step(user_input=user_input, subentry=None)
+        return await self._group_step(user_input=user_input, subentry=None)
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        return self._group_step(
+        return await self._group_step(
             user_input=user_input, subentry=self._get_reconfigure_subentry()
         )
 
-    def _group_step(
+    async def async_step_review_group(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        del user_input
+        return await self._review()
+
+    async def async_step_review_group_over_budget(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        del user_input
+        return await self._review()
+
+    async def async_step_save_group(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        del user_input
+        pending = self._pending
+        if pending is None:
+            return self.async_abort(reason=ABORT_NOT_PENDING)
+        group = pending.group
+        if pending.subentry is None:
+            return self.async_create_entry(title=group.name, data=group.data)
+        return self.async_update_and_abort(
+            self._get_entry(), pending.subentry, title=group.name, data=group.data
+        )
+
+    async def async_step_change_selection(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        del user_input
+        pending = self._pending
+        if pending is None:
+            return self.async_abort(reason=ABORT_NOT_PENDING)
+        context = await self._context(subentry=pending.subentry)
+        return self._show_group_form(
+            context=context,
+            subentry=pending.subentry,
+            submitted=pending.submitted,
+            errors={},
+        )
+
+    async def _context(self, *, subentry: ConfigSubentry | None) -> GroupContext:
+        entry = self._get_entry()
+        installation = stored_installation_load(hass=self.hass, entry=entry)
+        return GroupContext(
+            entry=entry,
+            installation=installation,
+            labels=await _entity_labels(
+                hass=self.hass, entry=entry, installation=installation
+            ),
+            claimed=_claimed_keys(
+                entry=entry,
+                excluding=None if subentry is None else subentry.subentry_id,
+            ),
+        )
+
+    async def _group_step(
         self, *, user_input: dict[str, Any] | None, subentry: ConfigSubentry | None
     ) -> SubentryFlowResult:
-        entry = self._get_entry()
-        labels = _sensor_labels(hass=self.hass, entry_id=entry.entry_id)
-        claimed = _claimed_sensors(
-            entry=entry, excluding=None if subentry is None else subentry.subentry_id
-        )
-        selectable = {key: label for key, label in labels.items() if key not in claimed}
-        if not labels:
+        context = await self._context(subentry=subentry)
+        selectable = _selectable(context=context)
+        if not context.labels:
             return self.async_abort(reason=ABORT_NO_SENSORS)
         if subentry is None and not selectable:
             return self.async_abort(reason=ABORT_ALL_SENSORS_ASSIGNED)
         errors: dict[str, str] = {}
         if user_input is not None:
-            group, errors = validate_group(user_input=user_input, claimed=claimed)
-            if group is not None and subentry is None:
-                return self.async_create_entry(title=group.name, data=group.data)
-            if group is not None and subentry is not None:
-                return self.async_update_and_abort(
-                    entry, subentry, title=group.name, data=group.data
+            group, errors = validate_group(
+                user_input=user_input, claimed=context.claimed
+            )
+            if group is not None:
+                self._pending = PendingGroup(
+                    group=group, submitted=dict(user_input), subentry=subentry
                 )
+                return await self._review()
+        return self._show_group_form(
+            context=context, subentry=subentry, submitted=user_input, errors=errors
+        )
+
+    def _show_group_form(
+        self,
+        *,
+        context: GroupContext,
+        subentry: ConfigSubentry | None,
+        submitted: Mapping[str, Any] | None,
+        errors: dict[str, str],
+    ) -> SubentryFlowResult:
+        selectable = _selectable(context=context)
         return self.async_show_form(
             step_id="user" if subentry is None else "reconfigure",
             data_schema=_group_schema(
                 options=selectable,
                 defaults=_group_defaults(
-                    subentry=subentry, submitted=user_input, selectable=selectable
+                    subentry=subentry, submitted=submitted, selectable=selectable
                 ),
             ),
+            description_placeholders=load_placeholders(
+                installation=context.installation
+            ),
             errors=errors,
+        )
+
+    async def _review(self) -> SubentryFlowResult:
+        pending = self._pending
+        if pending is None:
+            return self.async_abort(reason=ABORT_NOT_PENDING)
+        context = await self._context(subentry=pending.subentry)
+        keys = frozenset(pending.group.sensors)
+        saved = Cadence(interval=pending.group.interval, keys=keys)
+        excluding = None if pending.subentry is None else pending.subentry.subentry_id
+        installation = context.installation
+        change = LoadChange(
+            before=installation.per_minute,
+            after=replace(
+                installation,
+                groups=(
+                    *group_cadences(entry=context.entry, excluding=excluding),
+                    saved,
+                ),
+            ).per_minute,
+        )
+        return self.async_show_menu(
+            step_id=STEP_REVIEW_GROUP_OVER_BUDGET
+            if change.over_budget
+            else STEP_REVIEW_GROUP,
+            menu_options=[STEP_SAVE_GROUP, STEP_CHANGE_SELECTION],
+            description_placeholders={
+                **change.placeholders,
+                "requests": str(installation.requests_per_read(keys=keys)),
+            },
         )
 
 
@@ -530,23 +809,65 @@ def validate_group(
     )
 
 
-def _sensor_labels(*, hass: HomeAssistant, entry_id: str) -> dict[str, str]:
-    labels: dict[str, str] = {}
-    registry = er.async_get(hass)
-    for registered in er.async_entries_for_config_entry(registry, entry_id):
-        key = sensor_key(entry_id=entry_id, unique_id=registered.unique_id)
-        if registered.domain == SENSOR_DOMAIN and key is not None:
-            labels[key] = registered.name or registered.original_name or key
-    return labels
+async def _selector_options(
+    *, hass: HomeAssistant, selector_name: str
+) -> dict[str, str]:
+    translations = await async_get_translations(
+        hass, hass.config.language, "selector", [DOMAIN]
+    )
+    prefix = f"component.{DOMAIN}.selector.{selector_name}.options."
+    return {
+        name.removeprefix(prefix): label
+        for name, label in translations.items()
+        if name.startswith(prefix)
+    }
 
 
-def _claimed_sensors(*, entry: ConfigEntry, excluding: str | None) -> frozenset[str]:
+async def _entity_labels(
+    *, hass: HomeAssistant, entry: ConfigEntry, installation: InstallationLoad
+) -> dict[str, str]:
+    blocks = blocks_by_key(
+        profile=installation.profile, device_type=installation.device_type
+    )
+    block_labels = await _selector_options(hass=hass, selector_name=BLOCK_SELECTOR)
+    disabled_label = (
+        await _selector_options(hass=hass, selector_name=ENTITY_STATE_SELECTOR)
+    )[DISABLED_STATE]
+    entities = installation_entities(hass=hass, entry_id=entry.entry_id)
+    return {
+        key: _option_label(
+            block=block_labels.get(block, block),
+            entity=entity,
+            key=key,
+            disabled_label=disabled_label,
+        )
+        for key, block in blocks.items()
+        if (entity := entities.get(key)) is not None
+    }
+
+
+def _option_label(
+    *, block: str, entity: er.RegistryEntry, key: str, disabled_label: str
+) -> str:
+    name = f"{block}: {entity.name or entity.original_name or key}"
+    if entity.disabled_by is None:
+        return name
+    return disabled_label.format(entity=name)
+
+
+def _selectable(*, context: GroupContext) -> dict[str, str]:
+    return {
+        key: label
+        for key, label in context.labels.items()
+        if key not in context.claimed
+    }
+
+
+def _claimed_keys(*, entry: ConfigEntry, excluding: str | None) -> frozenset[str]:
     return frozenset(
         key
-        for subentry in entry.subentries.values()
-        if subentry.subentry_type == SUBENTRY_POLLING_GROUP
-        and subentry.subentry_id != excluding
-        for key in subentry.data[CONF_SENSORS]
+        for cadence in group_cadences(entry=entry, excluding=excluding)
+        for key in cadence.keys
     )
 
 
@@ -588,9 +909,7 @@ def _group_schema(
                 selector.SelectSelectorConfig(
                     options=[
                         selector.SelectOptionDict(value=key, label=label)
-                        for key, label in sorted(
-                            options.items(), key=lambda item: item[1]
-                        )
+                        for key, label in options.items()
                     ],
                     multiple=True,
                     mode=selector.SelectSelectorMode.LIST,
@@ -674,7 +993,9 @@ async def _probe_device(
 async def _probe_with(*, client: ModbusTcpClient, submission: Submission) -> Validation:
     try:
         device = await identify(client=client, selection=submission.model)
-        readout = await read_telemetry(client=client, device=device)
+        readout = await read_telemetry(
+            client=client, device=device, enabled=setup_keys(device)
+        )
         readout.require_complete()
     except HANDLED_ERRORS as err:
         translation = translate_error(error=err)
@@ -698,6 +1019,10 @@ def _confirm_prefix(change: PendingChange) -> None:
     change.prefix_confirmed = True
 
 
+def _confirm_load(change: PendingChange) -> None:
+    change.load_confirmed = True
+
+
 def prefix_context(
     *, entries: Iterable[ConfigEntry], saved_prefix: str | None = None
 ) -> PrefixContext:
@@ -706,9 +1031,7 @@ def prefix_context(
         other_prefixes=frozenset(
             entry.options.get(CONF_PREFIX, "") for entry in entries
         ),
-        sensor_keys=frozenset().union(
-            *(profile.measurement_keys for profile in PROFILES)
-        ),
+        catalogue_keys=known_keys(profiles=PROFILES),
     )
 
 
@@ -722,12 +1045,12 @@ def _checked_prefix(*, value: object, context: PrefixContext) -> PrefixCheck:
     return validate_prefix(
         value=value,
         other_prefixes=context.other_prefixes,
-        sensor_keys=context.sensor_keys,
+        catalogue_keys=context.catalogue_keys,
     )
 
 
 def validate_prefix(
-    *, value: object, other_prefixes: Collection[str], sensor_keys: Collection[str]
+    *, value: object, other_prefixes: Collection[str], catalogue_keys: Collection[str]
 ) -> PrefixCheck:
     if not isinstance(value, str):
         return PrefixCheck(prefix="", error=ERROR_INVALID_PREFIX)
@@ -736,8 +1059,8 @@ def validate_prefix(
         len(prefix) > MAX_PREFIX_LENGTH or PREFIX_SHAPE.fullmatch(prefix) is None
     ):
         return PrefixCheck(prefix=prefix, error=ERROR_INVALID_PREFIX)
-    if prefix and any(key.startswith(f"{prefix}_") for key in sensor_keys):
-        return PrefixCheck(prefix=prefix, error=ERROR_PREFIX_SHADOWS_SENSOR)
+    if prefix and any(key.startswith(f"{prefix}_") for key in catalogue_keys):
+        return PrefixCheck(prefix=prefix, error=ERROR_PREFIX_SHADOWS_ENTITY)
     if prefix in other_prefixes:
         return PrefixCheck(prefix=prefix, error=ERROR_PREFIX_IN_USE)
     return PrefixCheck(prefix=prefix)
@@ -769,17 +1092,20 @@ async def find_prefix_conflict(
     hass: HomeAssistant,
     context: PrefixContext,
     prefix: str,
-    keys: Iterable[str],
+    domains: Mapping[str, str],
     check_statistics: bool,
 ) -> Validation | None:
     checked = validate_prefix(
         value=prefix,
         other_prefixes=context.other_prefixes,
-        sensor_keys=context.sensor_keys,
+        catalogue_keys=context.catalogue_keys,
     )
     if checked.error is not None:
         return Validation(errors={CONF_PREFIX: checked.error})
-    entity_ids = [sensor_entity_id(prefix=prefix, key=key) for key in keys]
+    entity_ids = [
+        fixed_entity_id(domain=domain, prefix=prefix, key=key)
+        for key, domain in domains.items()
+    ]
     taken = first_taken_entity_id(
         entity_ids=entity_ids, is_taken=partial(entity_id_in_use, hass=hass)
     )
@@ -838,9 +1164,22 @@ def _prefix_confirmation_form(*, old_prefix: str, new_prefix: str) -> dict[str, 
         "data_schema": vol.Schema({}),
         "errors": {},
         "description_placeholders": {
-            "old_pattern": sensor_entity_id(prefix=old_prefix, key=KEY_PLACEHOLDER),
-            "new_pattern": sensor_entity_id(prefix=new_prefix, key=KEY_PLACEHOLDER),
+            "old_pattern": fixed_entity_id(
+                domain=DOMAIN_PLACEHOLDER, prefix=old_prefix, key=KEY_PLACEHOLDER
+            ),
+            "new_pattern": fixed_entity_id(
+                domain=DOMAIN_PLACEHOLDER, prefix=new_prefix, key=KEY_PLACEHOLDER
+            ),
         },
+    }
+
+
+def _device_domains(*, device: Device) -> dict[str, str]:
+    return {
+        register.key: register.kind.value
+        for register in device_registers(
+            profile=device.profile, device_type=device.device_type
+        )
     }
 
 

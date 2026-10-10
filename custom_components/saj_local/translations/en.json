@@ -36,9 +36,9 @@
       "model_mismatch": "This device identifies as {detected_model}, not {selected_model}. Choose {detected_model} or Automatic.",
       "unknown_model": "The model {selection} is not a known model. Choose Automatic or one of the listed models.",
       "invalid_prefix": "Use only lowercase letters and digits, with no underscores, up to 32 characters.",
-      "prefix_shadows_sensor": "This prefix would make entity IDs that clash with a sensor name. Choose a different prefix.",
       "prefix_in_use": "Another SAJ Local installation already uses this prefix. Leaving it empty also counts, so only one installation can have no prefix.",
-      "entity_id_taken": "The entity ID {entity_id} is already taken in Home Assistant. Choose a different prefix."
+      "entity_id_taken": "The entity ID {entity_id} is already taken in Home Assistant. Choose a different prefix.",
+      "prefix_shadows_entity": "This prefix would make entity IDs that clash with the name of an entity. Choose a different prefix."
     },
     "abort": {
       "already_configured": "This inverter is already configured.",
@@ -49,7 +49,7 @@
     "step": {
       "init": {
         "title": "Connection and polling",
-        "description": "Enter the local Modbus TCP endpoint, polling interval and model. Settings are saved after the endpoint is validated.",
+        "description": "Enter the local Modbus TCP endpoint, polling interval and model. Settings are saved after the endpoint is validated. The current cadences plan {load} of {budget} requests per minute.",
         "data": {
           "host": "Host",
           "port": "Port",
@@ -64,7 +64,7 @@
       },
       "confirm_replacement": {
         "title": "Confirm inverter replacement",
-        "description": "Replace the hardware for this existing installation with the {model} with serial {serial}? Your sensor entities and their historical data remain with this installation."
+        "description": "Replace the hardware for this existing installation with the {model} with serial {serial}? Your entities and their historical data remain with this installation."
       },
       "confirm_model": {
         "title": "Confirm model",
@@ -72,7 +72,11 @@
       },
       "confirm_prefix": {
         "title": "Confirm entity ID change",
-        "description": "Entity IDs change from `{old_pattern}` to `{new_pattern}`.\n\nHistory and long-term statistics move to the new entity IDs.\n\nAutomations, scripts, dashboards, templates and Energy settings that use the old entity IDs will stop working until you update them.\n\nEntities you renamed yourself are left alone. Change the entity IDs?"
+        "description": "Entity IDs change from `{old_pattern}` to `{new_pattern}`, for every entity type.\n\nHistory and long-term statistics move to the new entity IDs.\n\nAutomations, scripts, dashboards, templates and Energy settings that use the old entity IDs will stop working until you update them.\n\nEntities you renamed yourself are left alone. Change the entity IDs?"
+      },
+      "confirm_load": {
+        "title": "Confirm slower polling",
+        "description": "With this default interval the installation plans {after} requests per minute, up from {before}, which is above the budget of {budget}. Cadences will run slower than configured to keep the inverter from being overloaded. Save the interval anyway?"
       }
     },
     "error": {
@@ -90,10 +94,10 @@
       "model_mismatch": "This device identifies as {detected_model}, not {selected_model}. Choose {detected_model} or Automatic.",
       "unknown_model": "The model {selection} is not a known model. Choose Automatic or one of the listed models.",
       "invalid_prefix": "Use only lowercase letters and digits, with no underscores, up to 32 characters.",
-      "prefix_shadows_sensor": "This prefix would make entity IDs that clash with a sensor name. Choose a different prefix.",
       "prefix_in_use": "Another SAJ Local installation already uses this prefix. Leaving it empty also counts, so only one installation can have no prefix.",
       "entity_id_taken": "The entity ID {entity_id} is already taken in Home Assistant. Choose a different prefix.",
-      "statistics_exist": "Home Assistant already holds long-term statistics under {entity_id}, so this installation's history could not be moved there. Choose a different prefix."
+      "statistics_exist": "Home Assistant already holds long-term statistics under {entity_id}, so this installation's history could not be moved there. Choose a different prefix.",
+      "prefix_shadows_entity": "This prefix would make entity IDs that clash with the name of an entity. Choose a different prefix."
     },
     "abort": {
       "changes_saved": "SAJ Local settings were saved.",
@@ -111,37 +115,166 @@
       "step": {
         "user": {
           "title": "Add polling group",
-          "description": "Sensors in a polling group are read at the group's own interval. All other sensors are read at the default interval.",
+          "description": "Entities in a polling group are read at the group's own interval. All other entities are read at the default interval. The current cadences plan {load} of {budget} requests per minute. Disabled entities can be grouped now and cost nothing until they are enabled.",
           "data": {
             "name": "Name",
             "scan_interval": "Seconds between updates",
-            "sensors": "Sensors"
+            "sensors": "Entities"
+          },
+          "data_description": {
+            "sensors": "Listed in register order, each with the block of registers it is read from. Entities in the same block can share a request."
           }
         },
         "reconfigure": {
           "title": "Edit polling group",
-          "description": "Sensors in a polling group are read at the group's own interval. A sensor can belong to one group only.",
+          "description": "Entities in a polling group are read at the group's own interval. An entity can belong to one group only. The current cadences plan {load} of {budget} requests per minute. Disabled entities can be grouped now and cost nothing until they are enabled.",
           "data": {
             "name": "Name",
             "scan_interval": "Seconds between updates",
-            "sensors": "Sensors"
+            "sensors": "Entities"
+          },
+          "data_description": {
+            "sensors": "Listed in register order, each with the block of registers it is read from. Entities in the same block can share a request."
+          }
+        },
+        "review_group": {
+          "title": "Review the request load",
+          "description": "One read of this group takes {requests} requests. The installation plans {before} of {budget} requests per minute now, and {after} with this group saved.",
+          "menu_options": {
+            "save_group": "Save the group",
+            "change_selection": "Change the selection"
+          }
+        },
+        "review_group_over_budget": {
+          "title": "Review the request load",
+          "description": "One read of this group takes {requests} requests. The installation plans {before} of {budget} requests per minute now, and {after} with this group saved, which is above the budget. Cadences will run slower than configured to keep the inverter from being overloaded. You can still save the group.",
+          "menu_options": {
+            "save_group": "Save the group",
+            "change_selection": "Change the selection"
           }
         }
       },
       "error": {
         "invalid_scan_interval": "Enter a whole-number polling interval of at least 10 seconds.",
-        "no_sensors_selected": "Select at least one sensor.",
-        "sensor_in_other_group": "A selected sensor already belongs to another polling group."
+        "no_sensors_selected": "Select at least one entity.",
+        "sensor_in_other_group": "A selected entity already belongs to another polling group."
       },
       "abort": {
-        "no_sensors": "This installation has no sensors yet, so a polling group cannot be created.",
-        "all_sensors_assigned": "Every sensor already belongs to a polling group, so there is none left to add.",
-        "reconfigure_successful": "The polling group was saved."
+        "no_sensors": "This installation has no entities yet, so a polling group cannot be created.",
+        "all_sensors_assigned": "Every entity already belongs to a polling group, so there is none left to add.",
+        "reconfigure_successful": "The polling group was saved.",
+        "confirmation_not_pending": "No validated polling group is awaiting a decision."
       }
     }
   },
   "entity": {
     "sensor": {
+      "ethernet_protocol_version": {
+        "name": "Ethernet protocol version"
+      },
+      "ethernet_mac_address": {
+        "name": "Ethernet MAC address"
+      },
+      "ev_serial_number": {
+        "name": "EV charger serial number"
+      },
+      "ev_model": {
+        "name": "EV charger model"
+      },
+      "ev_software_version": {
+        "name": "EV charger software version"
+      },
+      "ev_hardware_version": {
+        "name": "EV charger hardware version"
+      },
+      "ev_phase_count": {
+        "name": "EV charger phase count"
+      },
+      "ev_minimum_power": {
+        "name": "EV charger minimum power"
+      },
+      "ev_maximum_power": {
+        "name": "EV charger maximum power"
+      },
+      "ev_work_mode": {
+        "name": "EV charger work mode",
+        "state": {
+          "disabled": "Disabled",
+          "standard": "Standard",
+          "time_based": "Time-based",
+          "pv_surplus": "PV surplus",
+          "ems": "EMS"
+        }
+      },
+      "ev_status": {
+        "name": "EV charger status",
+        "state": {
+          "idle": "Idle",
+          "ready": "Ready",
+          "charging": "Charging",
+          "charger_suspended": "Charger suspended",
+          "vehicle_suspended": "Vehicle suspended",
+          "complete": "Complete"
+        }
+      },
+      "ev_l1_voltage": {
+        "name": "EV charger L1 voltage"
+      },
+      "ev_l1_current": {
+        "name": "EV charger L1 current"
+      },
+      "ev_l2_voltage": {
+        "name": "EV charger L2 voltage"
+      },
+      "ev_l2_current": {
+        "name": "EV charger L2 current"
+      },
+      "ev_l3_voltage": {
+        "name": "EV charger L3 voltage"
+      },
+      "ev_l3_current": {
+        "name": "EV charger L3 current"
+      },
+      "ev_power": {
+        "name": "EV charger power"
+      },
+      "ev_charge_duration": {
+        "name": "EV charging duration"
+      },
+      "ev_session_energy": {
+        "name": "EV charger session energy"
+      },
+      "ev_total_energy": {
+        "name": "EV charger total energy"
+      },
+      "ev_control_pilot_voltage": {
+        "name": "EV charger control pilot voltage"
+      },
+      "ev_duty_cycle": {
+        "name": "EV charger duty cycle"
+      },
+      "ev_remote_control": {
+        "name": "EV charger remote control",
+        "state": {
+          "shutdown": "Shutdown",
+          "on": "On"
+        }
+      },
+      "ev_current_setpoint": {
+        "name": "EV charger current setpoint"
+      },
+      "ev_session_start": {
+        "name": "EV charger session start"
+      },
+      "ev_session_end": {
+        "name": "EV charger session end"
+      },
+      "settings_protocol_version": {
+        "name": "Settings protocol version"
+      },
+      "inverter_clock": {
+        "name": "Inverter clock"
+      },
       "operating_mode": {
         "name": "Operating mode",
         "state": {
@@ -157,20 +290,1987 @@
           "reset": "Reset"
         }
       },
+      "inverter_temperature": {
+        "name": "Inverter temperature"
+      },
+      "ambient_temperature": {
+        "name": "Ambient temperature"
+      },
+      "leakage_current": {
+        "name": "Leakage current"
+      },
+      "pv1_insulation_resistance": {
+        "name": "PV1 insulation resistance"
+      },
+      "pv2_insulation_resistance": {
+        "name": "PV2 insulation resistance"
+      },
+      "grid_connection_countdown": {
+        "name": "Grid connection countdown"
+      },
+      "inverter_discharge_power_setpoint": {
+        "name": "Inverter discharge power setpoint"
+      },
+      "inverter_charge_power_setpoint": {
+        "name": "Inverter charge power setpoint"
+      },
+      "battery_discharge_current_setpoint": {
+        "name": "Battery discharge current setpoint"
+      },
+      "battery_charge_current_setpoint": {
+        "name": "Battery charge current setpoint"
+      },
+      "battery_status_code": {
+        "name": "Battery status code"
+      },
+      "battery_protocol_active": {
+        "name": "Battery protocol (in effect)"
+      },
+      "battery_charge_limit_active": {
+        "name": "Battery charge limit (in effect)"
+      },
+      "battery_discharge_limit_active": {
+        "name": "Battery discharge limit (in effect)"
+      },
+      "battery_depth_of_discharge_active": {
+        "name": "Battery depth of discharge (in effect)"
+      },
+      "backup_reserve_soc_active": {
+        "name": "Backup reserve state of charge (in effect)"
+      },
+      "meter_configuration_active": {
+        "name": "Meter configuration (in effect)"
+      },
+      "grid_l1_voltage": {
+        "name": "Grid L1 voltage"
+      },
+      "grid_l1_current": {
+        "name": "Grid L1 current"
+      },
+      "grid_l1_frequency": {
+        "name": "Grid L1 frequency"
+      },
+      "grid_l1_dc_current": {
+        "name": "Grid L1 DC current"
+      },
+      "grid_l1_power": {
+        "name": "Grid L1 power"
+      },
+      "grid_l1_apparent_power": {
+        "name": "Grid L1 apparent power"
+      },
+      "grid_l1_power_factor": {
+        "name": "Grid L1 power factor"
+      },
+      "grid_l2_voltage": {
+        "name": "Grid L2 voltage"
+      },
+      "grid_l2_current": {
+        "name": "Grid L2 current"
+      },
+      "grid_l2_frequency": {
+        "name": "Grid L2 frequency"
+      },
+      "grid_l2_dc_current": {
+        "name": "Grid L2 DC current"
+      },
+      "grid_l2_power": {
+        "name": "Grid L2 power"
+      },
+      "grid_l2_apparent_power": {
+        "name": "Grid L2 apparent power"
+      },
+      "grid_l2_power_factor": {
+        "name": "Grid L2 power factor"
+      },
+      "grid_l3_voltage": {
+        "name": "Grid L3 voltage"
+      },
+      "grid_l3_current": {
+        "name": "Grid L3 current"
+      },
+      "grid_l3_frequency": {
+        "name": "Grid L3 frequency"
+      },
+      "grid_l3_dc_current": {
+        "name": "Grid L3 DC current"
+      },
+      "grid_l3_power": {
+        "name": "Grid L3 power"
+      },
+      "grid_l3_apparent_power": {
+        "name": "Grid L3 apparent power"
+      },
+      "grid_l3_power_factor": {
+        "name": "Grid L3 power factor"
+      },
+      "inverter_l1_voltage": {
+        "name": "Inverter L1 voltage"
+      },
+      "inverter_l1_current": {
+        "name": "Inverter L1 current"
+      },
+      "inverter_l1_frequency": {
+        "name": "Inverter L1 frequency"
+      },
+      "inverter_l1_power": {
+        "name": "Inverter L1 power"
+      },
+      "inverter_l1_apparent_power": {
+        "name": "Inverter L1 apparent power"
+      },
+      "inverter_l2_voltage": {
+        "name": "Inverter L2 voltage"
+      },
+      "inverter_l2_current": {
+        "name": "Inverter L2 current"
+      },
+      "inverter_l2_frequency": {
+        "name": "Inverter L2 frequency"
+      },
+      "inverter_l2_power": {
+        "name": "Inverter L2 power"
+      },
+      "inverter_l2_apparent_power": {
+        "name": "Inverter L2 apparent power"
+      },
+      "inverter_l3_voltage": {
+        "name": "Inverter L3 voltage"
+      },
+      "inverter_l3_current": {
+        "name": "Inverter L3 current"
+      },
+      "inverter_l3_frequency": {
+        "name": "Inverter L3 frequency"
+      },
+      "inverter_l3_power": {
+        "name": "Inverter L3 power"
+      },
+      "inverter_l3_apparent_power": {
+        "name": "Inverter L3 apparent power"
+      },
+      "backup_l1_voltage": {
+        "name": "Backup L1 voltage"
+      },
+      "backup_l1_current": {
+        "name": "Backup L1 current"
+      },
+      "backup_l1_frequency": {
+        "name": "Backup L1 frequency"
+      },
+      "backup_l1_dc_voltage": {
+        "name": "Backup L1 DC voltage"
+      },
+      "backup_l1_power": {
+        "name": "Backup L1 power"
+      },
+      "backup_l1_apparent_power": {
+        "name": "Backup L1 apparent power"
+      },
+      "backup_l2_voltage": {
+        "name": "Backup L2 voltage"
+      },
+      "backup_l2_current": {
+        "name": "Backup L2 current"
+      },
+      "backup_l2_frequency": {
+        "name": "Backup L2 frequency"
+      },
+      "backup_l2_dc_voltage": {
+        "name": "Backup L2 DC voltage"
+      },
+      "backup_l2_power": {
+        "name": "Backup L2 power"
+      },
+      "backup_l2_apparent_power": {
+        "name": "Backup L2 apparent power"
+      },
+      "backup_l3_voltage": {
+        "name": "Backup L3 voltage"
+      },
+      "backup_l3_current": {
+        "name": "Backup L3 current"
+      },
+      "backup_l3_frequency": {
+        "name": "Backup L3 frequency"
+      },
+      "backup_l3_dc_voltage": {
+        "name": "Backup L3 DC voltage"
+      },
+      "backup_l3_power": {
+        "name": "Backup L3 power"
+      },
+      "backup_l3_apparent_power": {
+        "name": "Backup L3 apparent power"
+      },
+      "dc_bus_voltage": {
+        "name": "DC bus voltage"
+      },
+      "dc_bus_slave_voltage": {
+        "name": "DC bus slave voltage"
+      },
+      "battery_voltage": {
+        "name": "Battery voltage"
+      },
+      "battery_current": {
+        "name": "Battery current"
+      },
+      "battery_port_power": {
+        "name": "Battery port power"
+      },
+      "battery_temperature": {
+        "name": "Battery temperature"
+      },
+      "battery_soc": {
+        "name": "Battery state of charge"
+      },
+      "pv1_voltage": {
+        "name": "PV1 voltage"
+      },
+      "pv1_current": {
+        "name": "PV1 current"
+      },
+      "pv1_power": {
+        "name": "PV1 power"
+      },
+      "pv2_voltage": {
+        "name": "PV2 voltage"
+      },
+      "pv2_current": {
+        "name": "PV2 current"
+      },
+      "pv2_power": {
+        "name": "PV2 power"
+      },
+      "grid_output_l1_voltage": {
+        "name": "Grid output L1 voltage"
+      },
+      "grid_output_l1_current": {
+        "name": "Grid output L1 current"
+      },
+      "grid_output_l1_frequency": {
+        "name": "Grid output L1 frequency"
+      },
+      "grid_output_l1_power": {
+        "name": "Grid output L1 power"
+      },
+      "grid_output_l2_voltage": {
+        "name": "Grid output L2 voltage"
+      },
+      "grid_output_l2_power": {
+        "name": "Grid output L2 power"
+      },
+      "grid_output_l3_voltage": {
+        "name": "Grid output L3 voltage"
+      },
+      "grid_output_l3_power": {
+        "name": "Grid output L3 power"
+      },
+      "pv_direction": {
+        "name": "Solar flow direction"
+      },
+      "battery_direction": {
+        "name": "Battery flow direction"
+      },
+      "grid_direction": {
+        "name": "Grid flow direction"
+      },
+      "output_direction": {
+        "name": "Output flow direction"
+      },
+      "load_power": {
+        "name": "Household load power"
+      },
       "pv_power": {
         "name": "Solar power"
       },
       "battery_power": {
         "name": "Battery power"
       },
-      "battery_soc": {
-        "name": "Battery charge"
-      },
       "grid_power": {
         "name": "Grid power"
       },
-      "load_power": {
-        "name": "Household load"
+      "inverter_power": {
+        "name": "Inverter power"
+      },
+      "grid_load_power": {
+        "name": "Grid load power"
+      },
+      "pv_energy_today": {
+        "name": "Solar energy today"
+      },
+      "pv_energy_month": {
+        "name": "Solar energy this month"
+      },
+      "pv_energy_year": {
+        "name": "Solar energy this year"
+      },
+      "pv_energy_total": {
+        "name": "Solar energy total"
+      },
+      "battery_charge_energy_today": {
+        "name": "Battery charge energy today"
+      },
+      "battery_charge_energy_month": {
+        "name": "Battery charge energy this month"
+      },
+      "battery_charge_energy_year": {
+        "name": "Battery charge energy this year"
+      },
+      "battery_charge_energy_total": {
+        "name": "Battery charge energy total"
+      },
+      "battery_discharge_energy_today": {
+        "name": "Battery discharge energy today"
+      },
+      "battery_discharge_energy_month": {
+        "name": "Battery discharge energy this month"
+      },
+      "battery_discharge_energy_year": {
+        "name": "Battery discharge energy this year"
+      },
+      "battery_discharge_energy_total": {
+        "name": "Battery discharge energy total"
+      },
+      "load_energy_today": {
+        "name": "Household load energy today"
+      },
+      "load_energy_month": {
+        "name": "Household load energy this month"
+      },
+      "load_energy_year": {
+        "name": "Household load energy this year"
+      },
+      "load_energy_total": {
+        "name": "Household load energy total"
+      },
+      "backup_load_energy_today": {
+        "name": "Backup load energy today"
+      },
+      "backup_load_energy_month": {
+        "name": "Backup load energy this month"
+      },
+      "backup_load_energy_year": {
+        "name": "Backup load energy this year"
+      },
+      "backup_load_energy_total": {
+        "name": "Backup load energy total"
+      },
+      "grid_l1_export_energy_today": {
+        "name": "Grid L1 export energy today"
+      },
+      "grid_l1_export_energy_month": {
+        "name": "Grid L1 export energy this month"
+      },
+      "grid_l1_export_energy_year": {
+        "name": "Grid L1 export energy this year"
+      },
+      "grid_l1_export_energy_total": {
+        "name": "Grid L1 export energy total"
+      },
+      "grid_l1_import_energy_today": {
+        "name": "Grid L1 import energy today"
+      },
+      "grid_l1_import_energy_month": {
+        "name": "Grid L1 import energy this month"
+      },
+      "grid_l1_import_energy_year": {
+        "name": "Grid L1 import energy this year"
+      },
+      "grid_l1_import_energy_total": {
+        "name": "Grid L1 import energy total"
+      },
+      "grid_l2_export_energy_today": {
+        "name": "Grid L2 export energy today"
+      },
+      "grid_l2_export_energy_month": {
+        "name": "Grid L2 export energy this month"
+      },
+      "grid_l2_export_energy_year": {
+        "name": "Grid L2 export energy this year"
+      },
+      "grid_l2_export_energy_total": {
+        "name": "Grid L2 export energy total"
+      },
+      "grid_l3_export_energy_today": {
+        "name": "Grid L3 export energy today"
+      },
+      "grid_l3_export_energy_month": {
+        "name": "Grid L3 export energy this month"
+      },
+      "grid_l3_export_energy_year": {
+        "name": "Grid L3 export energy this year"
+      },
+      "grid_l3_export_energy_total": {
+        "name": "Grid L3 export energy total"
+      },
+      "grid_l2_import_energy_today": {
+        "name": "Grid L2 import energy today"
+      },
+      "grid_l2_import_energy_month": {
+        "name": "Grid L2 import energy this month"
+      },
+      "grid_l2_import_energy_year": {
+        "name": "Grid L2 import energy this year"
+      },
+      "grid_l2_import_energy_total": {
+        "name": "Grid L2 import energy total"
+      },
+      "grid_l3_import_energy_today": {
+        "name": "Grid L3 import energy today"
+      },
+      "grid_l3_import_energy_month": {
+        "name": "Grid L3 import energy this month"
+      },
+      "grid_l3_import_energy_year": {
+        "name": "Grid L3 import energy this year"
+      },
+      "grid_l3_import_energy_total": {
+        "name": "Grid L3 import energy total"
+      },
+      "grid_import_energy_today": {
+        "name": "Grid import energy today"
+      },
+      "grid_import_energy_month": {
+        "name": "Grid import energy this month"
+      },
+      "grid_import_energy_year": {
+        "name": "Grid import energy this year"
+      },
+      "grid_import_energy_total": {
+        "name": "Grid import energy total"
+      },
+      "grid_export_energy_today": {
+        "name": "Grid export energy today"
+      },
+      "grid_export_energy_month": {
+        "name": "Grid export energy this month"
+      },
+      "grid_export_energy_year": {
+        "name": "Grid export energy this year"
+      },
+      "grid_export_energy_total": {
+        "name": "Grid export energy total"
+      },
+      "parallel_mode": {
+        "name": "Parallel mode"
+      },
+      "parallel_id": {
+        "name": "Parallel machine ID"
+      },
+      "parallel_count": {
+        "name": "Parallel machine count"
+      },
+      "parallel_online_count": {
+        "name": "Parallel machines online"
+      },
+      "parallel_pv_power_low_word": {
+        "name": "Parallel system solar power (low word)"
+      },
+      "parallel_battery_power_low_word": {
+        "name": "Parallel system battery power (low word)"
+      },
+      "parallel_grid_power_low_word": {
+        "name": "Parallel system grid power (low word)"
+      },
+      "parallel_load_power_low_word": {
+        "name": "Parallel system household load power (low word)"
+      },
+      "parallel_backup_load_power_low_word": {
+        "name": "Parallel system backup load power (low word)"
+      },
+      "parallel_battery_soc": {
+        "name": "Parallel system battery state of charge"
+      },
+      "parallel_grid_load_power_low_word": {
+        "name": "Parallel system grid load power (low word)"
+      },
+      "parallel_battery_capacity": {
+        "name": "Parallel system battery capacity"
+      },
+      "parallel_pv_power_high_word": {
+        "name": "Parallel system solar power (high word)"
+      },
+      "parallel_battery_power_high_word": {
+        "name": "Parallel system battery power (high word)"
+      },
+      "parallel_grid_power_high_word": {
+        "name": "Parallel system grid power (high word)"
+      },
+      "parallel_load_power_high_word": {
+        "name": "Parallel system household load power (high word)"
+      },
+      "parallel_backup_load_power_high_word": {
+        "name": "Parallel system backup load power (high word)"
+      },
+      "parallel_grid_load_power_high_word": {
+        "name": "Parallel system grid load power (high word)"
+      },
+      "parallel_meter_b_power": {
+        "name": "Parallel system meter B power"
+      },
+      "parallel_pv_energy_today": {
+        "name": "Parallel system solar energy today"
+      },
+      "parallel_pv_energy_month": {
+        "name": "Parallel system solar energy this month"
+      },
+      "parallel_pv_energy_year": {
+        "name": "Parallel system solar energy this year"
+      },
+      "parallel_pv_energy_total": {
+        "name": "Parallel system solar energy total"
+      },
+      "parallel_battery_charge_energy_today": {
+        "name": "Parallel system battery charge energy today"
+      },
+      "parallel_battery_charge_energy_month": {
+        "name": "Parallel system battery charge energy this month"
+      },
+      "parallel_battery_charge_energy_year": {
+        "name": "Parallel system battery charge energy this year"
+      },
+      "parallel_battery_charge_energy_total": {
+        "name": "Parallel system battery charge energy total"
+      },
+      "parallel_battery_discharge_energy_today": {
+        "name": "Parallel system battery discharge energy today"
+      },
+      "parallel_battery_discharge_energy_month": {
+        "name": "Parallel system battery discharge energy this month"
+      },
+      "parallel_battery_discharge_energy_year": {
+        "name": "Parallel system battery discharge energy this year"
+      },
+      "parallel_battery_discharge_energy_total": {
+        "name": "Parallel system battery discharge energy total"
+      },
+      "parallel_grid_l1_export_energy_today": {
+        "name": "Parallel system grid L1 export energy today"
+      },
+      "parallel_grid_l1_export_energy_month": {
+        "name": "Parallel system grid L1 export energy this month"
+      },
+      "parallel_grid_l1_export_energy_year": {
+        "name": "Parallel system grid L1 export energy this year"
+      },
+      "parallel_grid_l1_export_energy_total": {
+        "name": "Parallel system grid L1 export energy total"
+      },
+      "parallel_grid_l2_export_energy_today": {
+        "name": "Parallel system grid L2 export energy today"
+      },
+      "parallel_grid_l2_export_energy_month": {
+        "name": "Parallel system grid L2 export energy this month"
+      },
+      "parallel_grid_l2_export_energy_year": {
+        "name": "Parallel system grid L2 export energy this year"
+      },
+      "parallel_grid_l2_export_energy_total": {
+        "name": "Parallel system grid L2 export energy total"
+      },
+      "parallel_grid_l3_export_energy_today": {
+        "name": "Parallel system grid L3 export energy today"
+      },
+      "parallel_grid_l3_export_energy_month": {
+        "name": "Parallel system grid L3 export energy this month"
+      },
+      "parallel_grid_l3_export_energy_year": {
+        "name": "Parallel system grid L3 export energy this year"
+      },
+      "parallel_grid_l3_export_energy_total": {
+        "name": "Parallel system grid L3 export energy total"
+      },
+      "parallel_grid_l1_import_energy_today": {
+        "name": "Parallel system grid L1 import energy today"
+      },
+      "parallel_grid_l1_import_energy_month": {
+        "name": "Parallel system grid L1 import energy this month"
+      },
+      "parallel_grid_l1_import_energy_year": {
+        "name": "Parallel system grid L1 import energy this year"
+      },
+      "parallel_grid_l1_import_energy_total": {
+        "name": "Parallel system grid L1 import energy total"
+      },
+      "parallel_grid_l2_import_energy_today": {
+        "name": "Parallel system grid L2 import energy today"
+      },
+      "parallel_grid_l2_import_energy_month": {
+        "name": "Parallel system grid L2 import energy this month"
+      },
+      "parallel_grid_l2_import_energy_year": {
+        "name": "Parallel system grid L2 import energy this year"
+      },
+      "parallel_grid_l2_import_energy_total": {
+        "name": "Parallel system grid L2 import energy total"
+      },
+      "parallel_grid_l3_import_energy_today": {
+        "name": "Parallel system grid L3 import energy today"
+      },
+      "parallel_grid_l3_import_energy_month": {
+        "name": "Parallel system grid L3 import energy this month"
+      },
+      "parallel_grid_l3_import_energy_year": {
+        "name": "Parallel system grid L3 import energy this year"
+      },
+      "parallel_grid_l3_import_energy_total": {
+        "name": "Parallel system grid L3 import energy total"
+      },
+      "parallel_load_energy_today": {
+        "name": "Parallel system household load energy today"
+      },
+      "parallel_load_energy_month": {
+        "name": "Parallel system household load energy this month"
+      },
+      "parallel_load_energy_year": {
+        "name": "Parallel system household load energy this year"
+      },
+      "parallel_load_energy_total": {
+        "name": "Parallel system household load energy total"
+      },
+      "parallel_grid_import_energy_today": {
+        "name": "Parallel system grid import energy today"
+      },
+      "parallel_grid_import_energy_month": {
+        "name": "Parallel system grid import energy this month"
+      },
+      "parallel_grid_import_energy_year": {
+        "name": "Parallel system grid import energy this year"
+      },
+      "parallel_grid_import_energy_total": {
+        "name": "Parallel system grid import energy total"
+      },
+      "parallel_grid_export_energy_today": {
+        "name": "Parallel system grid export energy today"
+      },
+      "parallel_grid_export_energy_month": {
+        "name": "Parallel system grid export energy this month"
+      },
+      "parallel_grid_export_energy_year": {
+        "name": "Parallel system grid export energy this year"
+      },
+      "parallel_grid_export_energy_total": {
+        "name": "Parallel system grid export energy total"
+      },
+      "parallel_pv_meter_energy_today": {
+        "name": "Parallel system solar meter energy today"
+      },
+      "parallel_pv_meter_energy_month": {
+        "name": "Parallel system solar meter energy this month"
+      },
+      "parallel_pv_meter_energy_year": {
+        "name": "Parallel system solar meter energy this year"
+      },
+      "parallel_pv_meter_energy_total": {
+        "name": "Parallel system solar meter energy total"
+      },
+      "ev_settings_protocol_version": {
+        "name": "EV charger settings protocol version"
+      },
+      "average_grid_power": {
+        "name": "Grid power (5-minute average)"
+      },
+      "average_grid_l1_power": {
+        "name": "Grid L1 power (5-minute average)"
+      },
+      "average_grid_l1_voltage": {
+        "name": "Grid L1 voltage (5-minute average)"
+      },
+      "average_grid_l1_current": {
+        "name": "Grid L1 current (5-minute average)"
+      },
+      "average_grid_l1_frequency": {
+        "name": "Grid L1 frequency (5-minute average)"
+      },
+      "average_grid_l2_power": {
+        "name": "Grid L2 power (5-minute average)"
+      },
+      "average_grid_l2_voltage": {
+        "name": "Grid L2 voltage (5-minute average)"
+      },
+      "average_grid_l2_current": {
+        "name": "Grid L2 current (5-minute average)"
+      },
+      "average_grid_l2_frequency": {
+        "name": "Grid L2 frequency (5-minute average)"
+      },
+      "average_grid_l3_power": {
+        "name": "Grid L3 power (5-minute average)"
+      },
+      "average_grid_l3_voltage": {
+        "name": "Grid L3 voltage (5-minute average)"
+      },
+      "average_grid_l3_current": {
+        "name": "Grid L3 current (5-minute average)"
+      },
+      "average_grid_l3_frequency": {
+        "name": "Grid L3 frequency (5-minute average)"
+      },
+      "average_inverter_power": {
+        "name": "Inverter power (5-minute average)"
+      },
+      "average_inverter_l1_power": {
+        "name": "Inverter L1 power (5-minute average)"
+      },
+      "average_inverter_l1_voltage": {
+        "name": "Inverter L1 voltage (5-minute average)"
+      },
+      "average_inverter_l1_current": {
+        "name": "Inverter L1 current (5-minute average)"
+      },
+      "average_inverter_l1_frequency": {
+        "name": "Inverter L1 frequency (5-minute average)"
+      },
+      "average_inverter_l2_power": {
+        "name": "Inverter L2 power (5-minute average)"
+      },
+      "average_inverter_l2_voltage": {
+        "name": "Inverter L2 voltage (5-minute average)"
+      },
+      "average_inverter_l2_current": {
+        "name": "Inverter L2 current (5-minute average)"
+      },
+      "average_inverter_l2_frequency": {
+        "name": "Inverter L2 frequency (5-minute average)"
+      },
+      "average_inverter_l3_power": {
+        "name": "Inverter L3 power (5-minute average)"
+      },
+      "average_inverter_l3_voltage": {
+        "name": "Inverter L3 voltage (5-minute average)"
+      },
+      "average_inverter_l3_current": {
+        "name": "Inverter L3 current (5-minute average)"
+      },
+      "average_inverter_l3_frequency": {
+        "name": "Inverter L3 frequency (5-minute average)"
+      },
+      "average_load_power": {
+        "name": "Household load power (5-minute average)"
+      },
+      "average_load_l1_power": {
+        "name": "Household load L1 power (5-minute average)"
+      },
+      "average_load_l1_voltage": {
+        "name": "Household load L1 voltage (5-minute average)"
+      },
+      "average_load_l1_current": {
+        "name": "Household load L1 current (5-minute average)"
+      },
+      "average_load_l1_frequency": {
+        "name": "Household load L1 frequency (5-minute average)"
+      },
+      "average_load_l2_power": {
+        "name": "Household load L2 power (5-minute average)"
+      },
+      "average_load_l2_voltage": {
+        "name": "Household load L2 voltage (5-minute average)"
+      },
+      "average_load_l2_current": {
+        "name": "Household load L2 current (5-minute average)"
+      },
+      "average_load_l2_frequency": {
+        "name": "Household load L2 frequency (5-minute average)"
+      },
+      "average_load_l3_power": {
+        "name": "Household load L3 power (5-minute average)"
+      },
+      "average_load_l3_voltage": {
+        "name": "Household load L3 voltage (5-minute average)"
+      },
+      "average_load_l3_current": {
+        "name": "Household load L3 current (5-minute average)"
+      },
+      "average_load_l3_frequency": {
+        "name": "Household load L3 frequency (5-minute average)"
+      },
+      "average_grid_load_power": {
+        "name": "Grid load power (5-minute average)"
+      },
+      "average_grid_load_l1_power": {
+        "name": "Grid load L1 power (5-minute average)"
+      },
+      "average_grid_load_l1_voltage": {
+        "name": "Grid load L1 voltage (5-minute average)"
+      },
+      "average_grid_load_l1_current": {
+        "name": "Grid load L1 current (5-minute average)"
+      },
+      "average_grid_load_l1_frequency": {
+        "name": "Grid load L1 frequency (5-minute average)"
+      },
+      "average_grid_load_l2_power": {
+        "name": "Grid load L2 power (5-minute average)"
+      },
+      "average_grid_load_l2_voltage": {
+        "name": "Grid load L2 voltage (5-minute average)"
+      },
+      "average_grid_load_l2_current": {
+        "name": "Grid load L2 current (5-minute average)"
+      },
+      "average_grid_load_l2_frequency": {
+        "name": "Grid load L2 frequency (5-minute average)"
+      },
+      "average_grid_load_l3_power": {
+        "name": "Grid load L3 power (5-minute average)"
+      },
+      "average_grid_load_l3_voltage": {
+        "name": "Grid load L3 voltage (5-minute average)"
+      },
+      "average_grid_load_l3_current": {
+        "name": "Grid load L3 current (5-minute average)"
+      },
+      "average_grid_load_l3_frequency": {
+        "name": "Grid load L3 frequency (5-minute average)"
+      },
+      "average_backup_power": {
+        "name": "Backup power (5-minute average)"
+      },
+      "average_backup_l1_power": {
+        "name": "Backup L1 power (5-minute average)"
+      },
+      "average_backup_l1_voltage": {
+        "name": "Backup L1 voltage (5-minute average)"
+      },
+      "average_backup_l1_current": {
+        "name": "Backup L1 current (5-minute average)"
+      },
+      "average_backup_l1_frequency": {
+        "name": "Backup L1 frequency (5-minute average)"
+      },
+      "average_backup_l2_power": {
+        "name": "Backup L2 power (5-minute average)"
+      },
+      "average_backup_l2_voltage": {
+        "name": "Backup L2 voltage (5-minute average)"
+      },
+      "average_backup_l2_current": {
+        "name": "Backup L2 current (5-minute average)"
+      },
+      "average_backup_l2_frequency": {
+        "name": "Backup L2 frequency (5-minute average)"
+      },
+      "average_backup_l3_power": {
+        "name": "Backup L3 power (5-minute average)"
+      },
+      "average_backup_l3_voltage": {
+        "name": "Backup L3 voltage (5-minute average)"
+      },
+      "average_backup_l3_current": {
+        "name": "Backup L3 current (5-minute average)"
+      },
+      "average_backup_l3_frequency": {
+        "name": "Backup L3 frequency (5-minute average)"
+      },
+      "average_pv_power": {
+        "name": "Solar power (5-minute average)"
+      },
+      "average_pv1_voltage": {
+        "name": "PV1 voltage (5-minute average)"
+      },
+      "average_pv1_current": {
+        "name": "PV1 current (5-minute average)"
+      },
+      "average_pv1_power": {
+        "name": "PV1 power (5-minute average)"
+      },
+      "average_pv2_voltage": {
+        "name": "PV2 voltage (5-minute average)"
+      },
+      "average_pv2_current": {
+        "name": "PV2 current (5-minute average)"
+      },
+      "average_pv2_power": {
+        "name": "PV2 power (5-minute average)"
+      },
+      "average_generator_power": {
+        "name": "Generator power (5-minute average)"
+      },
+      "average_generator_l1_power": {
+        "name": "Generator L1 power (5-minute average)"
+      },
+      "average_generator_l1_voltage": {
+        "name": "Generator L1 voltage (5-minute average)"
+      },
+      "average_generator_l1_current": {
+        "name": "Generator L1 current (5-minute average)"
+      },
+      "average_generator_l1_frequency": {
+        "name": "Generator L1 frequency (5-minute average)"
+      },
+      "average_generator_l2_power": {
+        "name": "Generator L2 power (5-minute average)"
+      },
+      "average_generator_l2_voltage": {
+        "name": "Generator L2 voltage (5-minute average)"
+      },
+      "average_generator_l2_current": {
+        "name": "Generator L2 current (5-minute average)"
+      },
+      "average_generator_l2_frequency": {
+        "name": "Generator L2 frequency (5-minute average)"
+      },
+      "average_generator_l3_power": {
+        "name": "Generator L3 power (5-minute average)"
+      },
+      "average_generator_l3_voltage": {
+        "name": "Generator L3 voltage (5-minute average)"
+      },
+      "average_generator_l3_current": {
+        "name": "Generator L3 current (5-minute average)"
+      },
+      "average_generator_l3_frequency": {
+        "name": "Generator L3 frequency (5-minute average)"
+      },
+      "average_battery_power": {
+        "name": "Battery power (5-minute average)"
+      },
+      "average_battery_soc": {
+        "name": "Battery state of charge (5-minute average)"
+      },
+      "average_battery_pack1_power": {
+        "name": "Battery pack 1 power (5-minute average)"
+      },
+      "average_battery_pack1_voltage": {
+        "name": "Battery pack 1 voltage (5-minute average)"
+      },
+      "average_battery_pack1_current": {
+        "name": "Battery pack 1 current (5-minute average)"
+      },
+      "average_battery_pack1_soc": {
+        "name": "Battery pack 1 state of charge (5-minute average)"
+      },
+      "average_battery_pack1_temperature": {
+        "name": "Battery pack 1 temperature (5-minute average)"
+      },
+      "product_code": {
+        "name": "Product code"
+      },
+      "display_software_version": {
+        "name": "Display software version"
+      },
+      "master_software_version": {
+        "name": "Master software version"
+      },
+      "slave_software_version": {
+        "name": "Slave software version"
+      },
+      "display_hardware_version": {
+        "name": "Display hardware version"
+      },
+      "control_hardware_version": {
+        "name": "Control hardware version"
+      },
+      "power_hardware_version": {
+        "name": "Power hardware version"
+      },
+      "battery_pack_count": {
+        "name": "Battery pack count"
+      },
+      "battery_capacity": {
+        "name": "Battery capacity"
+      },
+      "battery_usable_capacity": {
+        "name": "Battery usable capacity"
+      },
+      "battery_online_code": {
+        "name": "Battery online code"
+      },
+      "battery_pack1_soc": {
+        "name": "Battery pack 1 state of charge"
+      },
+      "battery_pack1_soh": {
+        "name": "Battery pack 1 state of health"
+      },
+      "battery_pack1_voltage": {
+        "name": "Battery pack 1 voltage"
+      },
+      "battery_pack1_current": {
+        "name": "Battery pack 1 current"
+      },
+      "battery_pack1_temperature": {
+        "name": "Battery pack 1 temperature"
+      },
+      "battery_pack1_cycles": {
+        "name": "Battery pack 1 cycles"
+      },
+      "battery_pack1_discharged_energy": {
+        "name": "Battery pack 1 discharged energy"
+      },
+      "battery_discharge_current_limit": {
+        "name": "Battery discharge current limit"
+      },
+      "battery_charge_current_limit": {
+        "name": "Battery charge current limit"
+      },
+      "meter_a_status": {
+        "name": "Meter A status",
+        "state": {
+          "offline": "Offline",
+          "online": "Online"
+        }
+      },
+      "meter_a_l1_voltage": {
+        "name": "Meter A L1 voltage"
+      },
+      "meter_a_l1_current": {
+        "name": "Meter A L1 current"
+      },
+      "meter_a_l1_power": {
+        "name": "Meter A L1 power"
+      },
+      "meter_a_l1_apparent_power": {
+        "name": "Meter A L1 apparent power"
+      },
+      "meter_a_l1_power_factor": {
+        "name": "Meter A L1 power factor"
+      },
+      "meter_a_l1_frequency": {
+        "name": "Meter A L1 frequency"
+      },
+      "meter_a_l2_voltage": {
+        "name": "Meter A L2 voltage"
+      },
+      "meter_a_l2_current": {
+        "name": "Meter A L2 current"
+      },
+      "meter_a_l2_power": {
+        "name": "Meter A L2 power"
+      },
+      "meter_a_l2_apparent_power": {
+        "name": "Meter A L2 apparent power"
+      },
+      "meter_a_l2_power_factor": {
+        "name": "Meter A L2 power factor"
+      },
+      "meter_a_l2_frequency": {
+        "name": "Meter A L2 frequency"
+      },
+      "meter_a_l3_voltage": {
+        "name": "Meter A L3 voltage"
+      },
+      "meter_a_l3_current": {
+        "name": "Meter A L3 current"
+      },
+      "meter_a_l3_power": {
+        "name": "Meter A L3 power"
+      },
+      "meter_a_l3_apparent_power": {
+        "name": "Meter A L3 apparent power"
+      },
+      "meter_a_l3_power_factor": {
+        "name": "Meter A L3 power factor"
+      },
+      "meter_a_l3_frequency": {
+        "name": "Meter A L3 frequency"
+      },
+      "meter_b_status": {
+        "name": "Meter B status",
+        "state": {
+          "offline": "Offline",
+          "online": "Online"
+        }
+      },
+      "meter_b_l1_voltage": {
+        "name": "Meter B L1 voltage"
+      },
+      "meter_b_l1_current": {
+        "name": "Meter B L1 current"
+      },
+      "meter_b_l1_power": {
+        "name": "Meter B L1 power"
+      },
+      "meter_b_l1_apparent_power": {
+        "name": "Meter B L1 apparent power"
+      },
+      "meter_b_l1_power_factor": {
+        "name": "Meter B L1 power factor"
+      },
+      "meter_b_l1_frequency": {
+        "name": "Meter B L1 frequency"
+      },
+      "meter_b_l2_voltage": {
+        "name": "Meter B L2 voltage"
+      },
+      "meter_b_l2_current": {
+        "name": "Meter B L2 current"
+      },
+      "meter_b_l2_power": {
+        "name": "Meter B L2 power"
+      },
+      "meter_b_l2_apparent_power": {
+        "name": "Meter B L2 apparent power"
+      },
+      "meter_b_l2_power_factor": {
+        "name": "Meter B L2 power factor"
+      },
+      "meter_b_l2_frequency": {
+        "name": "Meter B L2 frequency"
+      },
+      "meter_b_l3_voltage": {
+        "name": "Meter B L3 voltage"
+      },
+      "meter_b_l3_current": {
+        "name": "Meter B L3 current"
+      },
+      "meter_b_l3_power": {
+        "name": "Meter B L3 power"
+      },
+      "meter_b_l3_apparent_power": {
+        "name": "Meter B L3 apparent power"
+      },
+      "meter_b_l3_power_factor": {
+        "name": "Meter B L3 power factor"
+      },
+      "meter_b_l3_frequency": {
+        "name": "Meter B L3 frequency"
+      },
+      "meter_a_l1_power_high_word": {
+        "name": "Meter A L1 power (high word)"
+      },
+      "meter_a_l2_power_high_word": {
+        "name": "Meter A L2 power (high word)"
+      },
+      "meter_a_l3_power_high_word": {
+        "name": "Meter A L3 power (high word)"
+      },
+      "meter_b_l1_power_high_word": {
+        "name": "Meter B L1 power (high word)"
+      },
+      "meter_b_l2_power_high_word": {
+        "name": "Meter B L2 power (high word)"
+      },
+      "meter_b_l3_power_high_word": {
+        "name": "Meter B L3 power (high word)"
+      },
+      "meter_a_l1_reactive_power": {
+        "name": "Meter A L1 reactive power"
+      },
+      "meter_a_l2_reactive_power": {
+        "name": "Meter A L2 reactive power"
+      },
+      "meter_a_l3_reactive_power": {
+        "name": "Meter A L3 reactive power"
+      },
+      "meter_b_l1_reactive_power": {
+        "name": "Meter B L1 reactive power"
+      },
+      "meter_b_l2_reactive_power": {
+        "name": "Meter B L2 reactive power"
+      },
+      "meter_b_l3_reactive_power": {
+        "name": "Meter B L3 reactive power"
+      },
+      "meter_a_power": {
+        "name": "Meter A power"
+      },
+      "parallel_backup_load_power": {
+        "name": "Parallel system backup load power"
+      },
+      "parallel_battery_power": {
+        "name": "Parallel system battery power"
+      },
+      "parallel_grid_load_power": {
+        "name": "Parallel system grid load power"
+      },
+      "parallel_grid_power": {
+        "name": "Parallel system grid power"
+      },
+      "parallel_load_power": {
+        "name": "Parallel system household load power"
+      },
+      "parallel_pv_power": {
+        "name": "Parallel system solar power"
+      },
+      "pv3_insulation_resistance": {
+        "name": "PV3 insulation resistance"
+      },
+      "pv4_insulation_resistance": {
+        "name": "PV4 insulation resistance"
+      },
+      "pv3_voltage": {
+        "name": "PV3 voltage"
+      },
+      "pv3_current": {
+        "name": "PV3 current"
+      },
+      "pv3_power": {
+        "name": "PV3 power"
+      },
+      "pv4_voltage": {
+        "name": "PV4 voltage"
+      },
+      "pv4_current": {
+        "name": "PV4 current"
+      },
+      "pv4_power": {
+        "name": "PV4 power"
+      },
+      "ct_grid_power": {
+        "name": "CT grid power"
+      },
+      "ct_grid_apparent_power": {
+        "name": "CT grid apparent power"
+      },
+      "ct_pv_power": {
+        "name": "CT solar power"
+      },
+      "ct_pv_apparent_power": {
+        "name": "CT solar apparent power"
+      },
+      "grid_apparent_power": {
+        "name": "Grid apparent power"
+      },
+      "inverter_apparent_power": {
+        "name": "Inverter apparent power"
+      },
+      "backup_load_power": {
+        "name": "Backup load power"
+      },
+      "backup_load_apparent_power": {
+        "name": "Backup load apparent power"
+      },
+      "inverter_energy_today": {
+        "name": "Inverter energy today"
+      },
+      "inverter_energy_month": {
+        "name": "Inverter energy this month"
+      },
+      "inverter_energy_year": {
+        "name": "Inverter energy this year"
+      },
+      "inverter_energy_total": {
+        "name": "Inverter energy total"
+      },
+      "pv2_energy_today": {
+        "name": "PV2 energy today"
+      },
+      "pv2_energy_month": {
+        "name": "PV2 energy this month"
+      },
+      "pv2_energy_year": {
+        "name": "PV2 energy this year"
+      },
+      "pv2_energy_total": {
+        "name": "PV2 energy total"
+      },
+      "pv3_energy_today": {
+        "name": "PV3 energy today"
+      },
+      "pv3_energy_month": {
+        "name": "PV3 energy this month"
+      },
+      "pv3_energy_year": {
+        "name": "PV3 energy this year"
+      },
+      "pv3_energy_total": {
+        "name": "PV3 energy total"
+      },
+      "protocol_version": {
+        "name": "Protocol version"
+      },
+      "battery_pack2_soc": {
+        "name": "Battery pack 2 state of charge"
+      },
+      "battery_pack2_soh": {
+        "name": "Battery pack 2 state of health"
+      },
+      "battery_pack2_voltage": {
+        "name": "Battery pack 2 voltage"
+      },
+      "battery_pack2_current": {
+        "name": "Battery pack 2 current"
+      },
+      "battery_pack2_temperature": {
+        "name": "Battery pack 2 temperature"
+      },
+      "battery_pack2_cycles": {
+        "name": "Battery pack 2 cycles"
+      },
+      "battery_pack3_soc": {
+        "name": "Battery pack 3 state of charge"
+      },
+      "battery_pack3_soh": {
+        "name": "Battery pack 3 state of health"
+      },
+      "battery_pack3_voltage": {
+        "name": "Battery pack 3 voltage"
+      },
+      "battery_pack3_current": {
+        "name": "Battery pack 3 current"
+      },
+      "battery_pack3_temperature": {
+        "name": "Battery pack 3 temperature"
+      },
+      "battery_pack3_cycles": {
+        "name": "Battery pack 3 cycles"
+      },
+      "battery_pack4_soc": {
+        "name": "Battery pack 4 state of charge"
+      },
+      "battery_pack4_soh": {
+        "name": "Battery pack 4 state of health"
+      },
+      "battery_pack4_voltage": {
+        "name": "Battery pack 4 voltage"
+      },
+      "battery_pack4_current": {
+        "name": "Battery pack 4 current"
+      },
+      "battery_pack4_temperature": {
+        "name": "Battery pack 4 temperature"
+      },
+      "battery_pack4_cycles": {
+        "name": "Battery pack 4 cycles"
+      },
+      "battery_pack2_discharged_energy": {
+        "name": "Battery pack 2 discharged energy"
+      },
+      "battery_pack3_discharged_energy": {
+        "name": "Battery pack 3 discharged energy"
+      },
+      "battery_pack4_discharged_energy": {
+        "name": "Battery pack 4 discharged energy"
+      },
+      "battery_voltage_high_protection": {
+        "name": "Battery voltage high protection"
+      },
+      "battery_charge_voltage": {
+        "name": "Battery charge voltage"
+      },
+      "battery_discharge_cutoff_voltage": {
+        "name": "Battery discharge cutoff voltage"
+      }
+    },
+    "number": {
+      "settings_sequence": {
+        "name": "Settings sequence"
+      },
+      "charge_slot_1_power": {
+        "name": "Charge slot 1 power"
+      },
+      "charge_slot_1_days": {
+        "name": "Charge slot 1 weekdays"
+      },
+      "charge_slot_2_power": {
+        "name": "Charge slot 2 power"
+      },
+      "charge_slot_2_days": {
+        "name": "Charge slot 2 weekdays"
+      },
+      "charge_slot_3_power": {
+        "name": "Charge slot 3 power"
+      },
+      "charge_slot_3_days": {
+        "name": "Charge slot 3 weekdays"
+      },
+      "charge_slot_4_power": {
+        "name": "Charge slot 4 power"
+      },
+      "charge_slot_4_days": {
+        "name": "Charge slot 4 weekdays"
+      },
+      "charge_slot_5_power": {
+        "name": "Charge slot 5 power"
+      },
+      "charge_slot_5_days": {
+        "name": "Charge slot 5 weekdays"
+      },
+      "charge_slot_6_power": {
+        "name": "Charge slot 6 power"
+      },
+      "charge_slot_6_days": {
+        "name": "Charge slot 6 weekdays"
+      },
+      "charge_slot_7_power": {
+        "name": "Charge slot 7 power"
+      },
+      "charge_slot_7_days": {
+        "name": "Charge slot 7 weekdays"
+      },
+      "discharge_slot_1_power": {
+        "name": "Discharge slot 1 power"
+      },
+      "discharge_slot_1_days": {
+        "name": "Discharge slot 1 weekdays"
+      },
+      "discharge_slot_2_power": {
+        "name": "Discharge slot 2 power"
+      },
+      "discharge_slot_2_days": {
+        "name": "Discharge slot 2 weekdays"
+      },
+      "discharge_slot_3_power": {
+        "name": "Discharge slot 3 power"
+      },
+      "discharge_slot_3_days": {
+        "name": "Discharge slot 3 weekdays"
+      },
+      "discharge_slot_4_power": {
+        "name": "Discharge slot 4 power"
+      },
+      "discharge_slot_4_days": {
+        "name": "Discharge slot 4 weekdays"
+      },
+      "discharge_slot_5_power": {
+        "name": "Discharge slot 5 power"
+      },
+      "discharge_slot_5_days": {
+        "name": "Discharge slot 5 weekdays"
+      },
+      "discharge_slot_6_power": {
+        "name": "Discharge slot 6 power"
+      },
+      "discharge_slot_6_days": {
+        "name": "Discharge slot 6 weekdays"
+      },
+      "discharge_slot_7_power": {
+        "name": "Discharge slot 7 power"
+      },
+      "discharge_slot_7_days": {
+        "name": "Discharge slot 7 weekdays"
+      },
+      "meter_address": {
+        "name": "Meter address"
+      },
+      "rs485_address": {
+        "name": "RS485 address"
+      },
+      "rs485_baud_rate": {
+        "name": "RS485 baud rate"
+      },
+      "passive_mode": {
+        "name": "Passive mode"
+      },
+      "passive_grid_charge_power": {
+        "name": "Passive grid charge power"
+      },
+      "passive_grid_discharge_power": {
+        "name": "Passive grid discharge power"
+      },
+      "passive_battery_charge_power": {
+        "name": "Passive battery charge power"
+      },
+      "passive_battery_discharge_power": {
+        "name": "Passive battery discharge power"
+      },
+      "battery_discharge_limit_on_grid": {
+        "name": "Battery discharge limit (on-grid)"
+      },
+      "battery_discharge_limit_off_grid": {
+        "name": "Battery discharge limit (off-grid)"
+      },
+      "battery_charge_limit": {
+        "name": "Battery charge limit"
+      },
+      "battery_charge_power_limit": {
+        "name": "Battery charge power limit"
+      },
+      "battery_discharge_power_limit": {
+        "name": "Battery discharge power limit"
+      },
+      "grid_import_power_limit": {
+        "name": "Grid import power limit"
+      },
+      "grid_export_power_limit": {
+        "name": "Grid export power limit"
+      },
+      "backup_reserve_soc": {
+        "name": "Backup reserve state of charge"
+      },
+      "export_limit_power": {
+        "name": "Export limit power"
+      },
+      "export_limit_current": {
+        "name": "Export limit current"
+      },
+      "rs485_slave_address": {
+        "name": "RS485 slave address"
+      },
+      "ev_address": {
+        "name": "EV charger address"
+      },
+      "ev_charger_count": {
+        "name": "EV charger count"
+      },
+      "ev_communication_timeout": {
+        "name": "EV charger communication timeout"
+      },
+      "ev_port_address": {
+        "name": "EV charger port address"
+      },
+      "ev_charge_power": {
+        "name": "EV charging power"
+      },
+      "ev_slot_1_days": {
+        "name": "EV charger slot 1 weekdays"
+      },
+      "ev_slot_1_power": {
+        "name": "EV charger slot 1 power"
+      },
+      "ev_slot_2_days": {
+        "name": "EV charger slot 2 weekdays"
+      },
+      "ev_slot_2_power": {
+        "name": "EV charger slot 2 power"
+      },
+      "ev_slot_3_days": {
+        "name": "EV charger slot 3 weekdays"
+      },
+      "ev_slot_3_power": {
+        "name": "EV charger slot 3 power"
+      },
+      "ev_slot_4_days": {
+        "name": "EV charger slot 4 weekdays"
+      },
+      "ev_slot_4_power": {
+        "name": "EV charger slot 4 power"
+      },
+      "ev_slot_5_days": {
+        "name": "EV charger slot 5 weekdays"
+      },
+      "ev_slot_5_power": {
+        "name": "EV charger slot 5 power"
+      },
+      "ev_slot_6_days": {
+        "name": "EV charger slot 6 weekdays"
+      },
+      "ev_slot_6_power": {
+        "name": "EV charger slot 6 power"
+      },
+      "ev_slot_7_days": {
+        "name": "EV charger slot 7 weekdays"
+      },
+      "ev_slot_7_power": {
+        "name": "EV charger slot 7 power"
+      },
+      "ems_timeout": {
+        "name": "EMS timeout"
+      }
+    },
+    "select": {
+      "ethernet_mode": {
+        "name": "Ethernet mode",
+        "state": {
+          "manual": "Manual",
+          "automatic": "Automatic"
+        }
+      },
+      "meter_configuration": {
+        "name": "Meter configuration",
+        "state": {
+          "no_meter_or_ct": "No meter or CT",
+          "single_phase_meter": "Single-phase meter",
+          "three_phase_three_wire_meter": "Three-phase three-wire meter",
+          "three_phase_four_wire_meter_on_single_phase_machine": "Three-phase four-wire meter on a single-phase machine",
+          "three_phase_four_wire_meter_grid_and_pv": "Three-phase four-wire meter (grid and PV)",
+          "two_three_phase_three_wire_meters": "Two three-phase three-wire meters",
+          "two_three_phase_four_wire_meters": "Two three-phase four-wire meters",
+          "two_single_phase_meters": "Two single-phase meters",
+          "single_phase_meter_with_two_ct_channels": "Single-phase meter with two CT channels",
+          "one_grid_ct": "One grid CT",
+          "grid_and_pv_cts": "Grid and PV CTs",
+          "dual_circuit_three_phase_four_wire_meter_with_six_ct_channels": "Dual-circuit three-phase four-wire meter with six CT channels"
+        }
+      },
+      "battery_protocol": {
+        "name": "Battery protocol",
+        "state": {
+          "not_in_use": "Not in use",
+          "saj_bu3": "SAJ BU3"
+        }
+      },
+      "application_mode": {
+        "name": "Application mode",
+        "state": {
+          "self_use": "Self-use",
+          "time_of_use": "Time-of-use",
+          "backup": "Backup",
+          "ems": "EMS",
+          "passive": "Passive",
+          "legacy": "Legacy"
+        }
+      },
+      "export_limit_mode": {
+        "name": "Export limit mode",
+        "state": {
+          "off": "Off",
+          "total_power": "Total power",
+          "phase_current": "Phase current",
+          "phase_power": "Phase power"
+        }
+      },
+      "time_of_use_idle_mode": {
+        "name": "Time-of-use idle mode",
+        "state": {
+          "standby": "Standby",
+          "self_use": "Self-use"
+        }
+      },
+      "led_mode": {
+        "name": "LED mode",
+        "state": {
+          "all_off": "All off",
+          "outer_ring_on": "Outer ring on",
+          "inner_ring_on": "Inner ring on",
+          "all_on": "All on"
+        }
+      },
+      "rs485_slave_baud_rate": {
+        "name": "RS485 slave baud rate",
+        "state": {
+          "115200": "115200 baud",
+          "57600": "57600 baud",
+          "38400": "38400 baud",
+          "19200": "19200 baud",
+          "9600": "9600 baud",
+          "4800": "4800 baud",
+          "2400": "2400 baud",
+          "1200": "1200 baud"
+        }
+      },
+      "ev_baud_rate": {
+        "name": "EV charger baud rate",
+        "state": {
+          "115200": "115200 baud",
+          "57600": "57600 baud",
+          "38400": "38400 baud",
+          "19200": "19200 baud",
+          "9600": "9600 baud",
+          "4800": "4800 baud",
+          "2400": "2400 baud",
+          "1200": "1200 baud"
+        }
+      },
+      "ev_port_mode": {
+        "name": "EV charger port mode",
+        "state": {
+          "invalid": "Invalid",
+          "host": "Host",
+          "modbus_slave": "Modbus slave"
+        }
+      },
+      "ev_mode": {
+        "name": "EV charger mode",
+        "state": {
+          "disabled": "Disabled",
+          "standard": "Standard",
+          "time_based": "Time-based",
+          "pv_surplus": "PV surplus",
+          "ems": "EMS"
+        }
+      },
+      "ev_slot_1_mode": {
+        "name": "EV charger slot 1 mode",
+        "state": {
+          "not_set": "Not set",
+          "standard": "Standard",
+          "pv_mode": "PV mode"
+        }
+      },
+      "ev_slot_2_mode": {
+        "name": "EV charger slot 2 mode",
+        "state": {
+          "not_set": "Not set",
+          "standard": "Standard",
+          "pv_mode": "PV mode"
+        }
+      },
+      "ev_slot_3_mode": {
+        "name": "EV charger slot 3 mode",
+        "state": {
+          "not_set": "Not set",
+          "standard": "Standard",
+          "pv_mode": "PV mode"
+        }
+      },
+      "ev_slot_4_mode": {
+        "name": "EV charger slot 4 mode",
+        "state": {
+          "not_set": "Not set",
+          "standard": "Standard",
+          "pv_mode": "PV mode"
+        }
+      },
+      "ev_slot_5_mode": {
+        "name": "EV charger slot 5 mode",
+        "state": {
+          "not_set": "Not set",
+          "standard": "Standard",
+          "pv_mode": "PV mode"
+        }
+      },
+      "ev_slot_6_mode": {
+        "name": "EV charger slot 6 mode",
+        "state": {
+          "not_set": "Not set",
+          "standard": "Standard",
+          "pv_mode": "PV mode"
+        }
+      },
+      "ev_slot_7_mode": {
+        "name": "EV charger slot 7 mode",
+        "state": {
+          "not_set": "Not set",
+          "standard": "Standard",
+          "pv_mode": "PV mode"
+        }
+      }
+    },
+    "switch": {
+      "charge_slot_1_enabled": {
+        "name": "Charge slot 1 enabled"
+      },
+      "charge_slot_2_enabled": {
+        "name": "Charge slot 2 enabled"
+      },
+      "charge_slot_3_enabled": {
+        "name": "Charge slot 3 enabled"
+      },
+      "charge_slot_4_enabled": {
+        "name": "Charge slot 4 enabled"
+      },
+      "charge_slot_5_enabled": {
+        "name": "Charge slot 5 enabled"
+      },
+      "charge_slot_6_enabled": {
+        "name": "Charge slot 6 enabled"
+      },
+      "charge_slot_7_enabled": {
+        "name": "Charge slot 7 enabled"
+      },
+      "discharge_slot_1_enabled": {
+        "name": "Discharge slot 1 enabled"
+      },
+      "discharge_slot_2_enabled": {
+        "name": "Discharge slot 2 enabled"
+      },
+      "discharge_slot_3_enabled": {
+        "name": "Discharge slot 3 enabled"
+      },
+      "discharge_slot_4_enabled": {
+        "name": "Discharge slot 4 enabled"
+      },
+      "discharge_slot_5_enabled": {
+        "name": "Discharge slot 5 enabled"
+      },
+      "discharge_slot_6_enabled": {
+        "name": "Discharge slot 6 enabled"
+      },
+      "discharge_slot_7_enabled": {
+        "name": "Discharge slot 7 enabled"
+      },
+      "battery_auto_wake": {
+        "name": "Battery auto wake"
+      },
+      "time_of_use_grid_discharge": {
+        "name": "Time-of-use grid discharge"
+      },
+      "ev_enabled": {
+        "name": "EV charger enabled"
+      },
+      "ev_slot_1_grid_charging": {
+        "name": "EV charger slot 1 grid charging"
+      },
+      "ev_slot_1_battery_discharge": {
+        "name": "EV charger slot 1 battery discharge"
+      },
+      "ev_slot_2_grid_charging": {
+        "name": "EV charger slot 2 grid charging"
+      },
+      "ev_slot_2_battery_discharge": {
+        "name": "EV charger slot 2 battery discharge"
+      },
+      "ev_slot_3_grid_charging": {
+        "name": "EV charger slot 3 grid charging"
+      },
+      "ev_slot_3_battery_discharge": {
+        "name": "EV charger slot 3 battery discharge"
+      },
+      "ev_slot_4_grid_charging": {
+        "name": "EV charger slot 4 grid charging"
+      },
+      "ev_slot_4_battery_discharge": {
+        "name": "EV charger slot 4 battery discharge"
+      },
+      "ev_slot_5_grid_charging": {
+        "name": "EV charger slot 5 grid charging"
+      },
+      "ev_slot_5_battery_discharge": {
+        "name": "EV charger slot 5 battery discharge"
+      },
+      "ev_slot_6_grid_charging": {
+        "name": "EV charger slot 6 grid charging"
+      },
+      "ev_slot_6_battery_discharge": {
+        "name": "EV charger slot 6 battery discharge"
+      },
+      "ev_slot_7_grid_charging": {
+        "name": "EV charger slot 7 grid charging"
+      },
+      "ev_slot_7_battery_discharge": {
+        "name": "EV charger slot 7 battery discharge"
+      },
+      "ev_minimum_current_charging": {
+        "name": "EV charger minimum current charging"
+      },
+      "ems_inverter_control": {
+        "name": "EMS inverter control"
+      },
+      "ems_battery_control": {
+        "name": "EMS battery control"
+      },
+      "ems_inverter_control_with_timeout_exit": {
+        "name": "EMS inverter control with timeout exit"
+      },
+      "ems_grid_control": {
+        "name": "EMS grid control"
+      }
+    },
+    "time": {
+      "charge_slot_1_start": {
+        "name": "Charge slot 1 start time"
+      },
+      "charge_slot_1_end": {
+        "name": "Charge slot 1 end time"
+      },
+      "charge_slot_2_start": {
+        "name": "Charge slot 2 start time"
+      },
+      "charge_slot_2_end": {
+        "name": "Charge slot 2 end time"
+      },
+      "charge_slot_3_start": {
+        "name": "Charge slot 3 start time"
+      },
+      "charge_slot_3_end": {
+        "name": "Charge slot 3 end time"
+      },
+      "charge_slot_4_start": {
+        "name": "Charge slot 4 start time"
+      },
+      "charge_slot_4_end": {
+        "name": "Charge slot 4 end time"
+      },
+      "charge_slot_5_start": {
+        "name": "Charge slot 5 start time"
+      },
+      "charge_slot_5_end": {
+        "name": "Charge slot 5 end time"
+      },
+      "charge_slot_6_start": {
+        "name": "Charge slot 6 start time"
+      },
+      "charge_slot_6_end": {
+        "name": "Charge slot 6 end time"
+      },
+      "charge_slot_7_start": {
+        "name": "Charge slot 7 start time"
+      },
+      "charge_slot_7_end": {
+        "name": "Charge slot 7 end time"
+      },
+      "discharge_slot_1_start": {
+        "name": "Discharge slot 1 start time"
+      },
+      "discharge_slot_1_end": {
+        "name": "Discharge slot 1 end time"
+      },
+      "discharge_slot_2_start": {
+        "name": "Discharge slot 2 start time"
+      },
+      "discharge_slot_2_end": {
+        "name": "Discharge slot 2 end time"
+      },
+      "discharge_slot_3_start": {
+        "name": "Discharge slot 3 start time"
+      },
+      "discharge_slot_3_end": {
+        "name": "Discharge slot 3 end time"
+      },
+      "discharge_slot_4_start": {
+        "name": "Discharge slot 4 start time"
+      },
+      "discharge_slot_4_end": {
+        "name": "Discharge slot 4 end time"
+      },
+      "discharge_slot_5_start": {
+        "name": "Discharge slot 5 start time"
+      },
+      "discharge_slot_5_end": {
+        "name": "Discharge slot 5 end time"
+      },
+      "discharge_slot_6_start": {
+        "name": "Discharge slot 6 start time"
+      },
+      "discharge_slot_6_end": {
+        "name": "Discharge slot 6 end time"
+      },
+      "discharge_slot_7_start": {
+        "name": "Discharge slot 7 start time"
+      },
+      "discharge_slot_7_end": {
+        "name": "Discharge slot 7 end time"
+      },
+      "ev_slot_1_start": {
+        "name": "EV charger slot 1 start time"
+      },
+      "ev_slot_1_end": {
+        "name": "EV charger slot 1 end time"
+      },
+      "ev_slot_2_start": {
+        "name": "EV charger slot 2 start time"
+      },
+      "ev_slot_2_end": {
+        "name": "EV charger slot 2 end time"
+      },
+      "ev_slot_3_start": {
+        "name": "EV charger slot 3 start time"
+      },
+      "ev_slot_3_end": {
+        "name": "EV charger slot 3 end time"
+      },
+      "ev_slot_4_start": {
+        "name": "EV charger slot 4 start time"
+      },
+      "ev_slot_4_end": {
+        "name": "EV charger slot 4 end time"
+      },
+      "ev_slot_5_start": {
+        "name": "EV charger slot 5 start time"
+      },
+      "ev_slot_5_end": {
+        "name": "EV charger slot 5 end time"
+      },
+      "ev_slot_6_start": {
+        "name": "EV charger slot 6 start time"
+      },
+      "ev_slot_6_end": {
+        "name": "EV charger slot 6 end time"
+      },
+      "ev_slot_7_start": {
+        "name": "EV charger slot 7 start time"
+      },
+      "ev_slot_7_end": {
+        "name": "EV charger slot 7 end time"
+      }
+    },
+    "text": {
+      "ethernet_ip_address": {
+        "name": "Ethernet IP address"
+      },
+      "ethernet_subnet_mask": {
+        "name": "Ethernet subnet mask"
+      },
+      "ethernet_gateway": {
+        "name": "Ethernet gateway"
+      },
+      "ethernet_dns_primary": {
+        "name": "Ethernet primary DNS"
+      },
+      "ethernet_dns_secondary": {
+        "name": "Ethernet secondary DNS"
       }
     }
   },
@@ -201,6 +2301,9 @@
     },
     "backing_off": {
       "message": "The inverter endpoint is backing off after repeated failures, so no connection was attempted. Home Assistant will retry automatically."
+    },
+    "control_not_enabled": {
+      "message": "Control of this installation is not enabled, so this setting cannot be changed."
     }
   },
   "selector": {
@@ -209,6 +2312,27 @@
         "automatic": "Automatic",
         "hs3": "HS3",
         "h2": "H2"
+      }
+    },
+    "block": {
+      "options": {
+        "network": "Network",
+        "ev_data": "EV charger data",
+        "settings": "Settings",
+        "realtime": "Realtime",
+        "energy": "Energy",
+        "parallel": "Parallel machines",
+        "ev_settings": "EV charger settings",
+        "averages": "Five-minute averages",
+        "ems": "EMS",
+        "identity": "Versions",
+        "battery": "Battery",
+        "meters": "Meters"
+      }
+    },
+    "entity_state": {
+      "options": {
+        "disabled": "{entity} (disabled)"
       }
     }
   }

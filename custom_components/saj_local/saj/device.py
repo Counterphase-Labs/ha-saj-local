@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .profiles import AUTOMATIC, Profile, resolve_profile
+from .profiles import AUTOMATIC, resolve_profile
 
 if TYPE_CHECKING:
     from .client import RegisterReader
+    from .models import Profile
 
 IDENTITY_ADDRESS = 0x8F00
 IDENTITY_WORD_COUNT = 2

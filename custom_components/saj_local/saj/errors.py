@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from .device_type import format_device_type
 
 if TYPE_CHECKING:
-    from .profiles import Profile
+    from .models import Profile
 
 
 class ModelError(Exception):

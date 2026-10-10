@@ -11,38 +11,34 @@ import pytest
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from custom_components.saj_local.saj.models import Profile
+
 from custom_components.saj_local import config_flow
 from custom_components.saj_local.errors import Translation
 from custom_components.saj_local.saj import errors as saj_errors
 from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessage
 from custom_components.saj_local.saj.device import Device
-from custom_components.saj_local.saj.profiles import Profile
+from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from custom_components.saj_local.saj.telemetry import Readout
+from tests.profiles import profile
 
 SERIAL = "TEST-001"
 REPLACEMENT_SERIAL = "TEST-REPLACEMENT"
 UNRECOGNISED_TYPE = 0x7777
-ALPHA = Profile(
-    key="alpha",
-    display_name="Alpha",
-    device_types=frozenset({0x0001}),
-    measurement_keys=frozenset(),
-    hand_verified=True,
+ALPHA = profile(
+    base=HS3, key="alpha", device_types={0x0001}, keys=(), hand_verified=True
 )
-BETA = Profile(
-    key="beta",
-    display_name="Beta",
-    device_types=frozenset({0x0002}),
-    measurement_keys=frozenset(),
-    hand_verified=False,
+BETA = profile(
+    base=HS3, key="beta", device_types={0x0002}, keys=(), hand_verified=False
 )
-GAMMA = Profile(
+GAMMA = profile(
+    base=HS3,
     key="gamma",
-    display_name="Gamma",
-    device_types=frozenset({0x0003}),
-    measurement_keys=frozenset({"pv_power", "grid_power"}),
+    device_types={0x0003},
+    keys={"pv_power", "grid_power", "battery_soc"},
     hand_verified=True,
 )
+GAMMA_TYPE = 0x0003
 INPUT = {
     "host": "inverter",
     "port": 502,
@@ -50,7 +46,15 @@ INPUT = {
     "scan_interval": 30,
     "model": "automatic",
 }
-SAVED_DATA = {"host": "inverter", "port": 502, "unit_id": 1, "model": "automatic"}
+SAVED_DATA = {
+    "host": "inverter",
+    "port": 502,
+    "unit_id": 1,
+    "model": "automatic",
+    "device_type": 0x0001,
+}
+DISABLED_LABEL = "{entity} (disabled)"
+BLOCK_LABELS = {"realtime": "Realtime", "settings": "Settings", "energy": "Energy"}
 
 
 class FlowAbortError(Exception):
@@ -155,6 +159,48 @@ def _nothing_taken(*, hass, entity_id) -> bool:
     return False
 
 
+def _nothing_enabled(**asked) -> frozenset[str]:
+    _nothing_enabled.asked.append(asked)
+    return _nothing_enabled.keys
+
+
+_nothing_enabled.asked = []
+_nothing_enabled.keys = frozenset()
+
+
+def _one_request_per_key(
+    *, profile, device_type, enabled, default_interval, groups
+) -> float:
+    _one_request_per_key.asked.append(
+        {
+            "profile": profile,
+            "device_type": device_type,
+            "enabled": enabled,
+            "default_interval": default_interval,
+            "groups": list(groups),
+        }
+    )
+    grouped = sum(len(group.keys) * 60 / group.interval for group in groups)
+    return grouped + 60 / default_interval
+
+
+_one_request_per_key.asked = []
+
+
+def _requests_per_key(*, profile, device_type, keys) -> int:
+    del profile, device_type
+    return len(keys)
+
+
+async def _block_translations(hass, language, category, integrations):
+    del hass
+    assert (language, category, integrations) == ("en", "selector", ["saj_local"])
+    return {
+        f"component.saj_local.selector.block.options.{block}": label
+        for block, label in BLOCK_LABELS.items()
+    } | {"component.saj_local.selector.entity_state.options.disabled": DISABLED_LABEL}
+
+
 def _identifying(device: Device):
     async def identify(client, selection):
         del client
@@ -173,8 +219,8 @@ def _failing_identify(error: BaseException):
     return identify
 
 
-async def _telemetry(client, device) -> Readout:
-    del client, device
+async def _telemetry(client, device, enabled) -> Readout:
+    del client, device, enabled
     return Readout(values={}, refusals={})
 
 
@@ -182,6 +228,9 @@ async def _telemetry(client, device) -> Readout:
 def reset_flow_client_instances(monkeypatch):
     FlowClient.instances.clear()
     FlowClient.validation_session = None
+    _nothing_enabled.asked.clear()
+    _nothing_enabled.keys = frozenset()
+    _one_request_per_key.asked.clear()
     monkeypatch.setattr(config_flow.selector, "NumberSelector", FakeNumberSelector)
     monkeypatch.setattr(
         config_flow.selector, "NumberSelectorMode", FakeNumberSelectorMode
@@ -191,6 +240,10 @@ def reset_flow_client_instances(monkeypatch):
     monkeypatch.setattr(config_flow, "identify", _identifying(_device()))
     monkeypatch.setattr(config_flow, "read_telemetry", _telemetry)
     monkeypatch.setattr(config_flow, "entity_id_in_use", _nothing_taken)
+    monkeypatch.setattr(config_flow, "enabled_entity_keys", _nothing_enabled)
+    monkeypatch.setattr(config_flow, "installation_load", _one_request_per_key)
+    monkeypatch.setattr(config_flow, "requests_per_read", _requests_per_key)
+    monkeypatch.setattr(config_flow, "async_get_translations", _block_translations)
 
 
 def _form(**kwargs):
@@ -205,7 +258,7 @@ def _flow(monkeypatch, *, entries=()):
     instance = object.__new__(config_flow.SajLocalConfigFlow)
     instance.hass = SimpleNamespace(
         config_entries=FakeConfigEntries(entries),
-        config=SimpleNamespace(components=set()),
+        config=SimpleNamespace(components=set(), language="en"),
         data={},
     )
     monkeypatch.setattr(instance, "async_show_form", _form)
@@ -291,7 +344,7 @@ async def test_user_step_creates_entry_on_automatic_through_one_path(
     assert result == {
         "type": "create_entry",
         "title": f"SAJ {SERIAL}",
-        "data": {**SAVED_DATA, "unit_id": 5},
+        "data": {**SAVED_DATA, "unit_id": 5, "device_type": device_type},
         "options": {"scan_interval": 30, "prefix": ""},
     }
     assert identify.selections == ["automatic"]
@@ -320,7 +373,7 @@ async def test_user_step_stores_explicit_selection_and_never_the_detected_model(
     result = await instance.async_step_user({**INPUT, "model": "beta"})
 
     assert result["data"]["model"] == "beta"
-    assert set(result["data"]) == {"host", "port", "unit_id", "model"}
+    assert set(result["data"]) == {"host", "port", "unit_id", "model", "device_type"}
     assert identify.selections == ["beta"]
 
 
@@ -507,7 +560,7 @@ async def test_confirmed_model_creates_entry_with_the_selection(monkeypatch):
     assert result == {
         "type": "create_entry",
         "title": f"SAJ {SERIAL}",
-        "data": {**SAVED_DATA, "model": "beta"},
+        "data": {**SAVED_DATA, "model": "beta", "device_type": UNRECOGNISED_TYPE},
         "options": {"scan_interval": 30, "prefix": ""},
     }
     assert instance.selected_unique_id == SERIAL
@@ -526,8 +579,8 @@ async def test_assumed_profile_with_failed_reads_reports_read_error(monkeypatch,
         lambda error: Translation(key=f"stubbed-{type(error).__name__}"),
     )
 
-    async def failing_read(client, device):
-        del client, device
+    async def failing_read(client, device, enabled):
+        del client, device, enabled
         raise error
 
     monkeypatch.setattr(config_flow, "read_telemetry", failing_read)
@@ -578,13 +631,21 @@ async def test_model_confirmation_aborts_when_endpoint_was_claimed_meanwhile(
     assert not hasattr(instance, "selected_unique_id")
 
 
+STORED_DEVICE_TYPES = {"automatic": 0x0001, "alpha": 0x0001, "beta": 0x0002}
+
+
 def _saved_entry(*, entry_id="entry-a", serial=SERIAL, model="automatic", prefix=""):
     return SimpleNamespace(
         entry_id=entry_id,
         unique_id=serial,
         title=f"SAJ {serial}",
-        data={**SAVED_DATA, "model": model},
+        data={
+            **SAVED_DATA,
+            "model": model,
+            "device_type": STORED_DEVICE_TYPES[model],
+        },
         options={"scan_interval": 45, "prefix": prefix},
+        subentries={},
         update_count=0,
     )
 
@@ -593,7 +654,7 @@ def _options_flow(monkeypatch, *, entry, entries=None):
     instance = object.__new__(config_flow.SajOptionsFlow)
     instance.hass = SimpleNamespace(
         config_entries=FakeConfigEntries(entries if entries is not None else [entry]),
-        config=SimpleNamespace(components=set()),
+        config=SimpleNamespace(components=set(), language="en"),
         data={},
     )
     monkeypatch.setattr(
@@ -739,7 +800,7 @@ async def test_same_endpoint_validation_probes_over_the_installation_client(
         session.events.append("identify")
         return _device()
 
-    async def read(client, device):
+    async def read(client, device, enabled):
         del device
         assert client is session.client
         assert session.active
@@ -775,8 +836,8 @@ async def test_refused_required_register_fails_validation_without_saving(
 ):
     entry, session, flow = _options_flow_with_validation_session(monkeypatch)
 
-    async def refused(client, device):
-        del client, device
+    async def refused(client, device, enabled):
+        del client, device, enabled
         return Readout(values={}, refusals={"pv_power": 2})
 
     monkeypatch.setattr(config_flow, "read_telemetry", refused)
@@ -865,7 +926,7 @@ async def test_replacement_across_models_asks_confirmation_before_any_change(
     assert entry.entry_id == "entry-a"
     assert entry.unique_id == REPLACEMENT_SERIAL
     assert entry.title == f"SAJ {SERIAL}"
-    assert entry.data == {**SAVED_DATA, "host": new_host}
+    assert entry.data == {**SAVED_DATA, "host": new_host, "device_type": new_type}
     assert entry.options == {"scan_interval": 75, "prefix": ""}
     assert entry.update_count == 1
 
@@ -884,7 +945,11 @@ async def test_options_unknown_model_selection_reports_error_and_keeps_saved_sta
     result = await flow.async_step_init(_submission(model="gamma"))
 
     assert result["errors"] == {"model": "unknown_model"}
-    assert result["description_placeholders"] == {"selection": "gamma"}
+    assert result["description_placeholders"] == {
+        "selection": "gamma",
+        "load": "1.3",
+        "budget": "40",
+    }
     _unchanged(entry)
     assert FlowClient.instances[-1].closed
 
@@ -906,8 +971,8 @@ async def test_options_assumed_profile_with_failed_reads_keeps_saved_state(
     flow = _options_flow(monkeypatch, entry=entry)
     monkeypatch.setattr(config_flow, "identify", _identifying(_assumed_device()))
 
-    async def failing_read(client, device):
-        del client, device
+    async def failing_read(client, device, enabled):
+        del client, device, enabled
         raise error
 
     monkeypatch.setattr(config_flow, "read_telemetry", failing_read)
@@ -954,7 +1019,9 @@ async def test_duplicate_serial_is_rejected_before_replacement_confirmation(
     _unchanged(entry)
 
 
-@pytest.mark.parametrize("step", ["confirm_model", "confirm_replacement"])
+@pytest.mark.parametrize(
+    "step", ["confirm_model", "confirm_replacement", "confirm_prefix", "confirm_load"]
+)
 async def test_confirmation_steps_without_pending_change_abort(monkeypatch, step):
     entry = _saved_entry()
     flow = _options_flow(monkeypatch, entry=entry)
@@ -1018,7 +1085,11 @@ async def test_assumed_model_is_saved_only_after_confirmation(monkeypatch, seria
         result = await flow.async_step_confirm_model({})
 
     assert result == _abort(reason="changes_saved")
-    assert entry.data == {**SAVED_DATA, "model": "beta"}
+    assert entry.data == {
+        **SAVED_DATA,
+        "model": "beta",
+        "device_type": UNRECOGNISED_TYPE,
+    }
     assert entry.unique_id == serial
     assert entry.update_count == 1
 
@@ -1168,10 +1239,19 @@ async def test_user_step_enforces_the_shared_minimum_interval(
 
 
 ENTRY_ID = "entry-a"
+CATALOGUE_BLOCKS = {
+    "battery_soc": "realtime",
+    "pv_power": "realtime",
+    "grid_power": "energy",
+}
+ENABLED = frozenset({"pv_power", "grid_power", "battery_soc"})
 
 
-def _registered(key, *, name=None, original_name="Original", domain="sensor"):
+def _registered(
+    key, *, name=None, original_name="Original", domain="sensor", disabled_by=None
+):
     return SimpleNamespace(
+        disabled_by=disabled_by,
         unique_id=f"{ENTRY_ID}_{key}",
         domain=domain,
         name=name,
@@ -1195,24 +1275,36 @@ def _group(subentry_id, keys, *, interval=10, title="Group"):
     )
 
 
-def _group_flow(monkeypatch, *, subentries=(), registered=REGISTERED, editing=None):
+def _group_flow(
+    monkeypatch,
+    *,
+    subentries=(),
+    registered=REGISTERED,
+    editing=None,
+    blocks=CATALOGUE_BLOCKS,
+):
     entry = SimpleNamespace(
         entry_id=ENTRY_ID,
+        data={"model": "automatic", "device_type": GAMMA_TYPE},
+        options={"scan_interval": 60},
         subentries={subentry.subentry_id: subentry for subentry in subentries},
     )
     flow = object.__new__(config_flow.SajPollingGroupFlow)
     flow.updates = []
+    flow.created = []
     flow.hass = SimpleNamespace(
         config_entries=SimpleNamespace(
             async_get_known_entry=lambda _entry_id: entry,
             async_update_subentry=lambda **changes: flow.updates.append(changes),
-        )
+        ),
+        config=SimpleNamespace(language="en"),
     )
     flow.handler = (ENTRY_ID, "polling_group")
     flow.context = {"source": "user"}
     if editing is not None:
         flow.context = {"source": "reconfigure", "subentry_id": editing}
     flow.registered = list(registered)
+    _nothing_enabled.keys = ENABLED
     monkeypatch.setattr(config_flow.er, "async_get", lambda _hass: "registry")
     monkeypatch.setattr(
         config_flow.er,
@@ -1221,12 +1313,32 @@ def _group_flow(monkeypatch, *, subentries=(), registered=REGISTERED, editing=No
             flow.registered if (registry, entry_id) == ("registry", ENTRY_ID) else []
         ),
     )
+    monkeypatch.setattr(
+        config_flow,
+        "blocks_by_key",
+        lambda *, profile, device_type: (
+            dict(blocks) if (profile, device_type) == (GAMMA, GAMMA_TYPE) else {}
+        ),
+    )
     monkeypatch.setattr(flow, "async_show_form", _form)
     monkeypatch.setattr(flow, "async_abort", _abort)
     monkeypatch.setattr(
         flow,
+        "async_show_menu",
+        lambda *, step_id, menu_options, description_placeholders: {
+            "type": "menu",
+            "step_id": step_id,
+            "menu_options": menu_options,
+            "description_placeholders": description_placeholders,
+        },
+    )
+    monkeypatch.setattr(
+        flow,
         "async_create_entry",
-        lambda *, title, data: {"type": "create_entry", "title": title, "data": data},
+        lambda *, title, data: (
+            flow.created.append((title, data))
+            or {"type": "create_entry", "title": title, "data": data}
+        ),
     )
     return flow, entry
 
@@ -1290,31 +1402,125 @@ async def test_the_form_requires_a_name_and_trims_it(monkeypatch):
         schema({"scan_interval": 10, "sensors": []})
 
 
-async def test_a_valid_submission_adds_a_group_titled_by_its_name(monkeypatch):
+@pytest.mark.parametrize("editing", [False, True])
+async def test_the_form_describes_the_current_request_load(monkeypatch, *, editing):
+    flow, _ = _group_flow(
+        monkeypatch,
+        subentries=[_group("g1", ["pv_power", "grid_power"], interval=10)],
+        editing="g1" if editing else None,
+    )
+    step = flow.async_step_reconfigure if editing else flow.async_step_user
+
+    form = await step()
+
+    assert form["description_placeholders"] == {"load": "13", "budget": "40"}
+
+
+async def test_the_load_comes_from_the_stored_device_enabled_entities_and_cadences(
+    monkeypatch,
+):
+    group = _group("g1", ["pv_power"], interval=20)
+    flow, entry = _group_flow(monkeypatch, subentries=[group])
+    entry.options["scan_interval"] = 45
+
+    await flow.async_step_user()
+
+    assert [
+        {key: value for key, value in call.items() if key != "groups"}
+        for call in _one_request_per_key.asked
+    ] == [
+        {
+            "profile": GAMMA,
+            "device_type": GAMMA_TYPE,
+            "enabled": ENABLED,
+            "default_interval": 45,
+        }
+    ]
+    assert _one_request_per_key.asked[0]["groups"] == [
+        config_flow.Cadence(interval=20, keys=frozenset({"pv_power"}))
+    ]
+    asked = _nothing_enabled.asked[0]
+    assert asked["entry_id"] == ENTRY_ID
+    assert {register.key for register in asked["registers"]} == {
+        "pv_power",
+        "grid_power",
+        "battery_soc",
+    }
+
+
+async def test_a_valid_submission_is_not_saved_until_the_save_choice(monkeypatch):
     flow, _ = _group_flow(monkeypatch)
 
-    result = await flow.async_step_user(
+    review = await flow.async_step_user(
         _group_input(scan_interval=15.0, sensors=["pv_power", "grid_power"])
     )
 
-    assert result == {
+    assert review["type"] == "menu"
+    assert review["step_id"] == "review_group"
+    assert review["menu_options"] == ["save_group", "change_selection"]
+    assert flow.created == []
+    assert flow.updates == []
+
+    saved = await flow.async_step_save_group()
+
+    assert saved == {
         "type": "create_entry",
         "title": "Power",
         "data": {"scan_interval": 15, "sensors": ["pv_power", "grid_power"]},
     }
-    assert type(result["data"]["scan_interval"]) is int
+    assert type(saved["data"]["scan_interval"]) is int
     assert flow.updates == []
 
 
-async def test_a_valid_edit_updates_the_group_in_place_without_a_flow_reload(
+async def test_the_result_step_shows_the_group_requests_and_the_load_before_and_after(
     monkeypatch,
 ):
-    group = _group("g1", ["pv_power"], title="Old")
+    flow, _ = _group_flow(monkeypatch)
+
+    review = await flow.async_step_user(
+        _group_input(scan_interval=10, sensors=["pv_power", "grid_power"])
+    )
+
+    assert review["description_placeholders"] == {
+        "requests": "2",
+        "before": "1",
+        "after": "13",
+        "budget": "40",
+    }
+
+
+async def test_only_enabled_entities_cost_requests_in_the_result_step(monkeypatch):
+    flow, _ = _group_flow(monkeypatch)
+    _nothing_enabled.keys = frozenset({"pv_power"})
+
+    review = await flow.async_step_user(
+        _group_input(scan_interval=10, sensors=["pv_power", "grid_power"])
+    )
+
+    assert review["description_placeholders"]["requests"] == "1"
+    assert _one_request_per_key.asked[-1]["enabled"] == {"pv_power"}
+
+
+async def test_the_result_step_of_an_edit_replaces_the_group_in_the_load_after(
+    monkeypatch,
+):
+    group = _group("g1", ["pv_power"], title="Old", interval=10)
     flow, entry = _group_flow(monkeypatch, subentries=[group], editing="g1")
 
-    result = await flow.async_step_reconfigure(
+    review = await flow.async_step_reconfigure(
         _group_input(name="New", scan_interval=30, sensors=["grid_power"])
     )
+
+    assert review["step_id"] == "review_group"
+    assert review["description_placeholders"] == {
+        "requests": "1",
+        "before": "7",
+        "after": "3",
+        "budget": "40",
+    }
+    assert flow.updates == []
+
+    result = await flow.async_step_save_group()
 
     assert result == _abort(reason="reconfigure_successful")
     assert len(flow.updates) == 1
@@ -1323,6 +1529,97 @@ async def test_a_valid_edit_updates_the_group_in_place_without_a_flow_reload(
     assert update["subentry"] is group
     assert update["title"] == "New"
     assert update["data"] == {"scan_interval": 30, "sensors": ["grid_power"]}
+
+
+@pytest.mark.parametrize(
+    ("key_count", "step_id"),
+    [(7, "review_group"), (8, "review_group_over_budget")],
+)
+async def test_the_result_step_says_so_when_the_load_with_the_group_is_over_the_budget(
+    monkeypatch, key_count, step_id
+):
+    flow, entry = _group_flow(monkeypatch)
+    entry.options["scan_interval"] = 12
+    keys = [f"key_{index}" for index in range(key_count)]
+
+    review = await flow.async_step_user(_group_input(scan_interval=12, sensors=keys))
+
+    assert review["step_id"] == step_id
+    assert review["menu_options"] == ["save_group", "change_selection"]
+    assert flow.created == []
+    saved = await flow.async_step_save_group()
+    assert saved["type"] == "create_entry"
+
+
+@pytest.mark.parametrize("editing", [False, True])
+async def test_change_selection_returns_to_the_form_with_the_submission_kept(
+    monkeypatch, *, editing
+):
+    group = _group("g1", ["grid_power"])
+    flow, _ = _group_flow(
+        monkeypatch, subentries=[group], editing="g1" if editing else None
+    )
+    step = flow.async_step_reconfigure if editing else flow.async_step_user
+    submitted = _group_input(name="Mine", scan_interval=25, sensors=["pv_power"])
+    await step(submitted)
+
+    form = await flow.async_step_change_selection()
+
+    assert form["type"] == "form"
+    assert form["step_id"] == ("reconfigure" if editing else "user")
+    schema = form["data_schema"]
+    assert _marker(schema, "name").default() == "Mine"
+    assert _marker(schema, "scan_interval").default() == 25
+    assert _marker(schema, "sensors").default() == ["pv_power"]
+    assert form["description_placeholders"] == {"load": "7", "budget": "40"}
+    assert flow.created == []
+    assert flow.updates == []
+
+
+@pytest.mark.parametrize(
+    "step", ["async_step_review_group", "async_step_review_group_over_budget"]
+)
+async def test_the_result_step_shows_the_same_figures_when_it_is_entered_again(
+    monkeypatch, step
+):
+    flow, _ = _group_flow(monkeypatch)
+    review = await flow.async_step_user(
+        _group_input(sensors=["pv_power", "grid_power"])
+    )
+
+    again = await getattr(flow, step)({})
+
+    assert again == review
+
+
+async def test_a_changed_selection_goes_through_the_result_step_again(monkeypatch):
+    flow, _ = _group_flow(monkeypatch)
+    await flow.async_step_user(_group_input(sensors=["pv_power"]))
+    await flow.async_step_change_selection()
+
+    review = await flow.async_step_user(
+        _group_input(sensors=["pv_power", "grid_power"])
+    )
+
+    assert review["description_placeholders"]["requests"] == "2"
+    assert flow.created == []
+    saved = await flow.async_step_save_group()
+    assert saved["data"]["sensors"] == ["pv_power", "grid_power"]
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        "async_step_save_group",
+        "async_step_change_selection",
+        "async_step_review_group",
+        "async_step_review_group_over_budget",
+    ],
+)
+async def test_the_result_choices_need_a_validated_submission(monkeypatch, step):
+    flow, _ = _group_flow(monkeypatch)
+
+    assert await getattr(flow, step)() == _abort(reason="confirmation_not_pending")
 
 
 @pytest.mark.parametrize("interval", [9, 0, 12.5, "fast", None])
@@ -1343,6 +1640,7 @@ async def test_an_invalid_interval_is_reported_on_its_field_and_nothing_is_saved
     assert result["type"] == "form"
     assert result["errors"] == {"scan_interval": "invalid_scan_interval"}
     assert flow.updates == []
+    assert flow.created == []
 
 
 async def test_a_submission_without_sensors_is_reported_on_the_sensors_field(
@@ -1352,6 +1650,7 @@ async def test_a_submission_without_sensors_is_reported_on_the_sensors_field(
 
     result = await flow.async_step_user(_group_input(sensors=[]))
 
+    assert result["type"] == "form"
     assert result["errors"] == {"sensors": "no_sensors_selected"}
 
 
@@ -1387,7 +1686,7 @@ async def test_every_error_is_reported_together_and_the_submission_is_redisplaye
 
 
 @pytest.mark.parametrize("editing", [False, True])
-async def test_an_installation_without_sensors_cannot_have_groups(
+async def test_an_installation_without_entities_cannot_have_groups(
     monkeypatch, *, editing
 ):
     group = _group("g1", [])
@@ -1402,7 +1701,7 @@ async def test_an_installation_without_sensors_cannot_have_groups(
     assert await step() == _abort(reason="no_sensors")
 
 
-async def test_adding_with_every_sensor_already_grouped_is_aborted_with_a_reason(
+async def test_adding_with_every_entity_already_grouped_is_aborted_with_a_reason(
     monkeypatch,
 ):
     groups = [
@@ -1414,7 +1713,7 @@ async def test_adding_with_every_sensor_already_grouped_is_aborted_with_a_reason
     assert await flow.async_step_user() == _abort(reason="all_sensors_assigned")
 
 
-async def test_editing_a_group_that_holds_every_sensor_still_shows_the_form(
+async def test_editing_a_group_that_holds_every_entity_still_shows_the_form(
     monkeypatch,
 ):
     group = _group("g1", ["pv_power", "grid_power", "battery_soc"])
@@ -1432,7 +1731,7 @@ async def test_editing_a_group_that_holds_every_sensor_still_shows_the_form(
     assert _marker(form["data_schema"], "scan_interval").default() == 10
 
 
-async def test_options_exclude_sensors_of_other_groups_and_include_the_groups_own(
+async def test_options_exclude_entities_of_other_groups_and_include_the_groups_own(
     monkeypatch,
 ):
     groups = [_group("g1", ["pv_power"]), _group("g2", ["grid_power"])]
@@ -1446,7 +1745,7 @@ async def test_options_exclude_sensors_of_other_groups_and_include_the_groups_ow
     }
 
 
-async def test_a_sensor_released_by_one_group_is_offered_to_another(monkeypatch):
+async def test_an_entity_released_by_one_group_is_offered_to_another(monkeypatch):
     first, second = _group("g1", ["pv_power"]), _group("g2", ["grid_power"])
     flow, entry = _group_flow(monkeypatch, subentries=[first, second], editing="g2")
     assert "pv_power" not in _offered(await flow.async_step_reconfigure())
@@ -1456,13 +1755,14 @@ async def test_a_sensor_released_by_one_group_is_offered_to_another(monkeypatch)
     assert "pv_power" in _offered(await flow.async_step_reconfigure())
 
 
-async def test_options_are_labelled_with_the_names_users_see(monkeypatch):
+async def test_options_are_labelled_with_their_block_and_the_names_users_see(
+    monkeypatch,
+):
     registered = [
         _registered("pv_power", name="Roof", original_name="Solar power"),
         _registered("grid_power", original_name="Grid power"),
         _registered("battery_soc", name=None, original_name=None),
         _registered("load_power", original_name="Other entry"),
-        _registered("operating_mode", original_name="Not a sensor", domain="switch"),
     ]
     registered[3].unique_id = "other-entry_load_power"
     flow, _ = _group_flow(monkeypatch, registered=registered)
@@ -1470,26 +1770,69 @@ async def test_options_are_labelled_with_the_names_users_see(monkeypatch):
     offered = _offered(await flow.async_step_user())
 
     assert offered == {
-        "pv_power": "Roof",
-        "grid_power": "Grid power",
-        "battery_soc": "battery_soc",
+        "battery_soc": "Realtime: battery_soc",
+        "pv_power": "Realtime: Roof",
+        "grid_power": "Energy: Grid power",
     }
 
 
-async def test_options_are_listed_in_label_order(monkeypatch):
+async def test_a_block_without_a_translation_is_labelled_by_its_name(monkeypatch):
+    flow, _ = _group_flow(monkeypatch, blocks={"pv_power": "parallel"})
+
+    assert _offered(await flow.async_step_user()) == {
+        "pv_power": "parallel: Solar power"
+    }
+
+
+async def test_options_are_listed_in_register_order(monkeypatch):
     flow, _ = _group_flow(monkeypatch)
 
     offered = _offered(await flow.async_step_user())
 
-    assert list(offered.values()) == sorted(offered.values())
+    assert list(offered) == ["battery_soc", "pv_power", "grid_power"]
 
 
-async def test_a_disabled_sensor_is_still_offered(monkeypatch):
-    disabled = _registered("pv_power", original_name="Solar power")
-    disabled.disabled_by = "user"
-    flow, _ = _group_flow(monkeypatch, registered=[disabled])
+@pytest.mark.parametrize(
+    ("disabled_by", "label"),
+    [
+        (None, "Realtime: Solar power"),
+        ("user", "Realtime: Solar power (disabled)"),
+        ("integration", "Realtime: Solar power (disabled)"),
+    ],
+)
+async def test_a_disabled_entity_is_still_offered_and_says_it_is_disabled(
+    monkeypatch, disabled_by, label
+):
+    entity = _registered(
+        "pv_power", original_name="Solar power", disabled_by=disabled_by
+    )
+    flow, _ = _group_flow(monkeypatch, registered=[entity])
 
-    assert set(_offered(await flow.async_step_user())) == {"pv_power"}
+    assert _offered(await flow.async_step_user()) == {"pv_power": label}
+
+
+async def test_a_group_may_hold_enabled_entities_of_several_domains(monkeypatch):
+    registered = [
+        _registered("pv_power", original_name="Solar power"),
+        _registered("backup_reserve_soc", original_name="Reserve", domain="number"),
+        _registered("ethernet_mode", original_name="Mode", domain="select"),
+        _registered("battery_charge_enable", original_name="Charge", domain="switch"),
+    ]
+    blocks = dict.fromkeys(
+        ("backup_reserve_soc", "ethernet_mode", "battery_charge_enable", "pv_power"),
+        "settings",
+    )
+    flow, _ = _group_flow(monkeypatch, registered=registered, blocks=blocks)
+    keys = list(blocks)
+    _nothing_enabled.keys = frozenset(keys)
+
+    form = await flow.async_step_user()
+    review = await flow.async_step_user(_group_input(sensors=keys))
+    saved = await flow.async_step_save_group()
+
+    assert set(_offered(form)) == set(keys)
+    assert review["description_placeholders"]["requests"] == "4"
+    assert saved["data"]["sensors"] == keys
 
 
 async def test_editing_works_while_the_entry_is_not_loaded(monkeypatch):
@@ -1498,23 +1841,26 @@ async def test_editing_works_while_the_entry_is_not_loaded(monkeypatch):
     assert not hasattr(entry, "runtime_data")
 
     form = await flow.async_step_reconfigure()
+    review = await flow.async_step_reconfigure(_group_input())
 
     assert form["type"] == "form"
+    assert review["type"] == "menu"
 
 
-async def test_stale_sensors_are_hidden_when_editing_and_dropped_on_save(monkeypatch):
+async def test_stale_entities_are_hidden_when_editing_and_dropped_on_save(monkeypatch):
     group = _group("g1", ["pv_power", "no_longer_exists"])
     flow, _ = _group_flow(monkeypatch, subentries=[group], editing="g1")
 
     form = await flow.async_step_reconfigure()
     shown = _marker(form["data_schema"], "sensors").default()
     await flow.async_step_reconfigure(_group_input(sensors=shown))
+    await flow.async_step_save_group()
 
     assert shown == ["pv_power"]
     assert flow.updates[0]["data"]["sensors"] == ["pv_power"]
 
 
-async def test_groups_of_other_subentry_types_do_not_own_sensors(monkeypatch):
+async def test_groups_of_other_subentry_types_do_not_own_entities(monkeypatch):
     foreign = SimpleNamespace(
         subentry_id="x", subentry_type="something_else", title="", data={}
     )
@@ -1575,8 +1921,8 @@ def _state(guard):
     )
 
 
-async def _read_refused(client, device):
-    del client, device
+async def _read_refused(client, device, enabled):
+    del client, device, enabled
     return Readout(values={}, refusals={"pv_power": 2})
 
 
@@ -1685,7 +2031,7 @@ def _prefix_error(result):
 )
 def test_a_well_formed_prefix_is_trimmed_and_lowercased(value, expected):
     checked = config_flow.validate_prefix(
-        value=value, other_prefixes=set(), sensor_keys=set()
+        value=value, other_prefixes=set(), catalogue_keys=set()
     )
 
     assert checked == config_flow.PrefixCheck(prefix=expected, error=None)
@@ -1714,7 +2060,7 @@ def test_a_well_formed_prefix_is_trimmed_and_lowercased(value, expected):
 )
 def test_a_malformed_prefix_is_rejected_not_rewritten(value):
     checked = config_flow.validate_prefix(
-        value=value, other_prefixes=set(), sensor_keys=set()
+        value=value, other_prefixes=set(), catalogue_keys=set()
     )
 
     assert checked.error == "invalid_prefix"
@@ -1734,7 +2080,7 @@ def test_a_prefix_is_unique_across_installations_and_empty_counts_as_a_value(
     value, others, error
 ):
     checked = config_flow.validate_prefix(
-        value=value, other_prefixes=others, sensor_keys=set()
+        value=value, other_prefixes=others, catalogue_keys=set()
     )
 
     assert checked.error == error
@@ -1743,8 +2089,9 @@ def test_a_prefix_is_unique_across_installations_and_empty_counts_as_a_value(
 @pytest.mark.parametrize(
     ("value", "error"),
     [
-        ("battery", "prefix_shadows_sensor"),
-        ("pv", "prefix_shadows_sensor"),
+        ("battery", "prefix_shadows_entity"),
+        ("pv", "prefix_shadows_entity"),
+        ("backup", "prefix_shadows_entity"),
         ("batterypower", None),
         ("bat", None),
         ("power", None),
@@ -1755,7 +2102,7 @@ def test_a_prefix_may_not_start_a_sensor_key_of_any_supported_model(value, error
     checked = config_flow.validate_prefix(
         value=value,
         other_prefixes=set(),
-        sensor_keys={"battery_power", "pv_power"},
+        catalogue_keys={"battery_power", "pv_power", "backup_reserve_soc"},
     )
 
     assert checked.error == error
@@ -1763,30 +2110,13 @@ def test_a_prefix_may_not_start_a_sensor_key_of_any_supported_model(value, error
 
 def test_a_malformed_prefix_is_reported_before_it_is_compared_with_anything():
     checked = config_flow.validate_prefix(
-        value="Pv__x", other_prefixes={"pv__x"}, sensor_keys={"pv__x_a"}
+        value="Pv__x", other_prefixes={"pv__x"}, catalogue_keys={"pv__x_a"}
     )
 
     assert checked.error == "invalid_prefix"
 
 
-def test_the_prefix_context_gathers_every_installations_prefix_and_every_models_keys(
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        config_flow,
-        "PROFILES",
-        (
-            ALPHA,
-            GAMMA,
-            Profile(
-                key="delta",
-                display_name="Delta",
-                device_types=frozenset({4}),
-                measurement_keys=frozenset({"a", "pv_power"}),
-                hand_verified=True,
-            ),
-        ),
-    )
+def test_the_prefix_context_gathers_every_prefix_and_the_keys_of_every_model():
     entries = [
         SimpleNamespace(options={"prefix": "house"}),
         SimpleNamespace(options={"prefix": ""}),
@@ -1796,7 +2126,7 @@ def test_the_prefix_context_gathers_every_installations_prefix_and_every_models_
     context = config_flow.prefix_context(entries=entries)
 
     assert context.other_prefixes == {"house", ""}
-    assert context.sensor_keys == {"a", "pv_power", "grid_power"}
+    assert context.catalogue_keys == {"pv_power", "grid_power", "battery_soc"}
 
 
 @pytest.mark.parametrize(
@@ -1888,7 +2218,7 @@ async def _find_conflict(monkeypatch, *, taken=(), recorded=(), **overrides):
         "hass": _conflict_hass(),
         "context": config_flow.PrefixContext(frozenset(), frozenset()),
         "prefix": "house",
-        "keys": ["pv_power", "grid_power"],
+        "domains": {"pv_power": "sensor", "backup_reserve_soc": "number"},
         "check_statistics": True,
         **overrides,
     }
@@ -1899,7 +2229,9 @@ async def test_no_conflict_when_nothing_is_taken_and_no_statistics_exist(monkeyp
     conflict, lookups = await _find_conflict(monkeypatch)
 
     assert conflict is None
-    assert lookups == [["sensor.saj_house_grid_power", "sensor.saj_house_pv_power"]]
+    assert lookups == [
+        ["number.saj_house_backup_reserve_soc", "sensor.saj_house_pv_power"]
+    ]
 
 
 async def test_a_taken_entity_id_is_reported_on_the_prefix_field_naming_the_id(
@@ -1907,11 +2239,11 @@ async def test_a_taken_entity_id_is_reported_on_the_prefix_field_naming_the_id(
 ):
     conflict, lookups = await _find_conflict(
         monkeypatch,
-        taken={"sensor.saj_house_pv_power", "sensor.saj_house_grid_power"},
+        taken={"sensor.saj_house_pv_power", "number.saj_house_backup_reserve_soc"},
     )
 
     assert conflict.errors == {"prefix": "entity_id_taken"}
-    assert conflict.placeholders == {"entity_id": "sensor.saj_house_grid_power"}
+    assert conflict.placeholders == {"entity_id": "number.saj_house_backup_reserve_soc"}
     assert lookups == []
 
 
@@ -2009,7 +2341,7 @@ async def test_setup_treats_a_cleared_prefix_field_as_empty(monkeypatch):
         ("house", "house", "prefix_in_use"),
         ("", "", "prefix_in_use"),
         ("Bad Prefix", "other", "invalid_prefix"),
-        ("pv", "other", "prefix_shadows_sensor"),
+        ("pv", "other", "prefix_shadows_entity"),
     ],
 )
 async def test_setup_refuses_a_bad_prefix_on_the_prefix_field_before_connecting(
@@ -2211,9 +2543,9 @@ async def test_an_unchanged_prefix_is_not_checked_against_the_registry_or_record
 @pytest.mark.parametrize(
     ("old", "new", "expected_old", "expected_new"),
     [
-        ("", "house", "sensor.saj_<key>", "sensor.saj_house_<key>"),
-        ("house", "garage", "sensor.saj_house_<key>", "sensor.saj_garage_<key>"),
-        ("house", "", "sensor.saj_house_<key>", "sensor.saj_<key>"),
+        ("", "house", "<domain>.saj_<key>", "<domain>.saj_house_<key>"),
+        ("house", "garage", "<domain>.saj_house_<key>", "<domain>.saj_garage_<key>"),
+        ("house", "", "<domain>.saj_house_<key>", "<domain>.saj_<key>"),
     ],
 )
 async def test_adding_changing_or_removing_a_prefix_asks_for_confirmation_first(
@@ -2289,6 +2621,58 @@ async def test_only_entities_at_the_id_the_old_prefix_produces_are_renamed(
         ("rename", "sensor.saj_house_pv_power", "sensor.saj_garage_pv_power")
     ]
     assert entities[1].entity_id == "sensor.my_grid"
+    assert entities[2].entity_id == "sensor.saj_house_battery_soc"
+
+
+@pytest.mark.parametrize(
+    "domain", ["sensor", "number", "select", "switch", "time", "text"]
+)
+async def test_a_prefix_change_renames_the_entities_of_every_domain(
+    monkeypatch, domain
+):
+    entities = [
+        _registered_entity(
+            "backup_reserve_soc",
+            entity_id=f"{domain}.saj_house_backup_reserve_soc",
+            domain=domain,
+        )
+    ]
+    _entry, flow = _prefix_flow(monkeypatch, saved_prefix="house", entities=entities)
+    await flow.async_step_init(_submission(prefix="garage"))
+
+    await flow.async_step_confirm_prefix({})
+
+    assert _renames(flow) == [
+        (
+            "rename",
+            f"{domain}.saj_house_backup_reserve_soc",
+            f"{domain}.saj_garage_backup_reserve_soc",
+        )
+    ]
+
+
+async def test_the_new_ids_of_every_domain_are_checked_before_a_prefix_change(
+    monkeypatch,
+):
+    entities = [
+        _registered_entity(
+            "backup_reserve_soc",
+            entity_id="number.saj_backup_reserve_soc",
+            domain="number",
+        )
+    ]
+    _entry, flow = _prefix_flow(monkeypatch, entities=entities)
+    monkeypatch.setattr(
+        config_flow, "entity_id_in_use", _taking("number.saj_house_backup_reserve_soc")
+    )
+
+    result = await flow.async_step_init(_submission(prefix="house"))
+
+    assert result["errors"] == {"prefix": "entity_id_taken"}
+    assert result["description_placeholders"]["entity_id"] == (
+        "number.saj_house_backup_reserve_soc"
+    )
+    assert flow.hass.config_entries.events == []
 
 
 async def test_a_disabled_entity_is_renamed_like_any_other(monkeypatch):
@@ -2317,7 +2701,9 @@ async def test_a_taken_target_id_refuses_the_change_before_confirmation(
     assert result["step_id"] == "init"
     assert result["errors"] == {"prefix": "entity_id_taken"}
     assert result["description_placeholders"] == {
-        "entity_id": "sensor.saj_house_grid_power"
+        "entity_id": "sensor.saj_house_grid_power",
+        "load": "1.3",
+        "budget": "40",
     }
     assert _marker(result["data_schema"], "prefix").description == {
         "suggested_value": "house"
@@ -2387,9 +2773,17 @@ async def test_statistics_under_a_target_id_refuse_the_change_naming_the_id(
 
     assert result["errors"] == {"prefix": "statistics_exist"}
     assert result["description_placeholders"] == {
-        "entity_id": "sensor.saj_house_pv_power"
+        "entity_id": "sensor.saj_house_pv_power",
+        "load": "1.3",
+        "budget": "40",
     }
-    assert calls == [{"sensor.saj_house_pv_power", "sensor.saj_house_grid_power"}]
+    assert calls == [
+        {
+            "sensor.saj_house_pv_power",
+            "sensor.saj_house_grid_power",
+            "sensor.saj_house_battery_soc",
+        }
+    ]
     assert flow.hass.config_entries.events == []
 
 
@@ -2435,7 +2829,7 @@ async def test_without_a_recorder_the_statistics_check_is_skipped(monkeypatch):
         ("other", "other", "prefix_in_use"),
         ("", "", "prefix_in_use"),
         ("Not Valid", "other", "invalid_prefix"),
-        ("pv", "other", "prefix_shadows_sensor"),
+        ("pv", "other", "prefix_shadows_entity"),
     ],
 )
 async def test_configure_refuses_a_bad_prefix_on_the_prefix_field_before_connecting(
@@ -2517,7 +2911,7 @@ async def test_a_saved_prefix_that_now_breaks_a_rule_does_not_block_other_change
     [
         ("pv", "pv2_", "invalid_prefix"),
         ("bad_saved", "bad_other", "invalid_prefix"),
-        ("pv", "battery", "prefix_shadows_sensor"),
+        ("pv", "battery", "prefix_shadows_entity"),
         ("dup", "other", "prefix_in_use"),
     ],
 )
@@ -2527,15 +2921,16 @@ async def test_changing_a_rule_breaking_saved_prefix_to_a_bad_value_is_still_ref
     entry, flow = _prefix_flow(
         monkeypatch, saved_prefix=saved, others=[_other_entry(prefix="other")]
     )
+    entry.data = {**entry.data, "device_type": 4}
     monkeypatch.setattr(
         config_flow,
         "PROFILES",
         (
-            Profile(
+            profile(
+                base=HS3,
                 key="delta",
-                display_name="Delta",
-                device_types=frozenset({4}),
-                measurement_keys=frozenset({"battery_power", "pv_power"}),
+                device_types={4},
+                keys={"battery_power", "pv_power"},
                 hand_verified=True,
             ),
         ),
@@ -2545,4 +2940,197 @@ async def test_changing_a_rule_breaking_saved_prefix_to_a_bad_value_is_still_ref
 
     assert result["errors"] == {"prefix": error}
     assert flow.hass.config_entries.events == []
-    _unchanged(entry, options={"scan_interval": 45, "prefix": saved})
+    _unchanged(
+        entry,
+        data={**SAVED_DATA, "device_type": 4},
+        options={"scan_interval": 45, "prefix": saved},
+    )
+
+
+def _entry_with_group(*, keys, interval=10):
+    entry = _saved_entry()
+    entry.subentries = {"g1": _group("g1", keys, interval=interval)}
+    return entry
+
+
+SIX_KEYS = [f"key_{index}" for index in range(6)]
+
+
+@pytest.mark.parametrize(
+    ("group_keys", "expected_load"),
+    [([], "1.3"), (SIX_KEYS, "37.3")],
+)
+async def test_the_configure_form_describes_the_current_request_load(
+    monkeypatch, group_keys, expected_load
+):
+    entry = _saved_entry()
+    entry.subentries = {"g1": _group("g1", group_keys, interval=10)}
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    form = await flow.async_step_init()
+
+    assert form["description_placeholders"] == {"load": expected_load, "budget": "40"}
+
+
+async def test_the_configure_load_comes_from_the_stored_device_and_enabled_entities(
+    monkeypatch,
+):
+    entry = _entry_with_group(keys=["pv_power"], interval=20)
+    _nothing_enabled.keys = frozenset({"pv_power"})
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    await flow.async_step_init()
+
+    call = _one_request_per_key.asked[0]
+    assert (call["profile"], call["device_type"]) == (ALPHA, 0x0001)
+    assert call["enabled"] == {"pv_power"}
+    assert call["default_interval"] == 45
+    assert call["groups"] == [
+        config_flow.Cadence(interval=20, keys=frozenset({"pv_power"}))
+    ]
+    assert _nothing_enabled.asked[0]["entry_id"] == "entry-a"
+
+
+@pytest.mark.parametrize(
+    ("group_keys", "interval", "shown"),
+    [
+        (SIX_KEYS, 10, True),
+        (SIX_KEYS, 20, False),
+        (SIX_KEYS, 45, False),
+        ([*SIX_KEYS, "key_6", "key_7"], 45, False),
+        ([*SIX_KEYS, "key_6", "key_7"], 30, True),
+        ([], 10, False),
+    ],
+)
+async def test_the_load_is_confirmed_only_when_a_changed_interval_goes_over_budget(
+    monkeypatch, group_keys, interval, *, shown
+):
+    entry = _entry_with_group(keys=group_keys)
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    result = await flow.async_step_init(_submission(scan_interval=interval))
+
+    if shown:
+        assert result["step_id"] == "confirm_load"
+        assert entry.update_count == 0
+    else:
+        assert result == _abort(reason="changes_saved")
+        assert entry.options["scan_interval"] == interval
+
+
+async def test_the_load_confirmation_shows_the_load_before_and_after(monkeypatch):
+    entry = _entry_with_group(keys=SIX_KEYS)
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    form = await flow.async_step_init(_submission(scan_interval=10))
+
+    assert form["step_id"] == "confirm_load"
+    assert form["description_placeholders"] == {
+        "before": "37.3",
+        "after": "42",
+        "budget": "40",
+    }
+    after = _one_request_per_key.asked[0]
+    assert after["default_interval"] == 10
+    assert (after["profile"], after["device_type"]) == (ALPHA, 0x0001)
+
+
+async def test_confirming_the_load_saves_the_interval_and_it_is_shown_until_confirmed(
+    monkeypatch,
+):
+    entry = _entry_with_group(keys=SIX_KEYS)
+    flow = _options_flow(monkeypatch, entry=entry)
+    await flow.async_step_init(_submission(scan_interval=10))
+
+    again = await flow.async_step_confirm_load()
+    _unchanged(entry)
+    result = await flow.async_step_confirm_load({})
+
+    assert again["step_id"] == "confirm_load"
+    assert result == _abort(reason="changes_saved")
+    assert entry.options == {"scan_interval": 10, "prefix": ""}
+    assert entry.update_count == 1
+
+
+async def test_the_load_is_confirmed_after_the_model_the_replacement_and_the_prefix(
+    monkeypatch,
+):
+    entry = _entry_with_group(keys=SIX_KEYS)
+    flow = _options_flow(monkeypatch, entry=entry)
+    registry = FakeEntityRegistry([], flow.hass.config_entries.events)
+    monkeypatch.setattr(config_flow.er, "async_get", lambda _hass: registry)
+    monkeypatch.setattr(
+        config_flow.er, "async_entries_for_config_entry", lambda *_args: []
+    )
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _identifying(_assumed_device(serial=REPLACEMENT_SERIAL)),
+    )
+
+    steps = [
+        await flow.async_step_init(
+            _submission(model="beta", scan_interval=10, prefix="house")
+        )
+    ]
+    steps.append(await flow.async_step_confirm_model({}))
+    steps.append(await flow.async_step_confirm_replacement({}))
+    steps.append(await flow.async_step_confirm_prefix({}))
+
+    assert [form["step_id"] for form in steps] == [
+        "confirm_model",
+        "confirm_replacement",
+        "confirm_prefix",
+        "confirm_load",
+    ]
+    assert entry.update_count == 0
+    result = await flow.async_step_confirm_load({})
+    assert result == _abort(reason="changes_saved")
+    assert entry.options == {"scan_interval": 10, "prefix": "house"}
+
+
+async def test_the_load_after_a_replacement_is_computed_for_the_new_device(
+    monkeypatch,
+):
+    entry = _entry_with_group(keys=SIX_KEYS)
+    flow = _options_flow(monkeypatch, entry=entry)
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _identifying(
+            _device(serial=REPLACEMENT_SERIAL, profile=BETA, device_type=0x0002)
+        ),
+    )
+
+    await flow.async_step_init(_submission(scan_interval=10))
+    await flow.async_step_confirm_replacement({})
+
+    after = _one_request_per_key.asked[0]
+    assert (after["profile"], after["device_type"]) == (BETA, 0x0002)
+    stored = _one_request_per_key.asked[1]
+    assert (stored["profile"], stored["device_type"]) == (ALPHA, 0x0001)
+
+
+async def test_setup_checks_the_entity_ids_of_every_domain_the_device_has(monkeypatch):
+    mixed = profile(
+        base=HS3,
+        key="mixed",
+        device_types={5},
+        keys={"pv_power", "backup_reserve_soc"},
+        hand_verified=True,
+    )
+    monkeypatch.setattr(config_flow, "PROFILES", (mixed,))
+    monkeypatch.setattr(
+        config_flow, "identify", _identifying(_device(profile=mixed, device_type=5))
+    )
+    monkeypatch.setattr(
+        config_flow, "entity_id_in_use", _taking("number.saj_house_backup_reserve_soc")
+    )
+    instance = _flow(monkeypatch)
+
+    result = await instance.async_step_user({**INPUT, "prefix": "house"})
+
+    assert result["errors"] == {"prefix": "entity_id_taken"}
+    assert result["description_placeholders"] == {
+        "entity_id": "number.saj_house_backup_reserve_soc"
+    }

@@ -3,25 +3,19 @@ import pytest
 import saj.device as device_module
 from saj.device import Device, identify
 from saj.errors import ModelMismatchError, UnsupportedDeviceError
-from saj.profiles import AUTOMATIC, Profile, Resolution
+from saj.models.hs3 import PROFILE as HS3
+from saj.profiles import AUTOMATIC, Resolution
+from tests.profiles import profile
 from tests.saj.fakes import FakeClient
 
 RECOGNISED_TYPE = 0x0001
 UNRECOGNISED_TYPE = 0x7777
 RATED_POWER = 6000
-FIRST = Profile(
-    key="first",
-    display_name="First",
-    device_types=frozenset({RECOGNISED_TYPE}),
-    measurement_keys=frozenset(),
-    hand_verified=True,
+FIRST = profile(
+    base=HS3, key="first", device_types={RECOGNISED_TYPE}, keys=(), hand_verified=True
 )
-SECOND = Profile(
-    key="second",
-    display_name="Second",
-    device_types=frozenset({0x0002}),
-    measurement_keys=frozenset(),
-    hand_verified=False,
+SECOND = profile(
+    base=HS3, key="second", device_types={0x0002}, keys=(), hand_verified=False
 )
 
 

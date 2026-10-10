@@ -19,29 +19,29 @@ from custom_components.saj_local.saj.errors import (
     UnknownModelError,
     UnsupportedDeviceError,
 )
+from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from custom_components.saj_local.saj.poller import (
     CadencePlan,
     CycleFailedError,
     CycleResult,
     IdentityChangedError,
 )
-from custom_components.saj_local.saj.profiles import Profile
 from custom_components.saj_local.saj.schedule import Cadence
 from custom_components.saj_local.saj.telemetry import Telemetry
+from tests.profiles import profile
 
-PROFILE = Profile(
+SUPPORTED_KEYS = frozenset(
+    {"pv_power", "grid_power", "battery_soc", "pv_energy_today", "backup_reserve_soc"}
+)
+PROFILE = profile(
+    base=HS3,
     key="alpha",
-    display_name="Alpha",
-    device_types=frozenset({0x1610}),
-    measurement_keys=frozenset({"pv_power", "grid_power", "battery_soc"}),
+    device_types={0x1610},
+    keys=SUPPORTED_KEYS,
     hand_verified=True,
 )
-OTHER_PROFILE = Profile(
-    key="beta",
-    display_name="Beta",
-    device_types=frozenset({0x0010}),
-    measurement_keys=frozenset(),
-    hand_verified=False,
+OTHER_PROFILE = profile(
+    base=HS3, key="beta", device_types={0x0010}, keys=(), hand_verified=False
 )
 SELECTION = "automatic"
 DEVICE = Device("TEST-001", 0x1610, 12000, PROFILE, detected=True)
@@ -99,6 +99,15 @@ class FakePoller:
         return self.load
 
 
+@pytest.fixture(autouse=True)
+def every_supported_entity_is_enabled(monkeypatch):
+    monkeypatch.setattr(
+        coordinator_module,
+        "enabled_entity_keys",
+        lambda **asked: frozenset(register.key for register in asked["registers"]),
+    )
+
+
 def _coordinator(
     *, contexts: set[str] | None = None
 ) -> tuple[SajCoordinator, FakeClient, FakePoller]:
@@ -108,6 +117,7 @@ def _coordinator(
     coordinator.client = client
     coordinator.device = DEVICE
     coordinator.model_selection = SELECTION
+    coordinator.entry_id = "logical-installation"
     coordinator.last_error = None
     coordinator.last_read = frozenset()
     coordinator.unavailable_keys = frozenset()
@@ -161,8 +171,9 @@ class RecordingSchedule:
 class RecordingPoller(FakePoller):
     instances: ClassVar[list] = []
 
-    def __init__(self, *, target, tracking, services) -> None:
+    def __init__(self, *, target, tracking, services, enabled) -> None:
         super().__init__()
+        self.enabled = enabled
         self.target = target
         self.tracking = tracking
         self.services = services
@@ -175,7 +186,9 @@ def _entry(*, options=None, subentries=()) -> SimpleNamespace:
         options={"scan_interval": 47} if options is None else options,
         data={"model": "alpha"},
         subentries={
-            f"id-{index}": SimpleNamespace(subentry_type=kind, data=data)
+            f"id-{index}": SimpleNamespace(
+                subentry_id=f"id-{index}", subentry_type=kind, data=data
+            )
             for index, (kind, data) in enumerate(subentries)
         },
     )
@@ -187,6 +200,7 @@ def _construct(monkeypatch, entry, *, poller_class=RecordingPoller):
     captured = {}
 
     def framework_init(coordinator, *, hass, logger, name) -> None:
+        coordinator.hass = hass
         captured.update(hass=hass, name=name)
 
     def build(*, default_interval, groups, supported):
@@ -229,7 +243,7 @@ def test_constructor_builds_the_poller_from_the_default_interval_and_polling_gro
         Cadence(interval=10, keys=frozenset({"pv_power"})),
         Cadence(interval=120, keys=frozenset({"battery_soc"})),
     ]
-    assert captured["supported"] == PROFILE.measurement_keys
+    assert captured["supported"] == SUPPORTED_KEYS
     assert captured["name"] == "SAJ"
     poller = coordinator.poller
     assert poller.target.client is client
@@ -242,6 +256,21 @@ def test_constructor_builds_the_poller_from_the_default_interval_and_polling_gro
     assert coordinator.entry_id == "logical-installation"
     assert coordinator.last_error is None
     assert coordinator._initial_refresh
+
+
+def test_the_poller_is_told_the_installations_enabled_keys_at_load(monkeypatch):
+    asked = {}
+
+    def enabled_in_registry(*, hass, entry_id, registers):
+        asked.update(entry_id=entry_id, keys={r.key for r in registers})
+        return frozenset({"pv_power"})
+
+    monkeypatch.setattr(coordinator_module, "enabled_entity_keys", enabled_in_registry)
+
+    coordinator, _, _ = _construct(monkeypatch, _entry())
+
+    assert coordinator.poller.enabled == frozenset({"pv_power"})
+    assert asked == {"entry_id": "logical-installation", "keys": set(SUPPORTED_KEYS)}
 
 
 def test_constructor_uses_the_default_interval_when_none_was_saved(monkeypatch):
@@ -321,13 +350,25 @@ def test_a_wakeup_is_the_closest_whole_second_after_the_target():
     assert wakeup_delay(target=110.0, now=100.9) == timedelta(seconds=10)
 
 
-async def test_first_callback_reads_every_supported_sensor():
+async def test_first_callback_reads_the_entities_enabled_in_the_registry(monkeypatch):
     coordinator, _client, poller = _coordinator()
+    asked = {}
+
+    def enabled_in_registry(*, hass, entry_id, registers):
+        asked.update(hass=hass, entry_id=entry_id, keys={r.key for r in registers})
+        return frozenset({"pv_power", "backup_reserve_soc"})
+
+    monkeypatch.setattr(coordinator_module, "enabled_entity_keys", enabled_in_registry)
 
     await coordinator._async_update_data()
 
-    assert poller.enabled_seen == [set(PROFILE.measurement_keys)]
-    assert coordinator.enabled_sensor_keys == set()
+    assert poller.enabled_seen == [{"pv_power", "backup_reserve_soc"}]
+    assert asked == {
+        "hass": coordinator.hass,
+        "entry_id": "logical-installation",
+        "keys": SUPPORTED_KEYS,
+    }
+    assert coordinator.enabled_keys == set()
 
 
 async def test_later_callbacks_read_only_sensors_with_active_listeners():
@@ -337,7 +378,7 @@ async def test_later_callbacks_read_only_sensors_with_active_listeners():
     await coordinator._async_update_data()
 
     assert poller.enabled_seen[1] == {"pv_power", "grid_power"}
-    assert coordinator.enabled_sensor_keys == {"pv_power", "grid_power"}
+    assert coordinator.enabled_keys == {"pv_power", "grid_power"}
 
 
 async def test_the_result_is_published_and_merged_with_earlier_values():

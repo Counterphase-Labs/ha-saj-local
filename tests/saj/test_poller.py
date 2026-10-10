@@ -3,10 +3,12 @@ import logging
 
 import pytest
 
+from saj.catalogue import Row
 from saj.client import ModbusError, ModbusErrorMessage
 from saj.device import Device
 from saj.errors import UnsupportedDeviceError
-from saj.health import Refusal
+from saj.health import REFUSAL_THRESHOLD, Break, ReadHealth, Refusal, Region
+from saj.models.hs3 import PROFILE as HS3
 from saj.poller import (
     RECONNECT_REQUESTS,
     CadencePlan,
@@ -17,19 +19,16 @@ from saj.poller import (
     Target,
     Tracking,
 )
-from saj.profiles import Profile
 from saj.schedule import Cadence
-from saj.telemetry import Readout, ReadRange
+from saj.telemetry import Readout, ReadRange, RequestOutcome
+from tests.profiles import profile
+from tests.saj.fakes import MemoryClient
 
-PROFILE = Profile(
-    key="alpha",
-    display_name="Alpha",
-    device_types=frozenset({1}),
-    measurement_keys=frozenset(),
-    hand_verified=True,
-)
+PROFILE = profile(base=HS3, key="alpha", device_types={1}, keys=(), hand_verified=True)
 DEVICE = Device("SERIAL-1", 1, 6000, PROFILE, detected=True)
 OTHER_DEVICE = Device("SERIAL-2", 1, 6000, PROFILE, detected=True)
+ROW_AB = (Row(address=0x4000, words=1), Row(address=0x4001, words=1))
+ROW_C = (Row(address=0x4002, words=1),)
 NOW = 1000.0
 PER_REQUEST = 10.0
 
@@ -104,6 +103,8 @@ class FakeHealth:
         self.lifted: frozenset[str] = frozenset()
         self.newly_suspended: frozenset[str] = frozenset()
         self.refusals = {}
+        self.narrowing: tuple[Region, ...] = ()
+        self.breaks: frozenset[Break] = frozenset()
         self.calls: list[tuple] = []
 
     def suspended(self):
@@ -120,9 +121,12 @@ class FakeHealth:
         self.calls.append(("success", key))
         return key in self.lifted
 
-    def record_refusal(self, *, key, code, now):
-        self.calls.append(("refusal", key, code, now))
-        return key in self.newly_suspended
+    def record_request_read(self, *, rows):
+        self.calls.append(("read", tuple(rows)))
+
+    def record_request_refused(self, *, rows, keys, code, now):
+        self.calls.append(("refused", tuple(rows), frozenset(keys), code, now))
+        return self.newly_suspended
 
 
 class Harness:
@@ -141,22 +145,28 @@ class Harness:
         self.timeouts: list[float] = []
         self.deadline_expires = False
 
-    def plan(self, *, device, enabled, isolated):
+    def plan(self, *, device, enabled, narrowing, breaks):
         self.plans.append(
-            {"device": device, "enabled": frozenset(enabled), "isolated": isolated}
+            {
+                "device": device,
+                "enabled": frozenset(enabled),
+                "narrowing": narrowing,
+                "breaks": breaks,
+            }
         )
         return [
             ReadRange(address=0x4000 + index, count=1, keys=("k",))
             for index in range(self.plan_length)
         ]
 
-    async def read(self, *, client, device, enabled, isolated):
+    async def read(self, *, client, device, enabled, narrowing, breaks):
         self.reads.append(
             {
                 "client": client,
                 "device": device,
                 "enabled": frozenset(enabled),
-                "isolated": isolated,
+                "narrowing": narrowing,
+                "breaks": breaks,
             }
         )
         outcome = self.outcomes.pop(0)
@@ -167,6 +177,8 @@ class Harness:
     async def find_identity(self, *, client, selection):
         self.identified.append((client, selection))
         return self.identity
+
+    enabled: frozenset[str] = frozenset({"a", "b", "c"})
 
     async def bound(self, awaitable, seconds):
         self.timeouts.append(seconds)
@@ -191,6 +203,7 @@ class Harness:
                 read=self.read,
                 identity=self.find_identity,
             ),
+            enabled=self.enabled,
         )
 
 
@@ -227,15 +240,21 @@ async def test_a_cycle_reads_due_enabled_unsuspended_keys_and_due_retests(
     assert harness.plans[0]["enabled"] == expected
 
 
-async def test_refused_keys_are_requested_in_requests_of_their_own():
+async def test_pending_narrowing_and_breaks_are_passed_into_planning_and_reading():
     harness = Harness()
     harness.schedule.due_keys = frozenset({"a", "b"})
-    harness.health.refused_keys = frozenset({"b"})
+    harness.health.narrowing = (Region(rows=(Row(address=0x4000, words=1),)),)
+    harness.health.breaks = frozenset({Break(before=0x4001, after=0x4003)})
 
-    await harness.poller().run(enabled={"a", "b"})
+    poller = harness.poller()
+    await poller.run(enabled={"a", "b"})
 
-    assert harness.reads[0]["isolated"] == {"b"}
-    assert harness.plans[0]["isolated"] == {"b"}
+    assert harness.reads[0]["narrowing"] == harness.health.narrowing
+    assert harness.reads[0]["breaks"] == harness.health.breaks
+    assert harness.plans[0]["narrowing"] == harness.health.narrowing
+    assert harness.plans[0]["breaks"] == harness.health.breaks
+    assert poller.narrowing == harness.health.narrowing
+    assert poller.breaks == harness.health.breaks
 
 
 async def test_nothing_to_read_sends_no_request_and_still_serves_the_schedule():
@@ -285,7 +304,16 @@ async def test_a_successful_cycle_returns_values_and_updates_trackers():
     harness.health.suspended_keys = frozenset({"s"})
     harness.health.refused_keys = frozenset({"c", "s"})
     harness.schedule.next_wakeup = NOW + 5
-    harness.outcomes = [Readout(values={"a": 1, "b": None}, refusals={"c": 2})]
+    harness.outcomes = [
+        Readout(
+            values={"a": 1, "b": None},
+            refusals={"c": 2},
+            outcomes=(
+                RequestOutcome(rows=ROW_AB, keys=frozenset({"a", "b"}), code=None),
+                RequestOutcome(rows=ROW_C, keys=frozenset({"c"}), code=2),
+            ),
+        )
+    ]
 
     result = await harness.poller().run(enabled={"a", "b", "c"})
 
@@ -298,7 +326,8 @@ async def test_a_successful_cycle_returns_values_and_updates_trackers():
     assert [call for call in harness.health.calls if call[0] != "retests_due"] == [
         ("success", "a"),
         ("success", "b"),
-        ("refusal", "c", 2, NOW),
+        ("read", ROW_AB),
+        ("refused", ROW_C, frozenset({"c"}), 2, NOW),
     ]
     assert ("mark_read", NOW) in harness.schedule.calls
     assert ("succeeded",) in harness.guard.calls
@@ -336,7 +365,13 @@ async def test_a_suspension_is_warned_once_and_a_lifted_suspension_is_informed(c
     harness.schedule.due_keys = frozenset({"a", "b"})
     harness.health.newly_suspended = frozenset({"b"})
     harness.health.lifted = frozenset({"a"})
-    harness.outcomes = [Readout(values={"a": 1}, refusals={"b": 5})]
+    harness.outcomes = [
+        Readout(
+            values={"a": 1},
+            refusals={"b": 5},
+            outcomes=(RequestOutcome(rows=ROW_C, keys=frozenset({"b"}), code=5),),
+        )
+    ]
 
     with caplog.at_level(logging.INFO):
         await harness.poller().run(enabled={"a", "b"})
@@ -353,7 +388,13 @@ async def test_a_suspension_is_warned_once_and_a_lifted_suspension_is_informed(c
 async def test_refusals_that_do_not_change_suspension_are_silent(caplog):
     harness = Harness()
     harness.schedule.due_keys = frozenset({"a"})
-    harness.outcomes = [Readout(values={}, refusals={"a": 2})]
+    harness.outcomes = [
+        Readout(
+            values={},
+            refusals={"a": 2},
+            outcomes=(RequestOutcome(rows=ROW_C, keys=frozenset({"a"}), code=2),),
+        )
+    ]
 
     with caplog.at_level(logging.DEBUG):
         await harness.poller().run(enabled={"a"})
@@ -481,7 +522,7 @@ async def test_a_different_device_at_the_endpoint_fails_the_cycle_before_reading
 
 
 def _stale(harness: Harness, *, requests: int = 1, peer_closed: bool = True):
-    async def read(*, client, device, enabled, isolated):
+    async def read(*, client, device, enabled, narrowing, breaks):
         harness.reads.append({"client": client, "enabled": frozenset(enabled)})
         if len(harness.reads) == 1:
             for _ in range(requests):
@@ -519,8 +560,8 @@ async def test_a_stale_reopen_is_followed_by_a_full_read_of_every_unsuspended_ke
     _stale(harness)
     sizes = []
 
-    def plan(*, device, enabled, isolated):
-        del device, isolated
+    def plan(*, device, enabled, narrowing, breaks):
+        del device, narrowing, breaks
         sizes.append(len(enabled))
         return [
             ReadRange(address=index, count=1, keys=("k",))
@@ -542,7 +583,7 @@ async def test_a_second_failure_after_the_stale_reopen_is_not_retried_again():
     harness.schedule.due_keys = frozenset({"a"})
     _stale(harness)
 
-    async def always_failing(*, client, device, enabled, isolated):
+    async def always_failing(*, client, device, enabled, narrowing, breaks):
         harness.reads.append({"client": client})
         await client.read_holding_registers(0, 1)
         raise ModbusError(ModbusErrorMessage.INCOMPLETE_RESPONSE, peer_closed=True)
@@ -619,8 +660,8 @@ async def test_cadence_plans_describe_each_cadence_and_its_request_count():
             default=False,
         ),
     )
-    assert harness.plans[0]["isolated"] == frozenset()
-    assert poller.planned_load() == 2 * 60 / 60 + 2 * 60 / 10
+    assert harness.plans[0]["narrowing"] == ()
+    assert harness.plans[0]["breaks"] == frozenset()
 
 
 async def test_poller_exposes_failure_and_refusal_state_for_diagnostics():
@@ -643,3 +684,180 @@ def test_a_failed_cycle_error_reads_like_its_cause():
     error = CycleFailedError(cause=ValueError("bad"), next_wakeup=1)
 
     assert str(error) == "bad"
+
+
+LOAD_DEVICE = Device(
+    "SERIAL-1",
+    1,
+    6000,
+    profile(
+        base=HS3,
+        key="gamma",
+        device_types={1},
+        keys=(
+            "operating_mode",
+            "battery_soc",
+            "pv_power",
+            "battery_power",
+            "grid_power",
+        ),
+        hand_verified=True,
+    ),
+    detected=True,
+)
+FAST_POWERS = frozenset({"pv_power", "battery_power", "grid_power"})
+SLOW_STATUS = frozenset({"operating_mode", "battery_soc"})
+
+
+@pytest.mark.parametrize(
+    ("enabled", "expected"),
+    [
+        (SLOW_STATUS | FAST_POWERS, 2 * 60 / 60 + 1 * 60 / 10),
+        (SLOW_STATUS | {"pv_power"}, 2 * 60 / 60 + 1 * 60 / 10),
+        (SLOW_STATUS, 2 * 60 / 60),
+        (frozenset(), 0),
+    ],
+)
+async def test_the_planned_load_counts_enabled_keys_of_each_cadence_planned_alone(
+    enabled: frozenset[str], expected: float
+):
+    harness = Harness()
+    harness.schedule = FakeSchedule(
+        [
+            Cadence(interval=60, keys=SLOW_STATUS, default=True),
+            Cadence(interval=10, keys=FAST_POWERS),
+        ]
+    )
+    poller = Poller(
+        target=Target(client=harness.client, device=LOAD_DEVICE, selection="automatic"),
+        tracking=Tracking(
+            schedule=harness.schedule, health=harness.health, guard=harness.guard
+        ),
+        services=Services(clock=harness.clock, bound=harness.bound, read=harness.read),
+        enabled=enabled,
+    )
+
+    assert poller.planned_load() == expected
+    assert [plan.keys for plan in poller.cadence_plans()] == [
+        SLOW_STATUS & enabled,
+        FAST_POWERS & enabled,
+    ]
+
+
+class MemoryPollerClient(FakeClient):
+    def __init__(self, memory: MemoryClient) -> None:
+        super().__init__()
+        self.memory = memory
+
+    async def read_holding_registers(self, address: int, count: int) -> tuple[int, ...]:
+        return await self.memory.read_holding_registers(address=address, count=count)
+
+
+POWER_DEVICE = Device(
+    "SERIAL-1",
+    1,
+    6000,
+    profile(
+        base=HS3,
+        key="delta",
+        device_types={1},
+        keys=("load_power", "pv_power", "battery_power", "grid_power"),
+        hand_verified=True,
+    ),
+    detected=True,
+)
+POWER_KEYS = frozenset({"load_power", "pv_power", "battery_power", "grid_power"})
+LOAD_ADDRESS = 0x40A0
+PV_ADDRESS = 0x40A5
+BATTERY_ADDRESS = 0x40A6
+GRID_ADDRESS = 0x40A7
+
+
+def _narrowing_poller(*, bad_address: int) -> tuple[Poller, MemoryClient]:
+    harness = Harness()
+    harness.schedule.due_keys = POWER_KEYS
+    memory = MemoryClient(bad_addresses=frozenset({bad_address}))
+    client = MemoryPollerClient(memory)
+    return (
+        Poller(
+            target=Target(client=client, device=POWER_DEVICE, selection="automatic"),
+            tracking=Tracking(
+                schedule=harness.schedule, health=ReadHealth(), guard=harness.guard
+            ),
+            services=Services(clock=harness.clock, bound=harness.bound),
+            enabled=POWER_KEYS,
+        ),
+        memory,
+    )
+
+
+async def test_a_refused_request_is_narrowed_until_the_refused_row_is_alone():
+    poller, memory = _narrowing_poller(bad_address=BATTERY_ADDRESS)
+
+    results = [await poller.run(enabled=POWER_KEYS) for _ in range(4)]
+
+    assert memory.reads == [
+        (LOAD_ADDRESS, 8),
+        (LOAD_ADDRESS, 1),
+        (PV_ADDRESS, 3),
+        (LOAD_ADDRESS, 1),
+        (PV_ADDRESS, 1),
+        (BATTERY_ADDRESS, 2),
+        (LOAD_ADDRESS, BATTERY_ADDRESS - LOAD_ADDRESS),
+        (BATTERY_ADDRESS, 1),
+        (GRID_ADDRESS, 1),
+    ]
+    assert [result.read for result in results] == [
+        frozenset(),
+        {"load_power"},
+        {"load_power", "pv_power"},
+        {"load_power", "pv_power", "grid_power"},
+    ]
+    assert poller.narrowing == (Region(rows=(Row(address=BATTERY_ADDRESS, words=1),)),)
+    assert poller.breaks == frozenset()
+    assert set(poller.refusals) == {"battery_power"}
+    assert poller.refusals["battery_power"].count == 1
+
+
+async def test_a_single_row_refused_three_times_in_a_row_is_suspended():
+    poller, _ = _narrowing_poller(bad_address=BATTERY_ADDRESS)
+
+    results = [await poller.run(enabled=POWER_KEYS) for _ in range(6)]
+
+    assert results[-2].suspended == frozenset()
+    assert results[-1].suspended == {"battery_power"}
+    assert poller.refusals["battery_power"].count == REFUSAL_THRESHOLD
+
+
+async def test_a_fault_in_a_gap_word_is_found_as_a_break_that_later_cycles_keep():
+    harness = Harness()
+    keys = frozenset({"load_power", "grid_power"})
+    harness.schedule.due_keys = keys
+    memory = MemoryClient(bad_addresses=frozenset({LOAD_ADDRESS + 3}))
+    poller = Poller(
+        target=Target(
+            client=MemoryPollerClient(memory),
+            device=POWER_DEVICE,
+            selection="automatic",
+        ),
+        tracking=Tracking(
+            schedule=harness.schedule, health=ReadHealth(), guard=harness.guard
+        ),
+        services=Services(clock=harness.clock, bound=harness.bound),
+        enabled=keys,
+    )
+
+    for _ in range(4):
+        await poller.run(enabled=keys)
+
+    assert memory.reads == [
+        (LOAD_ADDRESS, 8),
+        (LOAD_ADDRESS, 1),
+        (GRID_ADDRESS, 1),
+        (LOAD_ADDRESS, 1),
+        (GRID_ADDRESS, 1),
+        (LOAD_ADDRESS, 1),
+        (GRID_ADDRESS, 1),
+    ]
+    assert poller.breaks == {Break(before=LOAD_ADDRESS + 1, after=GRID_ADDRESS)}
+    assert poller.narrowing == ()

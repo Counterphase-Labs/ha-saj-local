@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import singledispatch
 
+from homeassistant.exceptions import HomeAssistantError
+
+from .const import DOMAIN
 from .saj.client import ModbusError, ModbusErrorMessage
 from .saj.device_type import format_device_type
 from .saj.errors import (
@@ -76,4 +79,10 @@ def _unknown_model(error: UnknownModelError) -> Translation:
         key="unknown_model",
         concerns_model=True,
         placeholders={"selection": error.selection},
+    )
+
+
+def control_not_enabled() -> HomeAssistantError:
+    return HomeAssistantError(
+        translation_domain=DOMAIN, translation_key="control_not_enabled"
     )

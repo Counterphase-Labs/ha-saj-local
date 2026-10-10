@@ -1,0 +1,182 @@
+from . import (
+    Evidence,
+    FamilyPlacement,
+    Profile,
+    Replacement,
+    Shape,
+    Span,
+    placements_by_evidence,
+)
+
+PROFILE = Profile(
+    key="h2",
+    display_name="H2",
+    device_types={
+        0x005A: Shape(phases=1, strings=2),
+        0x005B: Shape(phases=1, strings=3),
+    },
+    hand_verified=False,
+    maximum_shape=Shape(phases=3, strings=4),
+    largest_request=56,
+    spans=(
+        Span(name="settings", first=0x3604, last=0x367C),
+        Span(name="realtime", first=0x4000, last=0x4166),
+        Span(name="identity", first=0x8F00, last=0x8F1C),
+        Span(name="battery", first=0xA000, last=0xA037),
+        Span(name="meters", first=0xA03C, last=0xA065),
+    ),
+    placements=placements_by_evidence(
+        groups={
+            Evidence.IMPLEMENTED: {
+                "passive_mode": 0x3636,
+                "passive_grid_charge_power": 0x3637,
+                "passive_grid_discharge_power": 0x3638,
+                "passive_battery_charge_power": 0x3639,
+                "passive_battery_discharge_power": 0x363A,
+                "battery_discharge_limit_on_grid": 0x3644,
+                "battery_discharge_limit_off_grid": 0x3645,
+                "battery_charge_limit": 0x3646,
+                "application_mode": 0x3647,
+                "battery_charge_power_limit": 0x364D,
+                "battery_discharge_power_limit": 0x364E,
+                "grid_import_power_limit": 0x364F,
+                "grid_export_power_limit": 0x3650,
+                "export_limit_power": 0x365A,
+                "export_limit_current": 0x365B,
+                "export_limit_mode": 0x365C,
+                "time_of_use_idle_mode": 0x365F,
+                "time_of_use_grid_discharge": 0x3660,
+                "operating_mode": 0x4004,
+                "inverter_temperature": 0x4010,
+                "ambient_temperature": 0x4011,
+                "leakage_current": 0x4012,
+                "inverter_discharge_power_setpoint": 0x4023,
+                "inverter_charge_power_setpoint": 0x4024,
+                "battery_discharge_current_setpoint": 0x4025,
+                "battery_charge_current_setpoint": 0x4026,
+                "battery_status_code": 0x4027,
+                "battery_protocol_active": 0x4028,
+                "battery_charge_limit_active": 0x4029,
+                "battery_discharge_limit_active": 0x402A,
+                "battery_depth_of_discharge_active": 0x402B,
+                "backup_reserve_soc_active": 0x402C,
+                "meter_configuration_active": 0x4030,
+                "battery_temperature": 0x406E,
+                "battery_soc": 0x406F,
+                "pv_direction": 0x4095,
+                "battery_direction": 0x4096,
+                "grid_direction": 0x4097,
+                "output_direction": 0x4098,
+                "load_power": 0x40A0,
+                "ct_grid_power": 0x40A1,
+                "ct_grid_apparent_power": 0x40A2,
+                "ct_pv_power": 0x40A3,
+                "ct_pv_apparent_power": 0x40A4,
+                "pv_power": 0x40A5,
+                "battery_power": 0x40A6,
+                "grid_power": 0x40A7,
+                "grid_apparent_power": 0x40A8,
+                "inverter_power": 0x40A9,
+                "inverter_apparent_power": 0x40AA,
+                "backup_load_power": 0x40AB,
+                "backup_load_apparent_power": 0x40AC,
+                "grid_load_power": 0x40AD,
+                "protocol_version": 0x8F02,
+                "product_code": 0x8F0D,
+                "display_software_version": 0x8F17,
+                "master_software_version": 0x8F18,
+                "slave_software_version": 0x8F19,
+                "display_hardware_version": 0x8F1A,
+                "control_hardware_version": 0x8F1B,
+                "power_hardware_version": 0x8F1C,
+                "battery_pack_count": 0xA000,
+                "battery_capacity": 0xA001,
+                "battery_usable_capacity": 0xA00A,
+                "battery_online_code": 0xA00B,
+                "battery_voltage_high_protection": 0xA032,
+                "battery_charge_voltage": 0xA034,
+                "battery_discharge_cutoff_voltage": 0xA035,
+                "battery_discharge_current_limit": 0xA036,
+                "battery_charge_current_limit": 0xA037,
+            },
+            Evidence.DOCUMENTED: {
+                "meter_configuration": 0x3630,
+                "meter_address": 0x3631,
+                "rs485_address": 0x3633,
+                "rs485_baud_rate": 0x3634,
+                "battery_protocol": 0x363B,
+                "battery_auto_wake": 0x3643,
+                "backup_reserve_soc": 0x3651,
+                "inverter_clock": 0x4000,
+                "dc_bus_voltage": 0x4067,
+                "dc_bus_slave_voltage": 0x4068,
+                "battery_voltage": 0x4069,
+                "battery_current": 0x406A,
+                "battery_port_power": 0x406D,
+                "meter_a_status": 0xA03C,
+                "meter_b_status": 0xA053,
+                "meter_a_power": None,
+            },
+        }
+    ),
+    families=(
+        FamilyPlacement(family="grid_phase", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="inverter_phase", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="backup_phase", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(
+            family="grid_output_first_phase", evidence=Evidence.IMPLEMENTED
+        ),
+        FamilyPlacement(
+            family="grid_output_other_phases", evidence=Evidence.IMPLEMENTED
+        ),
+        FamilyPlacement(family="pv_string", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="pv_insulation", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="pv_energy", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="battery_charge_energy", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(
+            family="battery_discharge_energy", evidence=Evidence.IMPLEMENTED
+        ),
+        FamilyPlacement(family="inverter_energy", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="load_energy", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="backup_load_energy", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(
+            family="grid_export_energy", evidence=Evidence.IMPLEMENTED, base=0x40EF
+        ),
+        FamilyPlacement(
+            family="grid_import_energy", evidence=Evidence.IMPLEMENTED, base=0x40F7
+        ),
+        FamilyPlacement(
+            family="grid_other_phases_export_energy", evidence=Evidence.IMPLEMENTED
+        ),
+        FamilyPlacement(
+            family="grid_other_phases_import_energy", evidence=Evidence.IMPLEMENTED
+        ),
+        FamilyPlacement(
+            family="pv_other_strings_energy", evidence=Evidence.IMPLEMENTED
+        ),
+        FamilyPlacement(family="battery_pack", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(
+            family="battery_pack_discharged_energy", evidence=Evidence.IMPLEMENTED
+        ),
+        FamilyPlacement(family="meter_a_phase", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="meter_b_phase", evidence=Evidence.DOCUMENTED),
+        FamilyPlacement(family="charge_slots", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="charge_slots_enabled", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="discharge_slots", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(
+            family="discharge_slots_enabled", evidence=Evidence.IMPLEMENTED
+        ),
+    ),
+    replacements=(
+        Replacement(
+            key="application_mode",
+            options={
+                0: "self_use",
+                1: "time_of_use",
+                2: "backup",
+                3: "passive",
+                14: "legacy",
+            },
+        ),
+    ),
+)

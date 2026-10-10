@@ -4,19 +4,32 @@ import pytest
 
 from custom_components.saj_local.diagnostics import async_get_config_entry_diagnostics
 from custom_components.saj_local.saj.budget import BUDGET_PER_MINUTE
+from custom_components.saj_local.saj.catalogue import Row
 from custom_components.saj_local.saj.device import Device
-from custom_components.saj_local.saj.health import Refusal
+from custom_components.saj_local.saj.health import Break, Refusal, Region
+from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from custom_components.saj_local.saj.poller import CadencePlan
-from custom_components.saj_local.saj.profiles import Profile
 from custom_components.saj_local.saj.telemetry import Telemetry
+from tests.profiles import profile
 
-PROFILE = Profile(
+PRIVATE_KEYS = (
+    "product_code",
+    "ethernet_mac_address",
+    "ethernet_ip_address",
+    "ethernet_subnet_mask",
+    "ethernet_gateway",
+    "ethernet_dns_primary",
+    "ethernet_dns_secondary",
+    "ev_serial_number",
+)
+PROFILE = profile(
+    base=HS3,
     key="alpha",
-    display_name="Alpha",
-    device_types=frozenset({0x0001}),
-    measurement_keys=frozenset(),
+    device_types={0x1610},
+    keys={"operating_mode", "ethernet_mode", "pv_power", *PRIVATE_KEYS},
     hand_verified=False,
 )
+DEVICE = Device("PRIVATE-SERIAL", 0x1610, 12000, PROFILE, detected=True)
 
 
 NOW = 5000.0
@@ -37,6 +50,8 @@ class FakePoller:
 
     def __init__(self) -> None:
         self.refusals = {}
+        self.narrowing = ()
+        self.breaks = frozenset()
         self.plans = ()
         self.load = 0.0
 
@@ -54,38 +69,38 @@ class FakeCoordinator:
         self.last_update_success = True
         self.last_error = None
         self.last_read = frozenset()
+        self.device = DEVICE
         self.poller = FakePoller()
 
     def async_contexts(self):
         return iter(self._contexts)
 
     @property
-    def enabled_sensor_keys(self):
+    def enabled_keys(self):
         return set(self._contexts)
 
 
 @pytest.mark.parametrize(
-    ("contexts", "telemetry", "expected_sensors", "unknown_mode"),
+    ("contexts", "telemetry", "expected_keys"),
     [
         (
             {"pv_power", "grid_power"},
             Telemetry(values={"operating_mode": 2}),
             ["grid_power", "pv_power"],
-            None,
         ),
-        (set(), Telemetry(values={"operating_mode": 31}), [], 31),
-        ({"battery_soc"}, Telemetry(values={}), ["battery_soc"], None),
+        (set(), Telemetry(values={"operating_mode": 31}), []),
+        ({"battery_soc", "ev_mode"}, Telemetry(values={}), ["battery_soc", "ev_mode"]),
     ],
 )
 async def test_diagnostics_report_status_and_omit_endpoint_identity(
-    contexts, telemetry, expected_sensors, unknown_mode
+    contexts, telemetry, expected_keys
 ):
     entry = SimpleNamespace(
         data={"host": "private-host", "port": 502, "unit_id": 1, "model": "automatic"},
         options={"scan_interval": 60},
         unique_id="PRIVATE-SERIAL",
         runtime_data=SimpleNamespace(
-            device=Device("PRIVATE-SERIAL", 0x1610, 12000, PROFILE, detected=True),
+            device=DEVICE,
             client=FakeClient(),
             coordinator=FakeCoordinator(contexts, telemetry),
         ),
@@ -100,15 +115,11 @@ async def test_diagnostics_report_status_and_omit_endpoint_identity(
     assert result["device_type"] == 0x1610
     assert result["rated_power_w"] == 12000
     assert result["poll_interval_seconds"] == 60
-    assert result["enabled_sensors"] == expected_sensors
+    assert result["enabled_keys"] == expected_keys
     assert result["connected"] is True
     assert result["last_update_success"] is True
     assert "private-host" not in str(result)
     assert "PRIVATE-SERIAL" not in str(result)
-    if unknown_mode is not None:
-        assert result["unknown_operating_mode"] == unknown_mode
-    else:
-        assert "unknown_operating_mode" not in result
 
 
 @pytest.mark.parametrize(
@@ -141,7 +152,7 @@ def _entry(coordinator, client=None):
             "id-1": SimpleNamespace(title="Private group name", data={}),
         },
         runtime_data=SimpleNamespace(
-            device=Device("PRIVATE-SERIAL", 0x1610, 12000, PROFILE, detected=True),
+            device=DEVICE,
             client=client or FakeClient(),
             coordinator=coordinator,
         ),
@@ -173,13 +184,13 @@ async def test_diagnostics_report_cadences_and_planned_load_against_the_budget()
         {
             "default": True,
             "interval_seconds": 60,
-            "sensors": ["grid_power", "pv_power"],
+            "keys": ["grid_power", "pv_power"],
             "requests_per_read": 2,
         },
         {
             "default": False,
             "interval_seconds": 10,
-            "sensors": ["battery_soc"],
+            "keys": ["battery_soc"],
             "requests_per_read": 1,
         },
     ]
@@ -188,7 +199,7 @@ async def test_diagnostics_report_cadences_and_planned_load_against_the_budget()
     assert result["last_cycle_read"] == ["battery_soc", "pv_power"]
 
 
-async def test_diagnostics_report_refused_and_suspended_sensors_with_retest_timing():
+async def test_diagnostics_report_refused_and_suspended_keys_with_retest_timing():
     coordinator = FakeCoordinator(set(), None)
     coordinator.poller.refusals = {
         "pv_power": Refusal(count=1, code=2, retest_at=None),
@@ -198,7 +209,7 @@ async def test_diagnostics_report_refused_and_suspended_sensors_with_retest_timi
 
     result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator))
 
-    assert result["refused_sensors"] == {
+    assert result["refused_keys"] == {
         "pv_power": {
             "exception_code": 2,
             "consecutive_refusals": 1,
@@ -250,9 +261,9 @@ async def test_diagnostics_omit_group_names_host_and_serial():
 @pytest.mark.parametrize(
     ("options", "pattern"),
     [
-        ({"prefix": "private-house"}, "sensor.saj_[redacted]_<key>"),
-        ({"prefix": ""}, "sensor.saj_<key>"),
-        ({}, "sensor.saj_<key>"),
+        ({"prefix": "private-house"}, "<domain>.saj_[redacted]_<key>"),
+        ({"prefix": ""}, "<domain>.saj_<key>"),
+        ({}, "<domain>.saj_<key>"),
     ],
 )
 async def test_diagnostics_show_whether_a_prefix_is_set_without_revealing_it(
@@ -262,7 +273,7 @@ async def test_diagnostics_show_whether_a_prefix_is_set_without_revealing_it(
         data={"host": "private-host", "port": 502, "unit_id": 1, "model": "automatic"},
         options=options,
         runtime_data=SimpleNamespace(
-            device=Device("PRIVATE-SERIAL", 0x1610, 12000, PROFILE, detected=True),
+            device=DEVICE,
             client=FakeClient(),
             coordinator=FakeCoordinator(set(), None),
         ),
@@ -272,3 +283,93 @@ async def test_diagnostics_show_whether_a_prefix_is_set_without_revealing_it(
 
     assert result["entity_id_pattern"] == pattern
     assert "private-house" not in str(result)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ({"operating_mode": 31}, {"operating_mode": 31}),
+        ({"operating_mode": 2}, {}),
+        (
+            {"operating_mode": 31.0, "ethernet_mode": 9},
+            {"operating_mode": 31.0, "ethernet_mode": 9},
+        ),
+        ({"operating_mode": None, "pv_power": 99999}, {}),
+        ({"operating_mode": "text"}, {}),
+    ],
+)
+async def test_diagnostics_report_the_unknown_codes_of_enumerated_rows_by_key(
+    values, expected
+):
+    coordinator = FakeCoordinator(set(), Telemetry(values=values))
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator))
+
+    assert result["unknown_codes"] == expected
+
+
+async def test_diagnostics_report_no_unknown_codes_before_any_data_was_read():
+    result = await async_get_config_entry_diagnostics(
+        HASS, _entry(FakeCoordinator(set(), None))
+    )
+
+    assert result["unknown_codes"] == {}
+
+
+async def test_diagnostics_report_the_breaks_found_in_address_order():
+    coordinator = FakeCoordinator(set(), None)
+    coordinator.poller.breaks = frozenset(
+        {Break(before=0x4100, after=0x4104), Break(before=0x4010, after=0x4012)}
+    )
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator))
+
+    assert result["breaks"] == [
+        {"before": "0x4010", "after": "0x4012"},
+        {"before": "0x4100", "after": "0x4104"},
+    ]
+
+
+async def test_diagnostics_report_the_requests_being_narrowed():
+    coordinator = FakeCoordinator(set(), None)
+    coordinator.poller.narrowing = (
+        Region(rows=(Row(address=0x4000, words=2), Row(address=0x4005, words=1))),
+    )
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator))
+
+    assert result["narrowing"] == [{"before": "0x4000", "after": "0x4006", "rows": 2}]
+
+
+async def test_diagnostics_report_no_breaks_or_narrowing_when_there_are_none():
+    result = await async_get_config_entry_diagnostics(
+        HASS, _entry(FakeCoordinator(set(), None))
+    )
+
+    assert result["breaks"] == []
+    assert result["narrowing"] == []
+
+
+PRIVATE_VALUES = {
+    "product_code": "PRIVATE-PRODUCT",
+    "ethernet_mac_address": "AA:BB:CC:DD:EE:FF",
+    "ethernet_ip_address": "192.0.2.10",
+    "ethernet_subnet_mask": "255.255.255.0",
+    "ethernet_gateway": "192.0.2.1",
+    "ethernet_dns_primary": "198.51.100.1",
+    "ethernet_dns_secondary": "198.51.100.2",
+    "ev_serial_number": "PRIVATE-EV-SERIAL",
+}
+
+
+@pytest.mark.parametrize("key", sorted(PRIVATE_VALUES))
+async def test_diagnostics_never_include_the_value_of_a_private_row(key):
+    coordinator = FakeCoordinator(
+        set(PRIVATE_VALUES), Telemetry(values={**PRIVATE_VALUES, "operating_mode": 31})
+    )
+    coordinator.last_read = frozenset(PRIVATE_VALUES)
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator))
+
+    assert PRIVATE_VALUES[key] not in str(result)
+    assert "PRIVATE-SERIAL" not in str(result)

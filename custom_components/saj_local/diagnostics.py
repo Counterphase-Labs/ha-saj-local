@@ -5,17 +5,23 @@ from .const import (
     CONF_PREFIX,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
+    DOMAIN_PLACEHOLDER,
     KEY_PLACEHOLDER,
-    sensor_entity_id,
+    fixed_entity_id,
 )
 from .saj.budget import BUDGET_PER_MINUTE
-from .saj.telemetry import OPERATING_MODE, OPERATING_MODE_NAMES
+from .saj.catalogue import device_registers
 
 REDACTED_PREFIX = "[redacted]"
+ADDRESS_FORMAT = "#06x"
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
+
+    from .saj.health import Break, Region
 
 
 async def async_get_config_entry_diagnostics(
@@ -25,7 +31,7 @@ async def async_get_config_entry_diagnostics(
     coordinator = runtime.coordinator
     poller = coordinator.poller
     now = hass.loop.time()
-    data = {
+    return {
         "model_selection": entry.data[CONF_MODEL],
         "profile": runtime.device.profile.key,
         "profile_detected": runtime.device.detected,
@@ -35,11 +41,12 @@ async def async_get_config_entry_diagnostics(
         "poll_interval_seconds": entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
         ),
-        "entity_id_pattern": sensor_entity_id(
+        "entity_id_pattern": fixed_entity_id(
+            domain=DOMAIN_PLACEHOLDER,
             prefix=REDACTED_PREFIX if entry.options.get(CONF_PREFIX, "") else "",
             key=KEY_PLACEHOLDER,
         ),
-        "enabled_sensors": sorted(coordinator.enabled_sensor_keys),
+        "enabled_keys": sorted(coordinator.enabled_keys),
         "connected": runtime.client.is_connected(),
         "last_update_success": coordinator.last_update_success,
         "last_error": coordinator.last_error,
@@ -47,7 +54,7 @@ async def async_get_config_entry_diagnostics(
             {
                 "default": plan.default,
                 "interval_seconds": plan.interval,
-                "sensors": sorted(plan.keys),
+                "keys": sorted(plan.keys),
                 "requests_per_read": plan.requests,
             }
             for plan in poller.cadence_plans()
@@ -55,7 +62,7 @@ async def async_get_config_entry_diagnostics(
         "planned_requests_per_minute": poller.planned_load(),
         "request_budget_per_minute": BUDGET_PER_MINUTE,
         "last_cycle_read": sorted(coordinator.last_read),
-        "refused_sensors": {
+        "refused_keys": {
             key: {
                 "exception_code": refusal.code,
                 "consecutive_refusals": refusal.count,
@@ -70,12 +77,43 @@ async def async_get_config_entry_diagnostics(
         "backoff_seconds": poller.backoff_seconds,
         "late_frames_discarded": runtime.client.late_frames_discarded,
         "stale_reconnects": poller.stale_reconnects,
+        "unknown_codes": _unknown_codes(coordinator=coordinator),
+        "breaks": [_break_summary(block=block) for block in _ordered(poller.breaks)],
+        "narrowing": [_region_summary(region=region) for region in poller.narrowing],
     }
-    mode = (
-        coordinator.data.get(key=OPERATING_MODE)
-        if coordinator.data is not None
-        else None
-    )
-    if mode is not None and mode not in OPERATING_MODE_NAMES:
-        data["unknown_operating_mode"] = mode
-    return data
+
+
+def _ordered(breaks: Iterable[Break]) -> list[Break]:
+    return sorted(breaks, key=lambda block: (block.before, block.after))
+
+
+def _break_summary(*, block: Break) -> dict[str, str]:
+    return {
+        "before": format(block.before, ADDRESS_FORMAT),
+        "after": format(block.after, ADDRESS_FORMAT),
+    }
+
+
+def _region_summary(*, region: Region) -> dict[str, str | int]:
+    return {
+        **_break_summary(block=region.hull),
+        "rows": len(region.rows),
+    }
+
+
+def _unknown_codes(*, coordinator: Any) -> dict[str, float]:
+    if coordinator.data is None:
+        return {}
+    device = coordinator.device
+    codes: dict[str, float] = {}
+    for register in device_registers(
+        profile=device.profile, device_type=device.device_type
+    ):
+        value = coordinator.data.get(key=register.key)
+        if (
+            register.options is not None
+            and isinstance(value, int | float)
+            and int(value) not in register.options
+        ):
+            codes[register.key] = value
+    return codes

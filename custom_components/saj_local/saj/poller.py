@@ -5,19 +5,20 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NoReturn, Protocol
 
-from .budget import requests_per_minute
 from .client import ModbusError
 from .device import identify
 from .errors import ModelError
+from .load import planned_load
 from .telemetry import plan_reads, read_telemetry
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Collection, Mapping
 
     from .client import ModbusTcpClient, RegisterReader
+    from .codec import Value
     from .device import Device
     from .guard import EndpointGuard
-    from .health import ReadHealth, Refusal
+    from .health import Break, ReadHealth, Refusal, Region
     from .schedule import Schedule
     from .telemetry import Readout, ReadRange
 
@@ -51,7 +52,7 @@ class CycleFailedError(Exception):
 
 @dataclass(frozen=True)
 class CycleResult:
-    values: Mapping[str, int | float | None]
+    values: Mapping[str, Value]
     read: frozenset[str]
     refused: Mapping[str, int]
     suspended: frozenset[str]
@@ -79,7 +80,12 @@ class Bound(Protocol):
 
 class Planner(Protocol):
     def __call__(
-        self, *, device: Device, enabled: Collection[str], isolated: Collection[str]
+        self,
+        *,
+        device: Device,
+        enabled: Collection[str],
+        narrowing: Collection[Region],
+        breaks: Collection[Break],
     ) -> list[ReadRange]: ...
 
 
@@ -90,7 +96,8 @@ class Reader(Protocol):
         client: RegisterReader,
         device: Device,
         enabled: Collection[str],
-        isolated: Collection[str],
+        narrowing: Collection[Region],
+        breaks: Collection[Break],
     ) -> Awaitable[Readout]: ...
 
 
@@ -135,7 +142,12 @@ class Services:
 
 class Poller:
     def __init__(
-        self, *, target: Target, tracking: Tracking, services: Services
+        self,
+        *,
+        target: Target,
+        tracking: Tracking,
+        services: Services,
+        enabled: Collection[str],
     ) -> None:
         self._client = target.client
         self._device = target.device
@@ -145,6 +157,7 @@ class Poller:
         self._guard = tracking.guard
         self._services = services
         self.stale_reconnects = 0
+        self._enabled = frozenset(enabled)
 
     @property
     def consecutive_failures(self) -> int:
@@ -158,27 +171,43 @@ class Poller:
     def refusals(self) -> Mapping[str, Refusal]:
         return self._health.refusals
 
+    @property
+    def narrowing(self) -> tuple[Region, ...]:
+        return self._health.narrowing
+
+    @property
+    def breaks(self) -> frozenset[Break]:
+        return self._health.breaks
+
     def cadence_plans(self) -> tuple[CadencePlan, ...]:
-        return tuple(
-            CadencePlan(
-                interval=cadence.interval,
-                keys=cadence.keys,
-                ranges=tuple(
-                    (read_range.address, read_range.count)
-                    for read_range in self._services.plan(
-                        device=self._device,
-                        enabled=cadence.keys,
-                        isolated=frozenset(),
-                    )
-                ),
-                default=cadence.default,
+        plans = []
+        for cadence in self._schedule.cadences:
+            keys = cadence.keys & self._enabled
+            plans.append(
+                CadencePlan(
+                    interval=cadence.interval,
+                    keys=keys,
+                    ranges=tuple(
+                        (read_range.address, read_range.count)
+                        for read_range in self._services.plan(
+                            device=self._device,
+                            enabled=keys,
+                            narrowing=(),
+                            breaks=self._health.breaks,
+                        )
+                    ),
+                    default=cadence.default,
+                )
             )
-            for cadence in self._schedule.cadences
-        )
+        return tuple(plans)
 
     def planned_load(self) -> float:
-        return requests_per_minute(
-            reads=((plan.interval, plan.requests) for plan in self.cadence_plans())
+        return planned_load(
+            profile=self._device.profile,
+            device_type=self._device.device_type,
+            enabled=self._enabled,
+            cadences=self._schedule.cadences,
+            breaks=self._health.breaks,
         )
 
     async def run(self, *, enabled: Collection[str]) -> CycleResult:
@@ -187,20 +216,25 @@ class Poller:
         if reconnect:
             self._schedule.require_full_read()
         enabled_keys = frozenset(enabled)
+        self._enabled = enabled_keys
         keys = (
             (self._schedule.due(now=now) & enabled_keys) - self._health.suspended()
         ) | (self._health.retests_due(now=now) & enabled_keys)
         if not keys:
             self._schedule.mark_read(now=now)
             return self._result(enabled=enabled_keys, readout=None)
-        isolated = self._health.refused()
+        narrowing = self._health.narrowing
+        breaks = self._health.breaks
         full_keys = (enabled_keys - self._health.suspended()) | (
             self._health.retests_due(now=now) & enabled_keys
         )
         planned = max(
             len(
                 self._services.plan(
-                    device=self._device, enabled=planned_keys, isolated=isolated
+                    device=self._device,
+                    enabled=planned_keys,
+                    narrowing=narrowing,
+                    breaks=breaks,
                 )
             )
             for planned_keys in (keys, full_keys)
@@ -214,7 +248,8 @@ class Poller:
                     reconnect=reconnect,
                     keys=keys,
                     full_keys=full_keys,
-                    isolated=isolated,
+                    narrowing=narrowing,
+                    breaks=breaks,
                 ),
                 deadline,
             )
@@ -234,14 +269,19 @@ class Poller:
         reconnect: bool,
         keys: Collection[str],
         full_keys: Collection[str],
-        isolated: Collection[str],
+        narrowing: Collection[Region],
+        breaks: Collection[Break],
     ) -> Readout:
         if reconnect:
             await self._reopen()
         counter = _CountingReader(self._client)
         try:
             return await self._services.read(
-                client=counter, device=self._device, enabled=keys, isolated=isolated
+                client=counter,
+                device=self._device,
+                enabled=keys,
+                narrowing=narrowing,
+                breaks=breaks,
             )
         except ModbusError as err:
             if reconnect or not err.peer_closed or counter.requests != 1:
@@ -253,7 +293,8 @@ class Poller:
             client=self._client,
             device=self._device,
             enabled=full_keys,
-            isolated=isolated,
+            narrowing=narrowing,
+            breaks=breaks,
         )
 
     async def _reopen(self) -> None:
@@ -279,12 +320,18 @@ class Poller:
                 _LOGGER.info(
                     "SAJ sensor %s answers again and is no longer suspended", key
                 )
-        for key, code in readout.refusals.items():
-            if self._health.record_refusal(key=key, code=code, now=now):
+        for outcome in readout.outcomes:
+            if outcome.code is None:
+                self._health.record_request_read(rows=outcome.rows)
+                continue
+            suspended = self._health.record_request_refused(
+                rows=outcome.rows, keys=outcome.keys, code=outcome.code, now=now
+            )
+            for key in sorted(suspended):
                 _LOGGER.warning(
                     "SAJ sensor %s suspended after repeated refusals (code %s)",
                     key,
-                    code,
+                    outcome.code,
                 )
 
     def _result(

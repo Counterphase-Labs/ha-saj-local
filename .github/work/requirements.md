@@ -28,7 +28,7 @@ Platform stability and correctness is paramount.
 
 ### Entity IDs
 
-- Entity IDs are fixed by code, never derived from display text: `sensor.saj_<key>`, or `sensor.saj_<prefix>_<key>` when a prefix is set
+- Entity IDs are fixed by code, never derived from display text: `<domain>.saj_<key>`, or `<domain>.saj_<prefix>_<key>` when a prefix is set. `<domain>` is the Home Assistant entity type, for example `sensor.saj_pv_power` or `number.saj_backup_reserve_soc`
 - Each system has an optional prefix, empty by default
 - Prefixes must be unique across systems. Empty counts as a value, so only one system can have no prefix
 - A prefix can be added, changed or removed later. The user is warned about the consequences before it is applied

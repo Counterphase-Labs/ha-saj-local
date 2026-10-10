@@ -15,22 +15,15 @@ from custom_components.saj_local.const import DOMAIN, endpoint_guard
 from custom_components.saj_local.saj import errors as saj_errors
 from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessage
 from custom_components.saj_local.saj.device import Device
-from custom_components.saj_local.saj.profiles import Profile
+from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
+from tests.profiles import profile
 
 SERIAL = "HS3-TEST-001"
-PROFILE = Profile(
-    key="alpha",
-    display_name="Alpha",
-    device_types=frozenset({0x1610}),
-    measurement_keys=frozenset(),
-    hand_verified=True,
+PROFILE = profile(
+    base=HS3, key="alpha", device_types={0x1610}, keys=(), hand_verified=True
 )
-OTHER_PROFILE = Profile(
-    key="beta",
-    display_name="Beta",
-    device_types=frozenset({0x0010}),
-    measurement_keys=frozenset(),
-    hand_verified=False,
+OTHER_PROFILE = profile(
+    base=HS3, key="beta", device_types={0x0010}, keys=(), hand_verified=False
 )
 DEVICE = Device(SERIAL, 0x1610, 12000, PROFILE, detected=True)
 

@@ -1,3 +1,6 @@
+from dataclasses import replace
+from typing import TYPE_CHECKING
+
 import pytest
 
 from saj.device_type import format_device_type
@@ -6,22 +9,29 @@ from saj.errors import (
     UnknownModelError,
     UnsupportedDeviceError,
 )
-from saj.profiles import AUTOMATIC, Profile, Resolution, resolve_profile
+from saj.models import (
+    ENABLING_EVIDENCE,
+    Evidence,
+    Placement,
+    Shape,
+    Span,
+    placements_by_evidence,
+)
+from saj.models.h2 import PROFILE as H2
+from saj.models.hs3 import PROFILE as HS3
+from saj.profiles import AUTOMATIC, PROFILES, Resolution, resolve_profile
+from tests.profiles import profile
 
-ALPHA = Profile(
+if TYPE_CHECKING:
+    from saj.models import Profile
+
+ALPHA = profile(
+    base=HS3,
     key="alpha",
-    display_name="Alpha",
-    device_types=frozenset({0x0001, 0x0002}),
-    measurement_keys=frozenset({"power"}),
+    device_types={0x0001, 0x0002},
     hand_verified=True,
 )
-BETA = Profile(
-    key="beta",
-    display_name="Beta",
-    device_types=frozenset({0x0010}),
-    measurement_keys=frozenset({"power"}),
-    hand_verified=False,
-)
+BETA = profile(base=HS3, key="beta", device_types={0x0010}, hand_verified=False)
 UNRECOGNISED_TYPE = 0x7777
 
 
@@ -84,3 +94,97 @@ def test_unknown_selection_is_rejected_with_the_selection(device_type: int):
         )
 
     assert caught.value.selection == "gamma"
+
+
+@pytest.mark.parametrize(
+    ("device_type", "shape"),
+    [
+        (0x0001, Shape(phases=1, strings=1)),
+        (UNRECOGNISED_TYPE, Shape(phases=3, strings=4, assumed=True)),
+    ],
+)
+def test_a_device_type_has_the_shape_its_profile_gives_or_the_assumed_maximum(
+    device_type: int, shape: Shape
+):
+    profile_ = replace(ALPHA, maximum_shape=Shape(phases=3, strings=4))
+
+    assert profile_.shape_of(device_type=device_type) == shape
+
+
+@pytest.mark.parametrize(
+    ("first", "last", "address", "words", "inside"),
+    [
+        (0x10, 0x1F, 0x10, 1, True),
+        (0x10, 0x1F, 0x1F, 1, True),
+        (0x10, 0x1F, 0x1E, 2, True),
+        (0x10, 0x1F, 0x1F, 2, False),
+        (0x10, 0x1F, 0x0F, 1, False),
+        (0x10, 0x1F, 0x20, 1, False),
+    ],
+)
+def test_a_span_contains_a_row_only_when_all_its_words_fit(
+    first: int, last: int, address: int, words: int, *, inside: bool
+):
+    span = Span(name="block", first=first, last=last)
+
+    assert span.contains(address=address, words=words) is inside
+
+
+def test_placements_are_listed_by_evidence_in_the_order_given():
+    placements = placements_by_evidence(
+        groups={
+            Evidence.VERIFIED: {"alpha": 0x10, "beta": 0x11},
+            Evidence.DOCUMENTED: {"gamma": None},
+        }
+    )
+
+    assert placements == (
+        Placement(key="alpha", address=0x10, evidence=Evidence.VERIFIED),
+        Placement(key="beta", address=0x11, evidence=Evidence.VERIFIED),
+        Placement(key="gamma", address=None, evidence=Evidence.DOCUMENTED),
+    )
+
+
+@pytest.mark.parametrize(
+    ("evidence", "enabling"),
+    [
+        (Evidence.VERIFIED, True),
+        (Evidence.IMPLEMENTED, True),
+        (Evidence.DOCUMENTED, False),
+        (Evidence.RESPONDS_UNCHECKED, False),
+        (Evidence.RESPONDS_UNDOCUMENTED, False),
+    ],
+)
+def test_only_verified_and_implemented_evidence_enables_a_row(
+    evidence: Evidence, *, enabling: bool
+):
+    assert (evidence in ENABLING_EVIDENCE) is enabling
+
+
+@pytest.mark.parametrize(
+    ("profile_", "types", "largest", "verified"),
+    [
+        (HS3, {0x1610: Shape(phases=3, strings=2)}, 32, True),
+        (
+            H2,
+            {
+                0x005A: Shape(phases=1, strings=2),
+                0x005B: Shape(phases=1, strings=3),
+            },
+            56,
+            False,
+        ),
+    ],
+)
+def test_the_shipped_models_declare_their_device_types_and_largest_request(
+    profile_: Profile, types: dict[int, Shape], largest: int, *, verified: bool
+):
+    assert profile_.device_types == types
+    assert profile_.largest_request == largest
+    assert profile_.hand_verified is verified
+    assert profile_.spans
+
+
+def test_the_shipped_profiles_are_hs3_then_h2():
+    assert [profile_.key for profile_ in PROFILES] == ["hs3", "h2"]
+    assert resolve_profile(device_type=0x005B, selection=AUTOMATIC).profile is H2

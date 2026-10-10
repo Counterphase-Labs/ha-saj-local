@@ -113,9 +113,20 @@ const addIntegration = async (
     await page.getByRole("button", { name: "Finish" }).click();
 };
 
-const expectEntrySensorsReportValues = async (
+const smokeEntities = [
+    "sensor.pv_power",
+    "sensor.pv_energy_total",
+    "number.battery_discharge_limit_on_grid",
+] as const;
+
+const smokeEntityId = (prefix: string, entity: string): string => {
+    const [domain = "", key = ""] = entity.split(".");
+    return `${domain}.saj_${prefix ? `${prefix}_` : ""}${key}`;
+};
+
+const expectCoreEntitiesReportValues = async (
     page: Page,
-    entryCount: number,
+    prefixes: readonly string[],
 ): Promise<void> => {
     await expect
         .poll(async () => {
@@ -125,44 +136,39 @@ const expectEntrySensorsReportValues = async (
             const states = await callHassWebSocket<EntityState[]>(page, {
                 type: "get_states",
             });
-            const byEntry = new Map<string, string[]>();
-            for (const entity of registry) {
-                if (entity.platform === "saj_local" && entity.config_entry_id) {
-                    byEntry.set(entity.config_entry_id, [
-                        ...(byEntry.get(entity.config_entry_id) ?? []),
-                        entity.entity_id,
-                    ]);
-                }
-            }
+            const entries = new Set(
+                registry
+                    .filter((entity) => entity.platform === "saj_local")
+                    .map((entity) => entity.config_entry_id),
+            );
             return (
-                byEntry.size === entryCount &&
-                [...byEntry.values()].every(
-                    (entityIds) =>
-                        entityIds.length === 6 &&
-                        entityIds.every((entityId) =>
-                            states.some(
-                                (state) =>
-                                    state.entity_id === entityId &&
-                                    !["unknown", "unavailable"].includes(
-                                        state.state,
-                                    ),
-                            ),
+                entries.size === prefixes.length &&
+                prefixes.every((prefix) =>
+                    smokeEntities.every((entity) =>
+                        states.some(
+                            (state) =>
+                                state.entity_id ===
+                                    smokeEntityId(prefix, entity) &&
+                                !["unknown", "unavailable"].includes(
+                                    state.state,
+                                ),
                         ),
+                    ),
                 )
             );
         })
         .toBe(true);
 };
 
-test("an HS3 and an H2 endpoint load and report sensor values", async ({
+test("an HS3 and an H2 endpoint load and report a sensor, an energy counter and a setting", async ({
     page,
     browserFailures,
 }) => {
     await finishOnboarding(page);
 
     await addIntegration(page, browserFailures, "modbus-mock");
-    await expectEntrySensorsReportValues(page, 1);
+    await expectCoreEntitiesReportValues(page, [""]);
 
     await addIntegration(page, browserFailures, "modbus-mock-h2", "h2");
-    await expectEntrySensorsReportValues(page, 2);
+    await expectCoreEntitiesReportValues(page, ["", "h2"]);
 });
