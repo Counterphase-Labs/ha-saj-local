@@ -1,12 +1,40 @@
 from . import (
+    METER_A_PROBE,
+    METER_B_PROBE,
+    PARALLEL_PROBE,
+    Comparison,
+    Condition,
+    Equipment,
     Evidence,
     FamilyPlacement,
+    Probe,
     Profile,
     Replacement,
     Shape,
     Span,
     placements_by_evidence,
 )
+
+PARALLEL_ENERGY_FAMILIES = (
+    "parallel_pv_energy",
+    "parallel_battery_charge_energy",
+    "parallel_battery_discharge_energy",
+    "parallel_grid_l1_export_energy",
+    "parallel_grid_l2_export_energy",
+    "parallel_grid_l3_export_energy",
+    "parallel_grid_l1_import_energy",
+    "parallel_grid_l2_import_energy",
+    "parallel_grid_l3_import_energy",
+    "parallel_load_energy",
+)
+PARALLEL_POWER_ENCODINGS = {
+    "parallel_pv_power": "u16",
+    "parallel_battery_power": "i16",
+    "parallel_grid_power": "i16",
+    "parallel_load_power": "i16",
+    "parallel_backup_load_power": "u16",
+    "parallel_grid_load_power": "u16",
+}
 
 PROFILE = Profile(
     key="h2",
@@ -23,6 +51,7 @@ PROFILE = Profile(
         Span(name="realtime", first=0x4000, last=0x4166),
         Span(name="identity", first=0x8F00, last=0x8F1C),
         Span(name="battery", first=0xA000, last=0xA037),
+        Span(name="parallel", first=0x4200, last=0x4264),
         Span(name="meters", first=0xA03C, last=0xA065),
     ),
     placements=placements_by_evidence(
@@ -120,6 +149,19 @@ PROFILE = Profile(
                 "meter_a_status": 0xA03C,
                 "meter_b_status": 0xA053,
                 "meter_a_power": None,
+                "meter_b_power": None,
+                "parallel_mode": 0x4200,
+                "parallel_id": 0x4201,
+                "parallel_count": 0x4202,
+                "parallel_online_count": 0x4203,
+                "parallel_pv_power": 0x4204,
+                "parallel_battery_power": 0x4205,
+                "parallel_grid_power": 0x4206,
+                "parallel_load_power": 0x4207,
+                "parallel_backup_load_power": 0x4208,
+                "parallel_battery_soc": 0x4209,
+                "parallel_grid_load_power": 0x420A,
+                "parallel_battery_capacity": 0x420B,
             },
         }
     ),
@@ -164,6 +206,10 @@ PROFILE = Profile(
         ),
         FamilyPlacement(family="meter_a_phase", evidence=Evidence.IMPLEMENTED),
         FamilyPlacement(family="meter_b_phase", evidence=Evidence.DOCUMENTED),
+        *(
+            FamilyPlacement(family=family, evidence=Evidence.DOCUMENTED)
+            for family in PARALLEL_ENERGY_FAMILIES
+        ),
         FamilyPlacement(family="charge_slots", evidence=Evidence.IMPLEMENTED),
         FamilyPlacement(family="charge_slots_enabled", evidence=Evidence.IMPLEMENTED),
         FamilyPlacement(family="discharge_slots", evidence=Evidence.IMPLEMENTED),
@@ -172,6 +218,20 @@ PROFILE = Profile(
         ),
     ),
     replacements=(
+        Replacement(
+            key="battery_protocol",
+            options={
+                0: "not_in_use",
+                2: "lead_acid",
+                20: "dyness_h",
+                21: "pylon_sc0500",
+                22: "b2_can",
+            },
+        ),
+        *(
+            Replacement(key=key, encoding=encoding, uncombined=True)
+            for key, encoding in PARALLEL_POWER_ENCODINGS.items()
+        ),
         Replacement(
             key="application_mode",
             options={
@@ -183,5 +243,21 @@ PROFILE = Profile(
                 14: "legacy",
             },
         ),
+    ),
+    probes=(
+        Probe(
+            equipment=Equipment.BATTERY,
+            conditions=(
+                Condition(
+                    key="battery_protocol_active",
+                    comparison=Comparison.DIFFERS,
+                    reference=0,
+                ),
+            ),
+            unanswered=True,
+        ),
+        METER_A_PROBE,
+        METER_B_PROBE,
+        PARALLEL_PROBE,
     ),
 )

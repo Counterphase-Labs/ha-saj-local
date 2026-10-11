@@ -16,6 +16,7 @@ from saj.definitions import (
     Quantity,
     Role,
 )
+from saj.models import Equipment
 
 
 def _definition(key: str, **changes: object) -> Definition:
@@ -87,15 +88,16 @@ def test_a_stem_without_an_index_names_a_single_block():
 
 
 @pytest.mark.parametrize(
-    ("role", "phases", "strings"),
+    ("role", "phases", "strings", "packs"),
     [
-        (Role.NONE, [1, 1, 1], [1, 1, 1]),
-        (Role.PHASE, [1, 2, 3], [1, 1, 1]),
-        (Role.STRING, [1, 1, 1], [1, 2, 3]),
+        (Role.NONE, [1, 1, 1], [1, 1, 1], [0, 0, 0]),
+        (Role.PHASE, [1, 2, 3], [1, 1, 1], [0, 0, 0]),
+        (Role.STRING, [1, 1, 1], [1, 2, 3], [0, 0, 0]),
+        (Role.PACK, [1, 1, 1], [1, 1, 1], [1, 2, 3]),
     ],
 )
-def test_the_role_of_a_family_sets_the_phase_or_string_each_row_needs(
-    role: Role, phases: list[int], strings: list[int]
+def test_the_role_of_a_family_sets_the_phase_string_or_pack_each_row_needs(
+    role: Role, phases: list[int], strings: list[int], packs: list[int]
 ):
     definitions = [
         definition
@@ -105,6 +107,7 @@ def test_the_role_of_a_family_sets_the_phase_or_string_each_row_needs(
 
     assert [definition.phases for definition in definitions] == phases
     assert [definition.strings for definition in definitions] == strings
+    assert [definition.packs for definition in definitions] == packs
 
 
 def test_a_member_marked_core_for_the_first_index_only_is_core_for_that_index():
@@ -291,3 +294,30 @@ def test_the_settable_range_is_the_documented_range_or_what_the_encoding_holds(
         if expected is None
         else (settable.minimum, settable.maximum) == expected
     )
+
+
+@pytest.mark.parametrize(
+    ("family_equipment", "member_equipment", "expected"),
+    [
+        (None, None, None),
+        (Equipment.BATTERY, None, Equipment.BATTERY),
+        (Equipment.METER_B, Equipment.BATTERY, Equipment.METER_B),
+        (None, Equipment.BATTERY, Equipment.BATTERY),
+    ],
+)
+def test_a_family_tags_every_row_it_generates_with_its_equipment(
+    family_equipment: Equipment | None,
+    member_equipment: Equipment | None,
+    expected: Equipment | None,
+):
+    family = _family(
+        equipment=family_equipment,
+        members=(
+            Member(
+                offset=0,
+                definition=_definition("alpha", equipment=member_equipment),
+            ),
+        ),
+    )
+
+    assert {definition.equipment for definition in family.definitions()} == {expected}

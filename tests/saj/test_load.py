@@ -1,7 +1,9 @@
 import pytest
 
+from saj.catalogue import Fit
 from saj.health import Break
 from saj.load import installation_load, planned_load, requests_per_read
+from saj.models import ALL_EQUIPMENT, Equipment
 from saj.models.hs3 import PROFILE as HS3
 from saj.schedule import Cadence
 from tests.profiles import profile
@@ -32,7 +34,10 @@ SECONDS_PER_MINUTE = 60
 )
 def test_requests_for_one_read_count_blocks_not_rows(keys: set[str], expected: int):
     assert (
-        requests_per_read(profile=PROFILE, device_type=DEVICE_TYPE, keys=keys)
+        requests_per_read(
+            fit=Fit(profile=PROFILE, device_type=DEVICE_TYPE, equipment=ALL_EQUIPMENT),
+            keys=keys,
+        )
         == expected
     )
 
@@ -42,7 +47,9 @@ def test_a_break_adds_the_requests_it_forces():
     gap = Break(before=0x40A6, after=0x40A6)
 
     requests = requests_per_read(
-        profile=PROFILE, device_type=DEVICE_TYPE, keys=keys, breaks=[gap]
+        fit=Fit(profile=PROFILE, device_type=DEVICE_TYPE, equipment=ALL_EQUIPMENT),
+        keys=keys,
+        breaks=[gap],
     )
 
     assert requests == 2
@@ -50,7 +57,9 @@ def test_a_break_adds_the_requests_it_forces():
 
 def _load(cadences: list[Cadence], enabled: set[str] | None = None) -> float:
     return planned_load(
-        profile=PROFILE, device_type=DEVICE_TYPE, enabled=enabled, cadences=cadences
+        fit=Fit(profile=PROFILE, device_type=DEVICE_TYPE, equipment=ALL_EQUIPMENT),
+        enabled=enabled,
+        cadences=cadences,
     )
 
 
@@ -115,8 +124,7 @@ def test_the_installation_load_defaults_what_no_group_claims_and_counts_enabled_
     expected: float,
 ):
     load = installation_load(
-        profile=PROFILE,
-        device_type=DEVICE_TYPE,
+        fit=Fit(profile=PROFILE, device_type=DEVICE_TYPE, equipment=ALL_EQUIPMENT),
         enabled=enabled,
         default_interval=default_interval,
         groups=groups,
@@ -139,8 +147,7 @@ def test_a_write_only_key_adds_no_load_to_a_cadence():
 
     assert (
         installation_load(
-            profile=selected,
-            device_type=DEVICE_TYPE,
+            fit=Fit(profile=selected, device_type=DEVICE_TYPE, equipment=ALL_EQUIPMENT),
             enabled={"pv_power", "ems_grid_power_target"},
             default_interval=60,
             groups=[
@@ -151,9 +158,45 @@ def test_a_write_only_key_adds_no_load_to_a_cadence():
     )
     assert (
         requests_per_read(
-            profile=selected,
-            device_type=DEVICE_TYPE,
+            fit=Fit(profile=selected, device_type=DEVICE_TYPE, equipment=ALL_EQUIPMENT),
             keys=cadences[0].keys,
         )
         == 1
     )
+
+
+@pytest.mark.parametrize(
+    ("equipment", "expected"),
+    [
+        (frozenset(), 1),
+        (frozenset({Equipment.BATTERY}), 2),
+    ],
+)
+def test_requests_for_one_read_leave_out_equipment_that_is_not_fitted(
+    equipment: frozenset[Equipment], expected: int
+):
+    fit = Fit(profile=PROFILE, device_type=DEVICE_TYPE, equipment=equipment)
+
+    assert requests_per_read(fit=fit, keys={"pv_power", "battery_soc"}) == expected
+
+
+@pytest.mark.parametrize(
+    ("equipment", "expected"),
+    [
+        (frozenset(), 2),
+        (frozenset({Equipment.BATTERY}), 3),
+    ],
+)
+def test_the_installation_load_leaves_out_equipment_that_is_not_fitted(
+    equipment: frozenset[Equipment], expected: int
+):
+    fit = Fit(profile=PROFILE, device_type=DEVICE_TYPE, equipment=equipment)
+
+    load = installation_load(
+        fit=fit,
+        enabled=ALL_KEYS,
+        default_interval=60,
+        groups=[],
+    )
+
+    assert load == expected

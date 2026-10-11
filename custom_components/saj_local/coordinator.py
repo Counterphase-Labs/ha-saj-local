@@ -149,9 +149,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
                         ),
                         groups=group_cadences(entry=entry),
-                        supported=device_keys(
-                            profile=device.profile, device_type=device.device_type
-                        ),
+                        supported=device_keys(fit=device.fit),
                     ),
                     origin=hass.loop.time(),
                 ),
@@ -473,10 +471,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                 enabled_entity_keys(
                     hass=self.hass,
                     entry_id=self.entry_id,
-                    registers=device_registers(
-                        profile=self.device.profile,
-                        device_type=self.device.device_type,
-                    ),
+                    registers=device_registers(fit=self.device.fit),
                 )
             )
         return {str(context) for context in self.async_contexts()}

@@ -3,12 +3,20 @@ from pathlib import Path
 
 import pytest
 
+from custom_components.saj_local.config_flow import (
+    ERROR_INVALID_EQUIPMENT,
+    NO_EQUIPMENT,
+)
+from custom_components.saj_local.const import EQUIPMENT_ISSUE_TRANSLATION_KEY
 from custom_components.saj_local.saj.catalogue import (
     CATALOGUES,
     ENERGY_BLOCK,
+    Fit,
     blocks_by_key,
 )
 from custom_components.saj_local.saj.definitions import EntityKind
+from custom_components.saj_local.saj.equipment import Setting
+from custom_components.saj_local.saj.models import ALL_EQUIPMENT, Equipment
 
 TRANSLATIONS = json.loads(
     (
@@ -133,7 +141,11 @@ def test_every_block_an_entity_can_be_listed_under_has_a_label():
         block
         for profile_key in PROFILE_KEYS
         for block in blocks_by_key(
-            profile=CATALOGUES[profile_key].profile, device_type=0
+            fit=Fit(
+                profile=CATALOGUES[profile_key].profile,
+                device_type=0,
+                equipment=ALL_EQUIPMENT,
+            )
         ).values()
     }
 
@@ -172,3 +184,50 @@ def test_the_disabled_option_label_names_the_entity_it_qualifies():
     assert (
         label.format(entity="Realtime: Grid power") == "Realtime: Grid power (disabled)"
     )
+
+
+EQUIPMENT_SECTION = TRANSLATIONS["options"]["step"]["init"]["sections"]["equipment"]
+
+
+def test_the_equipment_section_names_and_describes_every_piece_of_equipment():
+    names = {item.value for item in Equipment}
+
+    assert set(EQUIPMENT_SECTION["data"]) == names
+    assert set(EQUIPMENT_SECTION["data_description"]) == names
+
+
+def test_the_equipment_section_states_what_is_treated_as_fitted():
+    assert "{equipment_fitted}" in EQUIPMENT_SECTION["description"]
+
+
+def test_every_equipment_and_every_setting_has_a_selector_label():
+    selectors = TRANSLATIONS["selector"]
+
+    assert set(selectors["equipment"]["options"]) == {
+        *(item.value for item in Equipment),
+        NO_EQUIPMENT,
+    }
+    assert set(selectors["equipment_setting"]["options"]) == {
+        setting.value for setting in Setting
+    }
+
+
+def test_an_invalid_equipment_choice_has_an_error_text():
+    assert TRANSLATIONS["options"]["error"][ERROR_INVALID_EQUIPMENT]
+
+
+ISSUES = TRANSLATIONS["issues"]
+
+
+def test_the_equipment_issue_names_the_installation_and_the_equipment_and_what_to_do():
+    issue = ISSUES[EQUIPMENT_ISSUE_TRANSLATION_KEY]
+
+    assert "{equipment}" in issue["title"]
+    assert "{installation}" in issue["description"]
+    assert "{equipment}" in issue["description"]
+    assert "Configure" in issue["description"]
+    assert "Not fitted" in issue["description"]
+
+
+def test_there_is_a_translation_for_every_issue_the_integration_raises():
+    assert set(ISSUES) == {EQUIPMENT_ISSUE_TRANSLATION_KEY}

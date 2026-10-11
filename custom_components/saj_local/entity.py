@@ -152,10 +152,7 @@ def add_entities(
     prefix: str = entry.options.get(CONF_PREFIX, "")
     registers = [
         register
-        for register in device_registers(
-            profile=coordinator.device.profile,
-            device_type=coordinator.device.device_type,
-        )
+        for register in device_registers(fit=coordinator.device.fit)
         if register.kind is kind
     ]
     _warn_about_displaced_entities(

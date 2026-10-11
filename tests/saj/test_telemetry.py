@@ -2,13 +2,13 @@ from dataclasses import replace
 
 import pytest
 
-from saj.catalogue import Register, Row, device_registers
+from saj.catalogue import Fit, Register, Row, device_registers
 from saj.client import ModbusError, ModbusErrorMessage
 from saj.codec import BitRange, Encoding
 from saj.definitions import Combination, Definition, Operation, Quantity
 from saj.device import Device
 from saj.health import Break, Region
-from saj.models import Evidence, Shape, Span
+from saj.models import ALL_EQUIPMENT, Equipment, Evidence, Shape, Span
 from saj.models.h2 import PROFILE as H2
 from saj.models.hs3 import PROFILE as HS3
 from saj.telemetry import (
@@ -319,28 +319,32 @@ NEVER_READ = {
 
 
 def _shipped_selection(
-    *, profile_key: str, selection: str
+    *,
+    profile_key: str,
+    selection: str,
+    equipment: frozenset[Equipment] = ALL_EQUIPMENT,
 ) -> tuple[list[ReadRange], int]:
     profile_data = HS3 if profile_key == HS3.key else H2
     device_type = next(iter(profile_data.device_types))
-    registers = device_registers(profile=profile_data, device_type=device_type)
+    fit = Fit(profile=profile_data, device_type=device_type, equipment=equipment)
+    registers = device_registers(fit=fit)
     keys = {
         "core": {register.key for register in registers if register.core},
         "every": {register.key for register in registers},
         "fast": FAST_POWER_KEYS,
     }[selection]
-    ranges = plan_requests(profile=profile_data, device_type=device_type, enabled=keys)
+    ranges = plan_requests(fit=fit, enabled=keys)
     return ranges, profile_data.largest_request
 
 
 @pytest.mark.parametrize(
     ("profile_key", "selection", "requests"),
     [
-        (HS3.key, "core", 9),
+        (HS3.key, "core", 13),
         (HS3.key, "every", 36),
         (HS3.key, "fast", 1),
-        (H2.key, "core", 5),
-        (H2.key, "every", 11),
+        (H2.key, "core", 7),
+        (H2.key, "every", 13),
         (H2.key, "fast", 1),
     ],
 )
@@ -353,10 +357,26 @@ def test_the_shipped_catalogues_read_in_few_requests_within_the_largest(
     assert max(read_range.count for read_range in ranges) <= largest
 
 
+BATTERY_AND_METER_A = frozenset({Equipment.BATTERY, Equipment.METER_A})
+
+
+@pytest.mark.parametrize(("profile_key", "requests"), [(HS3.key, 9), (H2.key, 6)])
+def test_the_default_read_of_a_battery_and_meter_a_installation_is_unchanged(
+    profile_key: str, requests: int
+):
+    ranges, _ = _shipped_selection(
+        profile_key=profile_key, selection="core", equipment=BATTERY_AND_METER_A
+    )
+
+    assert len(ranges) == requests
+
+
 @pytest.mark.parametrize("shipped", [HS3, H2])
 def test_no_request_leaves_its_span_or_touches_a_never_read_address(shipped):
     device_type = next(iter(shipped.device_types))
-    ranges = plan_requests(profile=shipped, device_type=device_type)
+    ranges = plan_requests(
+        fit=Fit(profile=shipped, device_type=device_type, equipment=ALL_EQUIPMENT)
+    )
 
     for read_range in ranges:
         assert any(
@@ -717,3 +737,76 @@ async def test_only_write_only_keys_enabled_means_nothing_is_read():
 
     assert client.reads == []
     assert telemetry.values == {}
+
+
+OPTIONAL_KEYS = ("pv_power", "battery_soc", "battery_power")
+
+
+def _optional_device(*, fitted: frozenset[Equipment]) -> Device:
+    return replace(_device(*OPTIONAL_KEYS), equipment=fitted)
+
+
+@pytest.mark.parametrize(
+    ("fitted", "keys"),
+    [
+        (frozenset(), {"pv_power"}),
+        (frozenset({Equipment.BATTERY}), {"pv_power", "battery_soc", "battery_power"}),
+        (frozenset({Equipment.EV_CHARGER}), {"pv_power"}),
+    ],
+)
+def test_rows_of_equipment_that_is_not_fitted_are_not_planned(
+    fitted: frozenset[Equipment], keys: set[str]
+):
+    device = _optional_device(fitted=fitted)
+
+    planned = {key for read_range in plan_reads(device) for key in read_range.keys}
+
+    assert planned == keys
+    assert setup_keys(device) <= keys
+
+
+@pytest.mark.parametrize(
+    ("fitted", "keys"),
+    [
+        (frozenset(), {"pv_power"}),
+        (frozenset({Equipment.BATTERY}), {"pv_power", "battery_soc", "battery_power"}),
+    ],
+)
+async def test_rows_of_equipment_that_is_not_fitted_are_not_read(
+    fitted: frozenset[Equipment], keys: set[str]
+):
+    device = _optional_device(fitted=fitted)
+
+    readout = await read_telemetry(
+        client=MemoryClient(), device=device, enabled=set(OPTIONAL_KEYS)
+    )
+
+    assert set(readout.values) == keys
+
+
+async def test_an_h2_reads_a_parallel_power_from_one_register_and_signs_the_battery():
+    device = Device(
+        serial="S",
+        device_type=0x005A,
+        rated_power=6000,
+        profile=H2,
+        detected=True,
+    )
+    client = MemoryClient({0x4204: 3500, 0x4205: 0xFFFF, 0x4208: 700})
+
+    readout = await read_telemetry(
+        client=client,
+        device=device,
+        enabled={
+            "parallel_pv_power",
+            "parallel_battery_power",
+            "parallel_backup_load_power",
+        },
+    )
+
+    assert readout.values == {
+        "parallel_pv_power": 3500,
+        "parallel_battery_power": -1,
+        "parallel_backup_load_power": 700,
+    }
+    assert [address for address, _ in client.reads] == [0x4204]

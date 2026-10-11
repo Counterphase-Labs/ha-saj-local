@@ -88,6 +88,7 @@ class Format:
     field: BitRange | None = None
     valid_range: Range | None = None
     words: int | None = None
+    inverted: bool = False
 
     @property
     def word_count(self) -> int:
@@ -129,7 +130,9 @@ def _decode_number(*, words: Sequence[int], encoding_format: Format) -> Value:
     raw = combine_words(words=words)
     bit_count = WORD_BITS * len(words)
     if encoding_format.field is not None:
-        raw = (raw >> encoding_format.field.first) & encoding_format.field.mask
+        raw = _field_bits(
+            raw=raw, field=encoding_format.field, inverted=encoding_format.inverted
+        )
         bit_count = encoding_format.field.width
     if raw in encoding_format.invalid:
         return None
@@ -142,6 +145,11 @@ def _decode_number(*, words: Sequence[int], encoding_format: Format) -> Value:
     ):
         return None
     return value
+
+
+def _field_bits(*, raw: int, field: BitRange, inverted: bool) -> int:
+    bits = (raw >> field.first) & field.mask
+    return bits ^ field.mask if inverted else bits
 
 
 def _bytes_of(*, words: Sequence[int]) -> bytes:
@@ -259,6 +267,8 @@ def _encode_number(*, value: Value, encoding_format: Format) -> tuple[int, ...]:
         raise InvalidValueError(ValueProblem.DOES_NOT_FIT)
     raw &= (1 << bit_count) - 1
     if field is not None:
+        if encoding_format.inverted:
+            raw ^= field.mask
         raw <<= field.first
     return split_words(raw=raw, word_count=encoding_format.word_count)
 

@@ -1,8 +1,10 @@
 import pytest
 
 import saj.device as device_module
+from saj.catalogue import Fit
 from saj.device import Device, identify
 from saj.errors import ModelMismatchError, UnsupportedDeviceError
+from saj.models import Equipment
 from saj.models.hs3 import PROFILE as HS3
 from saj.profiles import AUTOMATIC, Resolution
 from tests.profiles import profile
@@ -118,3 +120,42 @@ async def test_identify_rejects_empty_or_invalid_serial(
     _resolver(monkeypatch, Resolution(profile=FIRST, detected=True))
     with pytest.raises(ValueError, match=message):
         await identify(_client(serial=serial))
+
+
+@pytest.mark.parametrize(
+    ("fitted", "pack_limit"),
+    [
+        (frozenset(), None),
+        (frozenset({Equipment.BATTERY}), 2),
+        (frozenset(Equipment), None),
+    ],
+)
+def test_a_device_fit_names_its_profile_type_fitted_equipment_and_pack_limit(
+    fitted: frozenset[Equipment], pack_limit: int | None
+):
+    device = Device(
+        serial="UNIT-0001",
+        device_type=RECOGNISED_TYPE,
+        rated_power=RATED_POWER,
+        profile=FIRST,
+        detected=True,
+        equipment=fitted,
+        pack_limit=pack_limit,
+    )
+
+    assert device.fit == Fit(
+        profile=FIRST,
+        device_type=RECOGNISED_TYPE,
+        equipment=fitted,
+        pack_limit=pack_limit,
+    )
+
+
+async def test_identify_treats_all_equipment_as_fitted_until_it_is_detected(
+    monkeypatch,
+):
+    _resolver(monkeypatch, Resolution(profile=FIRST, detected=True))
+
+    device = await identify(_client())
+
+    assert device.equipment == frozenset(Equipment)

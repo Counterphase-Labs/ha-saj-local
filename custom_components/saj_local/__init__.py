@@ -20,6 +20,12 @@ from .const import (
     endpoint_guard,
 )
 from .coordinator import Installation, SajCoordinator
+from .equipment import (
+    EquipmentReport,
+    PackReport,
+    remove_equipment_issues,
+    settle_equipment,
+)
 from .errors import HANDLED_ERRORS, translate_error
 from .saj.client import ClientEnvironment, ModbusError, ModbusTcpClient
 from .saj.control import Control
@@ -31,12 +37,16 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import Event, HomeAssistant
 
+    from .saj.models import Equipment
+
 
 @dataclass
 class SajRuntimeData:
     client: ModbusTcpClient
     device: Device
     coordinator: SajCoordinator
+    equipment: dict[Equipment, EquipmentReport]
+    packs: PackReport
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -60,6 +70,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         device = await identify(client=client, selection=model_selection)
         _validate_identity(device=device, serial=entry.unique_id)
+        device, equipment, packs = await settle_equipment(
+            hass=hass, entry=entry, client=client, device=device
+        )
         coordinator = SajCoordinator(
             hass=hass,
             installation=Installation(
@@ -99,7 +112,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await client.close()
         raise
     entry.runtime_data = SajRuntimeData(
-        client=client, device=device, coordinator=coordinator
+        client=client,
+        device=device,
+        coordinator=coordinator,
+        equipment=equipment,
+        packs=packs,
     )
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -127,6 +144,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await entry.runtime_data.coordinator.async_shutdown()
         await entry.runtime_data.client.close()
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    remove_equipment_issues(hass=hass, entry=entry)
 
 
 def _release_ems_on_stop(

@@ -1,6 +1,13 @@
 from . import (
+    METER_A_PROBE,
+    METER_B_PROBE,
+    PARALLEL_PROBE,
+    Comparison,
+    Condition,
+    Equipment,
     Evidence,
     FamilyPlacement,
+    Probe,
     Profile,
     Replacement,
     Shape,
@@ -21,7 +28,7 @@ PROFILE = Profile(
         Span(name="settings", first=0x3600, last=0x36EF),
         Span(name="realtime", first=0x4000, last=0x4176),
         Span(name="parallel", first=0x4200, last=0x427C),
-        Span(name="ev_settings", first=0x4B03, last=0x4B45),
+        Span(name="ev_settings", first=0x4B03, last=0x4B47),
         Span(name="averages", first=0x513E, last=0x51BE),
         Span(name="ems", first=0x8400, last=0x8401),
         Span(name="identity", first=0x8F0D, last=0x8F1C),
@@ -133,6 +140,7 @@ PROFILE = Profile(
                 "parallel_grid_load_power_high_word": 0x4211,
                 "parallel_meter_b_power": 0x4212,
                 "meter_b_status": 0xA053,
+                "meter_b_power": None,
                 "parallel_backup_load_power": None,
                 "parallel_battery_power": None,
                 "parallel_grid_load_power": None,
@@ -196,6 +204,9 @@ PROFILE = Profile(
                 "ev_session_end": 0x30BA,
                 "battery_charge_limit": 0x3646,
                 "slave_software_version": 0x8F19,
+                "ev_ems_charging": 0x4B46,
+                "ev_ems_phase_mode": 0x4B46,
+                "ev_ems_charge_current": 0x4B47,
             },
         }
     ),
@@ -328,5 +339,26 @@ PROFILE = Profile(
                 11: "time_of_use_bms",
             },
         ),
+    ),
+    probes=(
+        Probe(
+            equipment=Equipment.BATTERY,
+            conditions=(
+                Condition(
+                    key="battery_protocol", comparison=Comparison.DIFFERS, reference=0
+                ),
+            ),
+            unanswered=True,
+        ),
+        METER_A_PROBE,
+        METER_B_PROBE,
+        Probe(
+            equipment=Equipment.EV_CHARGER,
+            conditions=(
+                Condition(key="ev_enabled", comparison=Comparison.EQUALS, reference=1),
+            ),
+            unanswered=False,
+        ),
+        PARALLEL_PROBE,
     ),
 )

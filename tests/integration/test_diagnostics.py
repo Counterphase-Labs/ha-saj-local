@@ -4,12 +4,19 @@ import pytest
 
 from custom_components.saj_local.coordinator import LastWrite, WriteStatistics
 from custom_components.saj_local.diagnostics import async_get_config_entry_diagnostics
+from custom_components.saj_local.equipment import (
+    EquipmentReport,
+    PackReport,
+    report_summary,
+)
 from custom_components.saj_local.errors import WriteOutcome
 from custom_components.saj_local.saj.budget import BUDGET_PER_MINUTE
 from custom_components.saj_local.saj.catalogue import Row
 from custom_components.saj_local.saj.device import Device
 from custom_components.saj_local.saj.ems import EmsOwnership
+from custom_components.saj_local.saj.equipment import Detection, Setting
 from custom_components.saj_local.saj.health import Break, Refusal, Region
+from custom_components.saj_local.saj.models import Equipment
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from custom_components.saj_local.saj.poller import CadencePlan
 from custom_components.saj_local.saj.telemetry import Telemetry
@@ -118,6 +125,8 @@ async def test_diagnostics_report_status_and_omit_endpoint_identity(
         runtime_data=SimpleNamespace(
             device=DEVICE,
             client=FakeClient(),
+            equipment={},
+            packs=PackReport(count_read=None, limit=None),
             coordinator=FakeCoordinator(contexts, telemetry),
         ),
     )
@@ -147,10 +156,9 @@ async def test_diagnostics_report_selection_and_whether_profile_was_assumed(
     entry = SimpleNamespace(
         data={"host": "private-host", "port": 502, "unit_id": 1, "model": selection},
         options={},
-        runtime_data=SimpleNamespace(
-            device=Device("PRIVATE-SERIAL", 0x1610, 12000, PROFILE, detected=detected),
-            client=FakeClient(),
+        runtime_data=_runtime(
             coordinator=FakeCoordinator(set(), None),
+            device=Device("PRIVATE-SERIAL", 0x1610, 12000, PROFILE, detected=detected),
         ),
     )
 
@@ -170,6 +178,8 @@ def _entry(coordinator, client=None):
         runtime_data=SimpleNamespace(
             device=DEVICE,
             client=client or FakeClient(),
+            equipment={},
+            packs=PackReport(count_read=None, limit=None),
             coordinator=coordinator,
         ),
     )
@@ -285,15 +295,7 @@ async def test_diagnostics_omit_group_names_host_and_serial():
 async def test_diagnostics_show_whether_a_prefix_is_set_without_revealing_it(
     options, pattern
 ):
-    entry = SimpleNamespace(
-        data={"host": "private-host", "port": 502, "unit_id": 1, "model": "automatic"},
-        options=options,
-        runtime_data=SimpleNamespace(
-            device=DEVICE,
-            client=FakeClient(),
-            coordinator=FakeCoordinator(set(), None),
-        ),
-    )
+    entry = _entry_of(FakeCoordinator(set(), None), **options)
 
     result = await async_get_config_entry_diagnostics(HASS, entry)
 
@@ -391,13 +393,21 @@ async def test_diagnostics_never_include_the_value_of_a_private_row(key):
     assert "PRIVATE-SERIAL" not in str(result)
 
 
+def _runtime(*, coordinator, device=DEVICE):
+    return SimpleNamespace(
+        device=device,
+        client=FakeClient(),
+        equipment={},
+        packs=PackReport(count_read=None, limit=None),
+        coordinator=coordinator,
+    )
+
+
 def _entry_of(coordinator, **options):
     return SimpleNamespace(
         data={"host": "private-host", "port": 502, "unit_id": 1, "model": "automatic"},
         options=options,
-        runtime_data=SimpleNamespace(
-            device=DEVICE, client=FakeClient(), coordinator=coordinator
-        ),
+        runtime_data=_runtime(coordinator=coordinator),
     )
 
 
@@ -464,3 +474,45 @@ async def test_diagnostics_count_writes_beats_and_name_the_last_write_without_a_
     assert result["ems_functions_owned"] == ["battery", "grid"]
     assert result["ems_beats_sent"] == 7
     assert result["ems_beats_dropped"] == 1
+
+
+async def test_diagnostics_report_each_equipment_with_its_probe_values_and_result():
+    entry = SimpleNamespace(
+        data={"host": "private-host", "port": 502, "unit_id": 1, "model": "automatic"},
+        options={},
+        unique_id="PRIVATE-SERIAL",
+        runtime_data=SimpleNamespace(
+            device=DEVICE,
+            client=FakeClient(),
+            equipment={
+                Equipment.BATTERY: EquipmentReport(
+                    setting=Setting.AUTOMATIC,
+                    detection=Detection(
+                        equipment=Equipment.BATTERY,
+                        fitted=True,
+                        answered=True,
+                        values={"battery_protocol": 24},
+                    ),
+                    remembered=True,
+                    lapsed=False,
+                    fitted=True,
+                ),
+                Equipment.METER_B: EquipmentReport(
+                    setting=Setting.FITTED,
+                    detection=None,
+                    remembered=False,
+                    lapsed=False,
+                    fitted=True,
+                ),
+            },
+            packs=PackReport(count_read=3, limit=2),
+            coordinator=FakeCoordinator(set(), None),
+        ),
+    )
+
+    result = await async_get_config_entry_diagnostics(HASS, entry)
+
+    assert result["battery_packs"] == {"count_read": 3, "limit_in_use": 2}
+    assert result["equipment"] == report_summary(reports=entry.runtime_data.equipment)
+    assert result["equipment"]["battery"]["probe_values"] == {"battery_protocol": 24}
+    assert result["equipment"]["meter_b"]["probe_values"] is None

@@ -17,13 +17,22 @@ from .definitions import (
     Quantity,
     Unit,
 )
-from .models import ENABLING_EVIDENCE, Evidence, Placement, Profile, Replacement, Shape
+from .models import (
+    ENABLED_WITHOUT_EVIDENCE,
+    ENABLING_EVIDENCE,
+    Evidence,
+    Placement,
+    Profile,
+    Replacement,
+    Shape,
+)
 from .profiles import PROFILES
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Collection, Iterable, Mapping, Sequence
 
     from .codec import BitRange, Format
+    from .models import Equipment
 
 ASSUMED_CORE_PHASES = 1
 ASSUMED_CORE_STRINGS = 2
@@ -33,6 +42,14 @@ ENERGY_BLOCK = "energy"
 
 class CatalogueError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class Fit:
+    profile: Profile
+    device_type: int
+    equipment: frozenset[Equipment]
+    pack_limit: int | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +72,10 @@ class Register:
     @property
     def key(self) -> str:
         return self.definition.key
+
+    @property
+    def equipment(self) -> Equipment | None:
+        return self.definition.equipment
 
     @property
     def words(self) -> int:
@@ -123,6 +144,10 @@ class Register:
         return self.definition.combination
 
     @property
+    def packs(self) -> int:
+        return self.definition.packs
+
+    @property
     def sources(self) -> tuple[str, ...]:
         if self.definition.combination is None:
             return ()
@@ -149,36 +174,88 @@ class Catalogue:
         _require_writable_forms(registers=registers)
         _require_write_only_forms(registers=registers)
         _require_combination_sources(registers=registers)
+        _require_combination_equipment(registers=registers)
+        _require_probes(profile=profile, registers=registers)
         _require_addresses(registers=registers)
         _require_no_overlap(registers=registers)
         _require_spans(profile=profile, registers=registers)
         self.registers = tuple(sorted(registers, key=_register_order))
-        self._by_shape: dict[Shape, tuple[Register, ...]] = {}
+        self.pack_maximum = max(
+            (register.packs for register in self.registers), default=0
+        )
+        self._by_fit: dict[
+            tuple[Shape, frozenset[Equipment], int | None], tuple[Register, ...]
+        ] = {}
 
-    def registers_for(self, *, shape: Shape) -> tuple[Register, ...]:
-        if shape not in self._by_shape:
-            self._by_shape[shape] = _fitting(registers=self.registers, shape=shape)
-        return self._by_shape[shape]
+    def registers_for(
+        self,
+        *,
+        shape: Shape,
+        equipment: Collection[Equipment],
+        pack_limit: int | None = None,
+    ) -> tuple[Register, ...]:
+        fitted = frozenset(equipment)
+        selection = (shape, fitted, pack_limit)
+        if selection not in self._by_fit:
+            self._by_fit[selection] = _fitting(
+                registers=self.registers,
+                shape=shape,
+                equipment=fitted,
+                pack_limit=pack_limit,
+            )
+        return self._by_fit[selection]
 
-    def read_registers_for(self, *, shape: Shape) -> tuple[Register, ...]:
-        return tuple(
-            register
-            for register in self.registers_for(shape=shape)
-            if register.readable
+    def read_registers_for(
+        self,
+        *,
+        shape: Shape,
+        equipment: Collection[Equipment],
+        pack_limit: int | None = None,
+    ) -> tuple[Register, ...]:
+        return self._readable(
+            shape=shape, equipment=equipment, pack_limit=pack_limit, readable=True
         )
 
-    def unread_registers_for(self, *, shape: Shape) -> tuple[Register, ...]:
-        return tuple(
-            register
-            for register in self.registers_for(shape=shape)
-            if not register.readable
+    def unread_registers_for(
+        self,
+        *,
+        equipment: Collection[Equipment],
+        shape: Shape,
+        pack_limit: int | None = None,
+    ) -> tuple[Register, ...]:
+        return self._readable(
+            readable=False, equipment=equipment, shape=shape, pack_limit=pack_limit
         )
 
-    def rows_for(self, *, shape: Shape) -> tuple[Row, ...]:
-        return _rows_of(registers=self.read_registers_for(shape=shape))
+    def _readable(
+        self,
+        *,
+        shape: Shape,
+        equipment: Collection[Equipment],
+        pack_limit: int | None,
+        readable: bool,
+    ) -> tuple[Register, ...]:
+        return tuple(
+            register
+            for register in self.registers_for(
+                shape=shape, equipment=equipment, pack_limit=pack_limit
+            )
+            if register.readable is readable
+        )
 
-    def unread_rows_for(self, *, shape: Shape) -> tuple[Row, ...]:
-        return _rows_of(registers=self.unread_registers_for(shape=shape))
+    def rows_for(
+        self, *, shape: Shape, equipment: Collection[Equipment]
+    ) -> tuple[Row, ...]:
+        return _rows_of(
+            registers=self.read_registers_for(shape=shape, equipment=equipment)
+        )
+
+    def unread_rows_for(
+        self, *, shape: Shape, equipment: Collection[Equipment]
+    ) -> tuple[Row, ...]:
+        return _rows_of(
+            registers=self.unread_registers_for(shape=shape, equipment=equipment)
+        )
 
 
 def _rows_of(*, registers: Iterable[Register]) -> tuple[Row, ...]:
@@ -222,6 +299,8 @@ def _replaced(*, original: Definition, replacement: Replacement) -> Definition:
         definition = replace(definition, encoding=Encoding(replacement.encoding))
     if replacement.scale is not None:
         definition = replace(definition, scale=replacement.scale)
+    if replacement.uncombined:
+        definition = replace(definition, combination=None)
     return definition
 
 
@@ -269,7 +348,15 @@ def _register(
         definition=definition,
         address=placement.address,
         evidence=placement.evidence,
-        core=definition.core and placement.evidence in ENABLING_EVIDENCE,
+        core=definition.core
+        and _enabled_by_default(definition=definition, evidence=placement.evidence),
+    )
+
+
+def _enabled_by_default(*, definition: Definition, evidence: Evidence) -> bool:
+    return evidence in ENABLING_EVIDENCE or (
+        definition.equipment is not None
+        and definition.equipment in ENABLED_WITHOUT_EVIDENCE
     )
 
 
@@ -301,6 +388,39 @@ def _require_combination_sources(*, registers: Sequence[Register]) -> None:
         missing = [source for source in register.sources if source not in keys]
         if missing:
             message = f"Combined key {register.key} lacks sources {missing}"
+            raise CatalogueError(message)
+
+
+def _require_combination_equipment(*, registers: Sequence[Register]) -> None:
+    by_key = {register.key: register for register in registers}
+    for register in registers:
+        mixed = [
+            source
+            for source in register.sources
+            if by_key[source].equipment != register.equipment
+        ]
+        if mixed:
+            message = (
+                f"Combined key {register.key} has sources {mixed} of another equipment"
+            )
+            raise CatalogueError(message)
+
+
+def _require_probes(*, profile: Profile, registers: Sequence[Register]) -> None:
+    by_key = {register.key: register for register in registers}
+    for probe in profile.probes:
+        for key in probe.keys:
+            register = by_key.get(key)
+            if register is None:
+                message = f"Probe for {probe.equipment} reads {key} that has no row"
+            elif not register.readable:
+                message = f"Probe for {probe.equipment} reads {key} that is unreadable"
+            elif register.equipment is not None:
+                message = (
+                    f"Probe for {probe.equipment} reads {key} that belongs to equipment"
+                )
+            else:
+                continue
             raise CatalogueError(message)
 
 
@@ -384,12 +504,20 @@ def _require_readable_row(*, profile: Profile, register: Register, row: Row) -> 
         raise CatalogueError(message)
 
 
-def _fitting(*, registers: Iterable[Register], shape: Shape) -> tuple[Register, ...]:
+def _fitting(
+    *,
+    registers: Iterable[Register],
+    shape: Shape,
+    equipment: frozenset[Equipment],
+    pack_limit: int | None,
+) -> tuple[Register, ...]:
     fitting = [
         register
         for register in registers
         if register.definition.phases <= shape.phases
         and register.definition.strings <= shape.strings
+        and (register.equipment is None or register.equipment in equipment)
+        and _within_pack_limit(register=register, pack_limit=pack_limit)
     ]
     present = {register.key for register in fitting}
     return tuple(
@@ -397,6 +525,10 @@ def _fitting(*, registers: Iterable[Register], shape: Shape) -> tuple[Register, 
         for register in fitting
         if _combination_available(register=register, present=present)
     )
+
+
+def _within_pack_limit(*, register: Register, pack_limit: int | None) -> bool:
+    return pack_limit is None or register.packs <= pack_limit
 
 
 def _combination_available(*, register: Register, present: set[str]) -> bool:
@@ -441,33 +573,45 @@ def catalogue_of(*, profile: Profile) -> Catalogue:
     return Catalogue(profile=profile)
 
 
-def device_registers(*, profile: Profile, device_type: int) -> tuple[Register, ...]:
-    return catalogue_of(profile=profile).registers_for(
-        shape=profile.shape_of(device_type=device_type)
+def device_registers(*, fit: Fit) -> tuple[Register, ...]:
+    return catalogue_of(profile=fit.profile).registers_for(
+        shape=fit.profile.shape_of(device_type=fit.device_type),
+        equipment=fit.equipment,
+        pack_limit=fit.pack_limit,
     )
 
 
-def device_read_registers(
-    *, profile: Profile, device_type: int
-) -> tuple[Register, ...]:
-    return catalogue_of(profile=profile).read_registers_for(
-        shape=profile.shape_of(device_type=device_type)
+def device_read_registers(*, fit: Fit) -> tuple[Register, ...]:
+    return catalogue_of(profile=fit.profile).read_registers_for(
+        shape=fit.profile.shape_of(device_type=fit.device_type),
+        equipment=fit.equipment,
+        pack_limit=fit.pack_limit,
     )
 
 
-def device_unread_registers(
-    *, profile: Profile, device_type: int
-) -> tuple[Register, ...]:
-    return catalogue_of(profile=profile).unread_registers_for(
-        shape=profile.shape_of(device_type=device_type)
+def device_unread_registers(*, fit: Fit) -> tuple[Register, ...]:
+    return catalogue_of(profile=fit.profile).unread_registers_for(
+        shape=fit.profile.shape_of(device_type=fit.device_type),
+        equipment=fit.equipment,
+        pack_limit=fit.pack_limit,
     )
 
 
-def device_keys(*, profile: Profile, device_type: int) -> frozenset[str]:
+def device_keys(*, fit: Fit) -> frozenset[str]:
+    return frozenset(register.key for register in device_read_registers(fit=fit))
+
+
+def absent_keys(*, fit: Fit) -> frozenset[str]:
     return frozenset(
         register.key
-        for register in device_read_registers(profile=profile, device_type=device_type)
+        for register in catalogue_of(profile=fit.profile).registers
+        if (register.equipment is not None and register.equipment not in fit.equipment)
+        or not _within_pack_limit(register=register, pack_limit=fit.pack_limit)
     )
+
+
+def pack_maximum(*, profile: Profile) -> int:
+    return catalogue_of(profile=profile).pack_maximum
 
 
 def known_keys(*, profiles: Iterable[Profile]) -> frozenset[str]:
@@ -478,15 +622,15 @@ def known_keys(*, profiles: Iterable[Profile]) -> frozenset[str]:
     )
 
 
-def blocks_by_key(*, profile: Profile, device_type: int) -> dict[str, str]:
-    registers = device_read_registers(profile=profile, device_type=device_type)
+def blocks_by_key(*, fit: Fit) -> dict[str, str]:
+    registers = device_read_registers(fit=fit)
     by_key = {register.key: register for register in registers}
     placed = [
         (_placed(register=register, by_key=by_key), register) for register in registers
     ]
     placed.sort(key=lambda item: item[0].address)
     return {
-        register.key: _block(profile=profile, register=register, row=row)
+        register.key: _block(profile=fit.profile, register=register, row=row)
         for row, register in placed
     }
 

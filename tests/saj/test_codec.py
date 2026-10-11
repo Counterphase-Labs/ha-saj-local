@@ -133,6 +133,24 @@ def test_a_bit_field_is_read_from_its_bits_only(
     assert decode(words=[word], encoding_format=format_) == expected
 
 
+@pytest.mark.parametrize(
+    ("word", "field", "expected"),
+    [
+        (0b0000, BitRange(first=0, last=0), 1),
+        (0b0001, BitRange(first=0, last=0), 0),
+        (0b0110, BitRange(first=1, last=2), 0),
+        (0b0010, BitRange(first=1, last=2), 2),
+        (0b1000, BitRange(first=0, last=0), 1),
+    ],
+)
+def test_an_inverted_bit_field_reads_the_complement_of_its_bits(
+    word: int, field: BitRange, expected: int
+):
+    format_ = Format(encoding=Encoding.U16, field=field, inverted=True)
+
+    assert decode(words=[word], encoding_format=format_) == expected
+
+
 def test_a_bit_field_applies_the_invalid_marker_to_the_field_value():
     format_ = Format(
         encoding=Encoding.U16,
@@ -421,6 +439,39 @@ def test_a_packed_field_encodes_to_its_bits_in_position(
     format_ = Format(encoding=encoding, field=field)
 
     assert list(encode(value=value, encoding_format=format_)) == words
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "words"),
+    [
+        (BitRange(first=0, last=0), 1, [0b0]),
+        (BitRange(first=0, last=0), 0, [0b1]),
+        (BitRange(first=3, last=3), 1, [0b0]),
+        (BitRange(first=1, last=2), 1, [0b100]),
+        (BitRange(first=1, last=2), 3, [0b000]),
+    ],
+)
+def test_an_inverted_packed_field_encodes_the_complement_in_position(
+    field: BitRange, value: int, words: list[int]
+):
+    format_ = Format(encoding=Encoding.U16, field=field, inverted=True)
+
+    assert list(encode(value=value, encoding_format=format_)) == words
+
+
+def test_an_inverted_bit_survives_a_round_trip_that_keeps_the_other_bits():
+    field = BitRange(first=0, last=0)
+    format_ = Format(encoding=Encoding.U16, field=field, inverted=True)
+    current = [0b110]
+
+    written = replace_bits(
+        current=current,
+        bits=encode(value=1, encoding_format=format_),
+        field=field,
+    )
+
+    assert list(written) == [0b110]
+    assert decode(words=written, encoding_format=format_) == 1
 
 
 @pytest.mark.parametrize(

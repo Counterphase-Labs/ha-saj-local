@@ -11,7 +11,7 @@ from .definitions import Combination, Operation
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterable, Mapping, Sequence
 
-    from .catalogue import Register, Row
+    from .catalogue import Fit, Register, Row
     from .client import RegisterReader
     from .device import Device
     from .health import Break, Region
@@ -29,9 +29,7 @@ SETUP_KEYS = frozenset(
 
 
 def setup_keys(device: Device) -> frozenset[str]:
-    registers = device_read_registers(
-        profile=device.profile, device_type=device.device_type
-    )
+    registers = device_read_registers(fit=device.fit)
     return SETUP_KEYS & {register.key for register in registers}
 
 
@@ -173,16 +171,15 @@ def _needed(
 
 def plan_requests(
     *,
-    profile: Profile,
-    device_type: int,
+    fit: Fit,
     enabled: Collection[str] | None = None,
     narrowing: Collection[Region] = (),
     breaks: Collection[Break] = (),
 ) -> list[ReadRange]:
-    registers = device_read_registers(profile=profile, device_type=device_type)
+    registers = device_read_registers(fit=fit)
     return plan_ranges(
         registers=_needed(registers, enabled),
-        profile=profile,
+        profile=fit.profile,
         narrowing=narrowing,
         breaks=breaks,
     )
@@ -195,8 +192,7 @@ def plan_reads(
     breaks: Collection[Break] = (),
 ) -> list[ReadRange]:
     return plan_requests(
-        profile=device.profile,
-        device_type=device.device_type,
+        fit=device.fit,
         enabled=enabled,
         narrowing=narrowing,
         breaks=breaks,
@@ -259,9 +255,7 @@ async def read_telemetry(
     narrowing: Collection[Region] = (),
     breaks: Collection[Break] = (),
 ) -> Readout:
-    registers = device_read_registers(
-        profile=device.profile, device_type=device.device_type
-    )
+    registers = device_read_registers(fit=device.fit)
     needed = _needed(registers, enabled)
     by_key = {register.key: register for register in needed}
     requested = set(by_key) if enabled is None else set(enabled)

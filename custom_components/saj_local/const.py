@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 from homeassistant.const import Platform
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.translation import async_get_translations
 
 from .saj.guard import EndpointGuard
 from .saj.schedule import Cadence
@@ -24,6 +25,12 @@ CONF_SENSORS = "sensors"
 CONF_PREFIX = "prefix"
 CONF_ALLOW_CONTROL = "allow_control"
 CONF_EMS_HEARTBEAT = "ems_heartbeat"
+CONF_EQUIPMENT = "equipment"
+CONF_DETECTED_EQUIPMENT = "detected_equipment"
+CONF_FITTED_EQUIPMENT = "fitted_equipment"
+CONF_HIGHEST_PACK_COUNT = "highest_pack_count"
+EQUIPMENT_SELECTOR = "equipment"
+EQUIPMENT_ISSUE_TRANSLATION_KEY = "equipment_not_detected"
 EMS_TIMEOUT_KEY = "ems_timeout"
 OBJECT_ID_ROOT = "saj"
 KEY_PLACEHOLDER = "<key>"
@@ -46,6 +53,20 @@ PLATFORMS = (
     Platform.TEXT,
     Platform.BUTTON,
 )
+
+
+async def selector_options(
+    *, hass: HomeAssistant, selector_name: str
+) -> dict[str, str]:
+    translations = await async_get_translations(
+        hass, hass.config.language, "selector", [DOMAIN]
+    )
+    prefix = f"component.{DOMAIN}.selector.{selector_name}.options."
+    return {
+        name.removeprefix(prefix): label
+        for name, label in translations.items()
+        if name.startswith(prefix)
+    }
 
 
 def entity_unique_id(*, entry_id: str, key: str) -> str:

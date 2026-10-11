@@ -113,6 +113,16 @@ def test_the_charger_ems_current_is_in_amps_with_the_protocol_range():
     assert (field.minimum, field.maximum) == (60, 320)
 
 
+def test_the_charger_ems_command_is_a_three_bit_field_that_starts_switched_off():
+    field = by_name(fields=eq.ev_settings_fields(scenario=make_scenario(model="hs3")))[
+        ev.EV_EMS_COMMAND
+    ]
+
+    assert field.writable
+    assert (field.minimum, field.maximum) == (None, 0b111)
+    assert field.initial & 0b1
+
+
 def test_charger_data_is_read_only_and_describes_the_session():
     fields = by_address(fields=eq.ev_data_fields())
 

@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, time
 
 import pytest
@@ -32,7 +32,7 @@ from saj.errors import (
     WriteRejectedError,
     WriteUnconfirmedError,
 )
-from saj.models import Evidence, Placement, Profile, Shape, Span
+from saj.models import Equipment, Evidence, Placement, Profile, Shape, Span
 from tests.saj.fakes import WritableClient
 
 SHAPE = Shape(phases=1, strings=1)
@@ -1078,3 +1078,53 @@ async def test_a_limits_request_nobody_answers_fails_the_link_and_stops(
 
     assert caught.value.link_failed
     assert len(link.requests) == 2
+
+
+@pytest.mark.parametrize(
+    ("fitted", "writable"),
+    [
+        (frozenset(), False),
+        (frozenset({Equipment.METER_B}), False),
+        (frozenset({Equipment.BATTERY}), True),
+    ],
+)
+async def test_a_setting_of_equipment_that_is_not_fitted_cannot_be_written(
+    monkeypatch, *, fitted: frozenset[Equipment], writable: bool
+):
+    profile, _ = _registers()
+    setting = _setting(
+        "reserve",
+        EntityKind.NUMBER,
+        equipment=Equipment.BATTERY,
+        range=Range(minimum=0, maximum=100),
+    )
+    placement = Placement(key="reserve", address=0x1010, evidence=Evidence.VERIFIED)
+    registers = Catalogue(
+        profile=replace(profile, placements=(placement,)), definitions=[setting]
+    ).registers
+    seen: list[frozenset[Equipment]] = []
+
+    def fitted_registers(*, fit):
+        seen.append(fit.equipment)
+        return [r for r in registers if r.equipment in (None, *fit.equipment)]
+
+    monkeypatch.setattr(control_module, "device_registers", fitted_registers)
+    device = Device(
+        serial="S",
+        device_type=1,
+        rated_power=6000,
+        profile=profile,
+        detected=True,
+        equipment=fitted,
+    )
+    link = WritableClient()
+    control = _control(device, link)
+
+    if writable:
+        result = await control.write(key="reserve", value=50)
+        assert result.written is True
+    else:
+        with pytest.raises(UnknownSettingError):
+            await control.write(key="reserve", value=50)
+        assert link.writes == []
+    assert seen == [fitted]

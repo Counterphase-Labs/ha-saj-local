@@ -64,6 +64,7 @@ AVERAGE_PV_REGISTERS = 4
 EV_PHASE_REGISTERS = 2
 AVERAGE_BATTERY = 0x51B6
 EV_SETTINGS_START = 0x4B00
+EV_EMS_COMMAND_MAXIMUM = 0b111
 EV_SLOT_START = 0x4B20
 EV_SLOT_STRIDE = 5
 EV_SETTINGS_LENGTH = 0x48
@@ -338,7 +339,12 @@ def ev_settings_fields(*, scenario: Scenario) -> list[Field]:
             shape=Shape(enc=U32, maximum=charger.max_power_w),
         ),
         setting(address=0x4B43, name=ev.EV_FUNCTION, value=0),
-        setting(address=0x4B46, name=ev.EV_EMS_COMMAND, value=1),
+        setting(
+            address=0x4B46,
+            name=ev.EV_EMS_COMMAND,
+            value=1,
+            shape=Shape(maximum=EV_EMS_COMMAND_MAXIMUM),
+        ),
         setting(
             address=0x4B47,
             name=ev.EV_EMS_CURRENT,

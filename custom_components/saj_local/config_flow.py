@@ -1,4 +1,5 @@
 import re
+from collections.abc import Mapping
 from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
 from functools import partial
@@ -15,24 +16,27 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
-from homeassistant.helpers.translation import async_get_translations
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Collection, Iterable, Mapping
+    from collections.abc import Awaitable, Callable, Collection, Iterable
     from contextlib import AbstractAsyncContextManager
 
     from homeassistant.config_entries import ConfigEntry, ConfigSubentry
     from homeassistant.core import HomeAssistant
 
     from .saj.guard import EndpointGuard
-    from .saj.models import Profile
 
 from .const import (
     CONF_ALLOW_CONTROL,
+    CONF_DETECTED_EQUIPMENT,
     CONF_DEVICE_TYPE,
     CONF_EMS_HEARTBEAT,
+    CONF_EQUIPMENT,
+    CONF_FITTED_EQUIPMENT,
+    CONF_HIGHEST_PACK_COUNT,
     CONF_MODEL,
     CONF_PREFIX,
     CONF_SCAN_INTERVAL,
@@ -43,6 +47,7 @@ from .const import (
     DEFAULT_UNIT_ID,
     DOMAIN,
     DOMAIN_PLACEHOLDER,
+    EQUIPMENT_SELECTOR,
     KEY_PLACEHOLDER,
     MAX_PORT,
     MAX_UNIT_ID,
@@ -55,10 +60,18 @@ from .const import (
     fixed_entity_id,
     group_cadences,
     installation_entities,
+    selector_options,
+)
+from .equipment import (
+    configured_settings,
+    settings_of,
+    stored_fitted_equipment,
+    stored_pack_limit,
 )
 from .errors import HANDLED_ERRORS, translate_error
 from .saj.budget import BUDGET_PER_MINUTE
 from .saj.catalogue import (
+    Fit,
     blocks_by_key,
     device_read_registers,
     device_registers,
@@ -72,7 +85,9 @@ from .saj.ems import (
     FUNCTION_BY_ENABLE_KEY,
     valid_heartbeat_interval,
 )
+from .saj.equipment import Setting
 from .saj.load import installation_load, requests_per_read
+from .saj.models import Equipment
 from .saj.profiles import AUTOMATIC, PROFILES, resolve_profile
 from .saj.schedule import MIN_INTERVAL, Cadence
 from .saj.telemetry import read_telemetry, setup_keys
@@ -89,6 +104,8 @@ STEP_SAVE_GROUP = "save_group"
 STEP_CHANGE_SELECTION = "change_selection"
 BLOCK_SELECTOR = "block"
 ENTITY_STATE_SELECTOR = "entity_state"
+EQUIPMENT_SETTING_TRANSLATION_KEY = "equipment_setting"
+NO_EQUIPMENT = "none"
 DISABLED_STATE = "disabled"
 LOAD_DECIMALS = 1
 ABORT_NOT_PENDING = "confirmation_not_pending"
@@ -104,6 +121,7 @@ ERROR_PREFIX_IN_USE = "prefix_in_use"
 ERROR_ENTITY_ID_TAKEN = "entity_id_taken"
 ERROR_STATISTICS_EXIST = "statistics_exist"
 ERROR_INVALID_EMS_HEARTBEAT = "invalid_ems_heartbeat"
+ERROR_INVALID_EQUIPMENT = "invalid_equipment"
 PREFIX_SHAPE = re.compile(r"[a-z0-9]+")
 MAX_PREFIX_LENGTH = 32
 RECORDER_COMPONENT = "recorder"
@@ -157,6 +175,7 @@ class Submission:
     prefix: str
     allow_control: bool = False
     ems_heartbeat: int | None = None
+    equipment: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def entry_data(self) -> dict[str, Any]:
@@ -176,6 +195,8 @@ class Submission:
         }
         if self.ems_heartbeat is not None:
             options[CONF_EMS_HEARTBEAT] = self.ems_heartbeat
+        if self.equipment:
+            options[CONF_EQUIPMENT] = dict(self.equipment)
         return options
 
     @property
@@ -365,6 +386,7 @@ class SajOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        user_input = self._with_saved_equipment(user_input=user_input)
         validation = await validate_submission(
             user_input=user_input,
             endpoint_taken=self._endpoint_exists_for_other,
@@ -382,12 +404,14 @@ class SajOptionsFlow(OptionsFlow):
                     self._pending = change
                     return await self._async_advance(change=change)
                 validation = conflict
+        offered = offered_equipment(entry=self.config_entry)
         return self.async_show_form(
             step_id="init",
             data_schema=_options_schema(
                 entry=self.config_entry,
                 submitted=user_input,
                 ems=offers_ems(entry=self.config_entry),
+                equipment=offered,
             ),
             errors=validation.errors,
             description_placeholders={
@@ -396,9 +420,34 @@ class SajOptionsFlow(OptionsFlow):
                         hass=self.hass, entry=self.config_entry
                     )
                 ),
+                **await self._equipment_placeholders(offered=offered),
                 **validation.placeholders,
             },
         )
+
+    def _with_saved_equipment(
+        self, *, user_input: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        if user_input is None or CONF_EQUIPMENT in user_input:
+            return user_input
+        return {
+            **user_input,
+            CONF_EQUIPMENT: dict(self.config_entry.options.get(CONF_EQUIPMENT, {})),
+        }
+
+    async def _equipment_placeholders(
+        self, *, offered: Collection[Equipment]
+    ) -> dict[str, str]:
+        if not offered:
+            return {}
+        names = await selector_options(hass=self.hass, selector_name=EQUIPMENT_SELECTOR)
+        fitted = stored_fitted_equipment(entry=self.config_entry)
+        return {
+            "equipment_fitted": ", ".join(
+                names[item.value] for item in offered if item in fitted
+            )
+            or names[NO_EQUIPMENT]
+        }
 
     async def async_step_confirm_model(
         self, user_input: dict[str, Any] | None = None
@@ -502,8 +551,18 @@ class SajOptionsFlow(OptionsFlow):
         after = installation_load_of(
             hass=self.hass,
             entry=entry,
-            profile=change.device.profile,
-            device_type=change.device.device_type,
+            fit=Fit(
+                profile=change.device.profile,
+                device_type=change.device.device_type,
+                equipment=stored_fitted_equipment(
+                    entry=entry,
+                    settings=settings_of(stored=change.submission.equipment),
+                    inherited=not self._replaces_unit(change=change),
+                ),
+                pack_limit=stored_pack_limit(
+                    entry=entry, inherited=not self._replaces_unit(change=change)
+                ),
+            ),
             default_interval=submitted_interval,
         ).per_minute
         if after <= BUDGET_PER_MINUTE:
@@ -593,6 +652,17 @@ class SajOptionsFlow(OptionsFlow):
             for entry in self.hass.config_entries.async_entries(DOMAIN)
         )
 
+    def _replaces_unit(self, *, change: PendingChange) -> bool:
+        return change.device.serial != self.config_entry.unique_id
+
+    def _saved_data(self, *, change: PendingChange) -> dict[str, Any]:
+        data = {**self.config_entry.data, **change.entry_data}
+        if self._replaces_unit(change=change):
+            data.pop(CONF_DETECTED_EQUIPMENT, None)
+            data.pop(CONF_FITTED_EQUIPMENT, None)
+            data.pop(CONF_HIGHEST_PACK_COUNT, None)
+        return data
+
     async def _save_changes(self, *, change: PendingChange) -> ConfigFlowResult:
         submission = change.submission
         if self._endpoint_exists_for_other(
@@ -605,7 +675,7 @@ class SajOptionsFlow(OptionsFlow):
             self._rename_entities(new_prefix=submission.prefix)
         self.hass.config_entries.async_update_entry(
             self.config_entry,
-            data=change.entry_data,
+            data=self._saved_data(change=change),
             options=submission.entry_options,
             unique_id=change.device.serial,
         )
@@ -625,8 +695,7 @@ class PollingGroup:
 
 @dataclass(frozen=True)
 class InstallationLoad:
-    profile: Profile
-    device_type: int
+    fit: Fit
     enabled: frozenset[str]
     default_interval: int
     groups: tuple[Cadence, ...]
@@ -634,8 +703,7 @@ class InstallationLoad:
     @property
     def per_minute(self) -> float:
         return installation_load(
-            profile=self.profile,
-            device_type=self.device_type,
+            fit=self.fit,
             enabled=self.enabled,
             default_interval=self.default_interval,
             groups=self.groups,
@@ -643,8 +711,7 @@ class InstallationLoad:
 
     def requests_per_read(self, *, keys: Collection[str]) -> int:
         return requests_per_read(
-            profile=self.profile,
-            device_type=self.device_type,
+            fit=self.fit,
             keys=self.enabled & frozenset(keys),
         )
 
@@ -682,17 +749,15 @@ def installation_load_of(
     *,
     hass: HomeAssistant,
     entry: ConfigEntry,
-    profile: Profile,
-    device_type: int,
+    fit: Fit,
     default_interval: int,
 ) -> InstallationLoad:
     return InstallationLoad(
-        profile=profile,
-        device_type=device_type,
+        fit=fit,
         enabled=enabled_entity_keys(
             hass=hass,
             entry_id=entry.entry_id,
-            registers=device_read_registers(profile=profile, device_type=device_type),
+            registers=device_read_registers(fit=fit),
         ),
         default_interval=default_interval,
         groups=tuple(group_cadences(entry=entry)),
@@ -702,12 +767,10 @@ def installation_load_of(
 def stored_installation_load(
     *, hass: HomeAssistant, entry: ConfigEntry
 ) -> InstallationLoad:
-    profile, device_type = _stored_profile(entry=entry)
     return installation_load_of(
         hass=hass,
         entry=entry,
-        profile=profile,
-        device_type=device_type,
+        fit=_stored_fit(entry=entry),
         default_interval=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
     )
 
@@ -895,29 +958,13 @@ def validate_group(
     )
 
 
-async def _selector_options(
-    *, hass: HomeAssistant, selector_name: str
-) -> dict[str, str]:
-    translations = await async_get_translations(
-        hass, hass.config.language, "selector", [DOMAIN]
-    )
-    prefix = f"component.{DOMAIN}.selector.{selector_name}.options."
-    return {
-        name.removeprefix(prefix): label
-        for name, label in translations.items()
-        if name.startswith(prefix)
-    }
-
-
 async def _entity_labels(
     *, hass: HomeAssistant, entry: ConfigEntry, installation: InstallationLoad
 ) -> dict[str, str]:
-    blocks = blocks_by_key(
-        profile=installation.profile, device_type=installation.device_type
-    )
-    block_labels = await _selector_options(hass=hass, selector_name=BLOCK_SELECTOR)
+    blocks = blocks_by_key(fit=installation.fit)
+    block_labels = await selector_options(hass=hass, selector_name=BLOCK_SELECTOR)
     disabled_label = (
-        await _selector_options(hass=hass, selector_name=ENTITY_STATE_SELECTOR)
+        await selector_options(hass=hass, selector_name=ENTITY_STATE_SELECTOR)
     )[DISABLED_STATE]
     entities = installation_entities(hass=hass, entry_id=entry.entry_id)
     return {
@@ -1023,12 +1070,15 @@ async def validate_submission(
     heartbeat = _normalized_heartbeat(user_input=user_input)
     if heartbeat is None and CONF_EMS_HEARTBEAT in user_input:
         errors[CONF_EMS_HEARTBEAT] = ERROR_INVALID_EMS_HEARTBEAT
+    equipment = _normalized_equipment(user_input=user_input)
+    if equipment is None:
+        errors[CONF_EQUIPMENT] = ERROR_INVALID_EQUIPMENT
     checked_prefix = _checked_prefix(
         value=user_input.get(CONF_PREFIX, ""), context=prefix_context
     )
     if checked_prefix.error is not None:
         errors[CONF_PREFIX] = checked_prefix.error
-    if endpoint is None or interval is None or errors:
+    if endpoint is None or interval is None or equipment is None or errors:
         return Validation(errors=errors)
     host, port, unit_id = endpoint
     submission = Submission(
@@ -1040,6 +1090,7 @@ async def validate_submission(
         prefix=checked_prefix.prefix,
         allow_control=bool(user_input.get(CONF_ALLOW_CONTROL, False)),
         ems_heartbeat=heartbeat,
+        equipment=equipment,
     )
     if endpoint_taken(host=host, port=port, unit_id=unit_id):
         return Validation(errors={"base": ABORT_ALREADY_CONFIGURED})
@@ -1272,9 +1323,7 @@ def _prefix_confirmation_form(*, old_prefix: str, new_prefix: str) -> dict[str, 
 def _device_domains(*, device: Device) -> dict[str, str]:
     return {
         register.key: register.kind.value
-        for register in device_registers(
-            profile=device.profile, device_type=device.device_type
-        )
+        for register in device_registers(fit=device.fit)
     }
 
 
@@ -1283,6 +1332,7 @@ def _endpoint_schema(
     defaults: dict[str, Any] | None = None,
     control: bool = False,
     ems: bool = False,
+    equipment: Collection[Equipment] = (),
 ) -> vol.Schema:
     values = defaults or {}
     host_marker = (
@@ -1317,7 +1367,39 @@ def _endpoint_schema(
         ] = selector.BooleanSelector()
     if ems:
         schema.update(_heartbeat_field(values=values))
+    if equipment:
+        submitted = values.get(CONF_EQUIPMENT)
+        schema[vol.Optional(CONF_EQUIPMENT)] = _equipment_section(
+            equipment=equipment,
+            values=submitted if isinstance(submitted, Mapping) else {},
+        )
     return vol.Schema(schema)
+
+
+def _equipment_section(
+    *, equipment: Collection[Equipment], values: Mapping[str, str]
+) -> section:
+    return section(
+        vol.Schema(
+            {
+                vol.Required(
+                    item.value, default=values.get(item.value, Setting.AUTOMATIC.value)
+                ): _equipment_setting_selector()
+                for item in equipment
+            }
+        ),
+        {"collapsed": True},
+    )
+
+
+def _equipment_setting_selector() -> selector.SelectSelector:
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=[setting.value for setting in Setting],
+            mode=selector.SelectSelectorMode.DROPDOWN,
+            translation_key=EQUIPMENT_SETTING_TRANSLATION_KEY,
+        )
+    )
 
 
 def _heartbeat_field(*, values: Mapping[str, Any]) -> dict[vol.Marker, Any]:
@@ -1338,10 +1420,17 @@ def _control_confirmation_schema(
 
 
 def _options_schema(
-    *, entry: ConfigEntry, submitted: dict[str, Any] | None, ems: bool
+    *,
+    entry: ConfigEntry,
+    submitted: dict[str, Any] | None,
+    ems: bool,
+    equipment: Collection[Equipment],
 ) -> vol.Schema:
     if submitted is not None:
-        return _endpoint_schema(defaults=submitted, control=True, ems=ems)
+        return _endpoint_schema(
+            defaults=submitted, control=True, ems=ems, equipment=equipment
+        )
+    settings = configured_settings(entry=entry)
     defaults = {
         **entry.data,
         CONF_SCAN_INTERVAL: entry.options.get(
@@ -1352,8 +1441,14 @@ def _options_schema(
         CONF_EMS_HEARTBEAT: entry.options.get(
             CONF_EMS_HEARTBEAT, DEFAULT_HEARTBEAT_INTERVAL
         ),
+        CONF_EQUIPMENT: {
+            item.value: settings.get(item, Setting.AUTOMATIC).value
+            for item in equipment
+        },
     }
-    return _endpoint_schema(defaults=defaults, control=True, ems=ems)
+    return _endpoint_schema(
+        defaults=defaults, control=True, ems=ems, equipment=equipment
+    )
 
 
 def _model_selector() -> selector.SelectSelector:
@@ -1407,6 +1502,19 @@ def _normalized_interval(*, user_input: Mapping[str, Any]) -> int | None:
     return interval
 
 
+def _normalized_equipment(*, user_input: Mapping[str, Any]) -> dict[str, str] | None:
+    submitted = user_input.get(CONF_EQUIPMENT, {})
+    if not isinstance(submitted, Mapping):
+        return None
+    try:
+        return {
+            Equipment(name).value: Setting(value).value
+            for name, value in submitted.items()
+        }
+    except ValueError:
+        return None
+
+
 def _normalized_heartbeat(*, user_input: Mapping[str, Any]) -> int | None:
     try:
         heartbeat_value = user_input[CONF_EMS_HEARTBEAT]
@@ -1418,28 +1526,36 @@ def _normalized_heartbeat(*, user_input: Mapping[str, Any]) -> int | None:
     return heartbeat
 
 
+def offered_equipment(*, entry: ConfigEntry) -> tuple[Equipment, ...]:
+    profile = _stored_fit(entry=entry).profile
+    return tuple(item for item in Equipment if item in profile.equipment)
+
+
 def offers_ems(*, entry: ConfigEntry) -> bool:
-    profile, device_type = _stored_profile(entry=entry)
-    return _has_ems_rows(profile=profile, device_type=device_type)
+    return _has_ems_rows(fit=_stored_fit(entry=entry))
 
 
 def offers_ems_device(*, device: Device) -> bool:
-    return _has_ems_rows(profile=device.profile, device_type=device.device_type)
+    return _has_ems_rows(fit=device.fit)
 
 
-def _has_ems_rows(*, profile: Profile, device_type: int) -> bool:
+def _has_ems_rows(*, fit: Fit) -> bool:
     return any(
-        register.key in FUNCTION_BY_ENABLE_KEY
-        for register in device_registers(profile=profile, device_type=device_type)
+        register.key in FUNCTION_BY_ENABLE_KEY for register in device_registers(fit=fit)
     )
 
 
-def _stored_profile(*, entry: ConfigEntry) -> tuple[Profile, int]:
+def _stored_fit(*, entry: ConfigEntry) -> Fit:
     device_type = entry.data[CONF_DEVICE_TYPE]
     resolution = resolve_profile(
         device_type=device_type, selection=entry.data[CONF_MODEL], profiles=PROFILES
     )
-    return resolution.profile, device_type
+    return Fit(
+        profile=resolution.profile,
+        device_type=device_type,
+        equipment=stored_fitted_equipment(entry=entry),
+        pack_limit=stored_pack_limit(entry=entry),
+    )
 
 
 def _entry_owns_endpoint(

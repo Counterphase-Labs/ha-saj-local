@@ -49,6 +49,7 @@ def entry(hass) -> ConfigEntry:
             "unit_id": 1,
             "model": "automatic",
             "device_type": min(H2.device_types),
+            "fitted_equipment": ["battery"],
         },
         options={"scan_interval": 60},
     )

@@ -120,9 +120,7 @@ class Control:
         self._guard = guard
         self._enabled = enabled
         self._clock = clock
-        registers = device_registers(
-            profile=device.profile, device_type=device.device_type
-        )
+        registers = device_registers(fit=device.fit)
         self._targets = {
             register.key: _Target(register=register, row=register.row)
             for register in registers

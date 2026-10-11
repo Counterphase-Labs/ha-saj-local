@@ -15,7 +15,7 @@ from custom_components.saj_local import (
 )
 from custom_components.saj_local import time as time_platform
 from custom_components.saj_local.const import DOMAIN
-from custom_components.saj_local.saj.catalogue import device_registers
+from custom_components.saj_local.saj.catalogue import Fit, device_registers
 from custom_components.saj_local.saj.definitions import Access, EntityKind, Quantity
 from custom_components.saj_local.saj.errors import (
     ControlDisabledError,
@@ -25,6 +25,7 @@ from custom_components.saj_local.saj.errors import (
     WriteMismatchError,
     WriteRejectedError,
 )
+from custom_components.saj_local.saj.models import ALL_EQUIPMENT
 from custom_components.saj_local.saj.models.h2 import PROFILE as H2
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from tests.entities import ENTRY_ID, FakeCoordinator, device, register_of
@@ -450,18 +451,18 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
             HS3,
             0x1610,
             {
-                "sensor": 425,
-                "number": 76,
-                "select": 18,
-                "switch": 36,
+                "sensor": 426,
+                "number": 77,
+                "select": 19,
+                "switch": 37,
                 "time": 42,
                 "text": 5,
                 "button": 5,
             },
             {
-                "sensor": 36,
+                "sensor": 46,
                 "number": 2,
-                "select": 1,
+                "select": 2,
                 "switch": 0,
                 "time": 0,
                 "text": 0,
@@ -472,7 +473,7 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
             H2,
             0x005A,
             {
-                "sensor": 167,
+                "sensor": 220,
                 "number": 46,
                 "select": 5,
                 "switch": 16,
@@ -481,7 +482,7 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
                 "button": 4,
             },
             {
-                "sensor": 32,
+                "sensor": 39,
                 "number": 3,
                 "select": 1,
                 "switch": 0,
@@ -495,7 +496,9 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
 def test_a_recognised_device_gets_the_entities_of_its_shape_with_the_core_enabled(
     profile, device_type, by_kind, enabled_by_kind
 ):
-    registers = device_registers(profile=profile, device_type=device_type)
+    registers = device_registers(
+        fit=Fit(profile=profile, device_type=device_type, equipment=ALL_EQUIPMENT)
+    )
 
     assert {
         kind.value: sum(row.kind is kind for row in registers) for kind in ALL_KINDS

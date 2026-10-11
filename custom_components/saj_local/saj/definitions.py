@@ -16,6 +16,7 @@ from .codec import (
     Range,
     scaled,
 )
+from .models import Equipment
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
@@ -112,6 +113,7 @@ class Role(StrEnum):
     NONE = "none"
     PHASE = "phase"
     STRING = "string"
+    PACK = "pack"
 
 
 class Operation(StrEnum):
@@ -141,10 +143,13 @@ class Definition:
     core: bool = False
     phases: int = 1
     strings: int = 1
+    packs: int = 0
     words: int | None = None
     field: BitRange | None = None
     combination: Combination | None = None
     command_value: int | None = None
+    equipment: Equipment | None = None
+    inverted: bool = False
 
     @cached_property
     def format(self) -> Format:
@@ -155,6 +160,7 @@ class Definition:
             field=self.field,
             valid_range=self.valid_range,
             words=self.words,
+            inverted=self.inverted,
         )
 
     @property
@@ -225,6 +231,7 @@ class Family:
     first_index: int = FIRST_INDEX
     count: int = 1
     role: Role = Role.NONE
+    equipment: Equipment | None = None
 
     @property
     def indices(self) -> range:
@@ -248,12 +255,16 @@ class Family:
         definition = replace(
             member.definition, key=self._key(index=index, member=member)
         )
+        if self.equipment is not None:
+            definition = replace(definition, equipment=self.equipment)
         if member.core_first_only and index != self.first_index:
             definition = replace(definition, core=False)
         if self.role is Role.PHASE:
             definition = replace(definition, phases=index)
         if self.role is Role.STRING:
             definition = replace(definition, strings=index)
+        if self.role is Role.PACK:
+            definition = replace(definition, packs=index)
         if member.field_follows_index and definition.field is not None:
             shift = index - self.first_index
             definition = replace(
@@ -371,12 +382,17 @@ EV_SLOT_MODE_FIELD = BitRange(first=0, last=2)
 EV_SLOT_GRID_CHARGING_FIELD = BitRange(first=3, last=3)
 EV_SLOT_BATTERY_DISCHARGE_FIELD = BitRange(first=4, last=4)
 EV_MINIMUM_CURRENT_CHARGING_FIELD = BitRange(first=2, last=2)
+EV_EMS_CHARGING_FIELD = BitRange(first=0, last=0)
+EV_EMS_PHASE_MODE_FIELD = BitRange(first=1, last=2)
+EV_EMS_PHASE_MODE_OPTIONS = {0: "three_phase", 1: "single_phase"}
+EV_EMS_CHARGE_CURRENT_RANGE = Range(minimum=6, maximum=32)
 EMS_CONTROL_BITS = {
     "ems_inverter_control": 0,
     "ems_battery_control": 1,
     "ems_inverter_control_with_timeout_exit": 3,
     "ems_grid_control": 5,
 }
+EMS_CONTROL_EQUIPMENT = {"ems_battery_control": Equipment.BATTERY}
 EMS_TARGET_KEYS = frozenset(
     {
         "ems_inverter_power_target",
@@ -394,6 +410,7 @@ EMS_LIMIT_KEYS = frozenset(
     }
 )
 PARALLEL_POWER_SUBJECTS = ("pv", "battery", "grid", "load", "backup_load", "grid_load")
+PARALLEL_CORE_POWER_SUBJECTS = frozenset({"pv", "battery", "grid", "load"})
 
 
 def _measure(
@@ -406,6 +423,23 @@ def _measure(
 ) -> Definition:
     return Definition(
         key=key, quantity=quantity, encoding=encoding, scale=scale, unit=unit
+    )
+
+
+def _meter_power(*, meter: str, equipment: Equipment) -> Definition:
+    return Definition(
+        key=f"meter_{meter}_power",
+        equipment=equipment,
+        quantity=Quantity.POWER,
+        encoding=Encoding.I32,
+        unit=Unit.WATT,
+        core=True,
+        combination=Combination(
+            operation=Operation.SUM,
+            sources=tuple(
+                f"meter_{meter}_l{phase}_power" for phase in range(1, PHASE_COUNT + 1)
+            ),
+        ),
     )
 
 
@@ -498,11 +532,19 @@ def _energy_period(*, period: str, core: bool) -> Definition:
     )
 
 
-def _energy(*, name: str, stem: str, base: int, core: bool = False) -> Family:
+def _energy(
+    *,
+    name: str,
+    stem: str,
+    base: int,
+    core: bool = False,
+    equipment: Equipment | None = None,
+) -> Family:
     return Family(
         name=name,
         stem=stem,
         base=base,
+        equipment=equipment,
         members=tuple(
             Member(
                 offset=position * PERIOD_STRIDE,
@@ -660,13 +702,18 @@ PV_INSULATION = _stringed(
 )
 PV_ENERGY = _energy(name="pv_energy", stem="pv_energy", base=0x40BF, core=True)
 BATTERY_CHARGE_ENERGY = _energy(
-    name="battery_charge_energy", stem="battery_charge_energy", base=0x40C7, core=True
+    name="battery_charge_energy",
+    stem="battery_charge_energy",
+    base=0x40C7,
+    core=True,
+    equipment=Equipment.BATTERY,
 )
 BATTERY_DISCHARGE_ENERGY = _energy(
     name="battery_discharge_energy",
     stem="battery_discharge_energy",
     base=0x40CF,
     core=True,
+    equipment=Equipment.BATTERY,
 )
 INVERTER_ENERGY = _energy(name="inverter_energy", stem="inverter_energy", base=0x40D7)
 LOAD_ENERGY = _energy(name="load_energy", stem="load_energy", base=0x40DF, core=True)
@@ -735,6 +782,7 @@ PARALLEL_ENERGY = tuple(
         name=f"parallel_{subject}_energy",
         stem=f"parallel_{subject}_energy",
         base=PARALLEL_ENERGY_BASE + position * ENERGY_STRIDE,
+        equipment=Equipment.PARALLEL,
     )
     for position, subject in enumerate(PARALLEL_ENERGY_SUBJECTS)
 )
@@ -790,6 +838,7 @@ AVERAGE_PV_STRING = _stringed(
 )
 AVERAGE_BATTERY_PACK = Family(
     name="average_battery_pack",
+    equipment=Equipment.BATTERY,
     stem="average_battery_pack{index}",
     base=0x51B9,
     members=(
@@ -800,10 +849,12 @@ AVERAGE_BATTERY_PACK = Family(
 )
 BATTERY_PACK = Family(
     name="battery_pack",
+    equipment=Equipment.BATTERY,
     stem="battery_pack{index}",
     base=0xA00C,
     stride=6,
     count=PACK_COUNT,
+    role=Role.PACK,
     members=(
         Member(offset=0, definition=_state_of_charge()),
         Member(
@@ -829,10 +880,12 @@ BATTERY_PACK = Family(
 )
 BATTERY_PACK_DISCHARGED_ENERGY = Family(
     name="battery_pack_discharged_energy",
+    equipment=Equipment.BATTERY,
     stem="battery_pack{index}",
     base=0xA02A,
     stride=2,
     count=PACK_COUNT,
+    role=Role.PACK,
     members=(
         Member(
             offset=0,
@@ -849,6 +902,7 @@ METER_PHASE_STRIDE = 6
 METER_A_PHASE = _phased(
     family=Family(
         name="meter_a_phase",
+        equipment=Equipment.METER_A,
         stem="meter_a_l{index}",
         base=0xA03D,
         stride=METER_PHASE_STRIDE,
@@ -865,12 +919,14 @@ METER_A_PHASE = _phased(
 METER_B_PHASE = replace(
     METER_A_PHASE,
     name="meter_b_phase",
+    equipment=Equipment.METER_B,
     stem="meter_b_l{index}",
     base=0xA054,
 )
 METER_A_POWER_HIGH_WORDS = _phased(
     family=Family(
         name="meter_a_power_high_words",
+        equipment=Equipment.METER_A,
         stem="meter_a_l{index}",
         base=0xA066,
         stride=1,
@@ -880,12 +936,14 @@ METER_A_POWER_HIGH_WORDS = _phased(
 METER_B_POWER_HIGH_WORDS = replace(
     METER_A_POWER_HIGH_WORDS,
     name="meter_b_power_high_words",
+    equipment=Equipment.METER_B,
     stem="meter_b_l{index}",
     base=0xA069,
 )
 METER_A_REACTIVE_POWER = _phased(
     family=Family(
         name="meter_a_reactive_power",
+        equipment=Equipment.METER_A,
         stem="meter_a_l{index}",
         base=0xA06C,
         stride=2,
@@ -905,11 +963,13 @@ METER_A_REACTIVE_POWER = _phased(
 METER_B_REACTIVE_POWER = replace(
     METER_A_REACTIVE_POWER,
     name="meter_b_reactive_power",
+    equipment=Equipment.METER_B,
     stem="meter_b_l{index}",
     base=0xA072,
 )
 EV_PHASE = Family(
     name="ev_phase",
+    equipment=Equipment.EV_CHARGER,
     stem="ev_l{index}",
     base=0x309E,
     stride=2,
@@ -985,10 +1045,16 @@ def _slot_switch(*, offset: int, key: str, field: BitRange, follows: bool) -> Me
 
 
 def _schedule_slots(
-    *, name: str, stem: str, first_register: int, enable_register: int
+    *,
+    name: str,
+    stem: str,
+    first_register: int,
+    enable_register: int,
+    equipment: Equipment,
 ) -> tuple[Family, Family]:
     slots = Family(
         name=f"{name}_slots",
+        equipment=equipment,
         stem=stem,
         base=first_register,
         stride=SLOT_STRIDE,
@@ -1014,6 +1080,7 @@ def _schedule_slots(
     )
     enabled = Family(
         name=f"{name}_slots_enabled",
+        equipment=equipment,
         stem=stem,
         base=enable_register,
         count=SLOT_COUNT,
@@ -1031,15 +1098,18 @@ CHARGE_SLOTS, CHARGE_SLOTS_ENABLED = _schedule_slots(
     stem="charge_slot_{index}",
     first_register=0x3606,
     enable_register=0x3604,
+    equipment=Equipment.BATTERY,
 )
 DISCHARGE_SLOTS, DISCHARGE_SLOTS_ENABLED = _schedule_slots(
     name="discharge",
     stem="discharge_slot_{index}",
     first_register=0x361B,
     enable_register=0x3605,
+    equipment=Equipment.BATTERY,
 )
 EV_SLOTS = Family(
     name="ev_slots",
+    equipment=Equipment.EV_CHARGER,
     stem="ev_slot_{index}",
     base=0x4B20,
     stride=EV_SLOT_STRIDE,
@@ -1132,9 +1202,10 @@ FAMILIES = (
 FAMILY_BY_NAME = {family.name: family for family in FAMILIES}
 
 
-def _power_limit_setting(*, key: str) -> Definition:
+def _power_limit_setting(*, key: str, equipment: Equipment | None = None) -> Definition:
     return Definition(
         key=key,
+        equipment=equipment,
         quantity=Quantity.PERCENTAGE,
         kind=EntityKind.NUMBER,
         access=Access.READ_WRITE,
@@ -1145,14 +1216,10 @@ def _power_limit_setting(*, key: str) -> Definition:
     )
 
 
-def _percent_setting(*, key: str) -> Definition:
-    return Definition(
-        key=key,
-        quantity=Quantity.PERCENTAGE,
-        kind=EntityKind.NUMBER,
-        access=Access.READ_WRITE,
-        encoding=Encoding.U16,
-        unit=Unit.PERCENT,
+def _percent_setting(*, key: str, equipment: Equipment | None = None) -> Definition:
+    return replace(
+        _power_limit_setting(key=key, equipment=equipment),
+        scale=1,
         range=PERCENT_RANGE,
         core=True,
     )
@@ -1175,9 +1242,11 @@ def _ems_percentage(
     encoding: Encoding,
     value_range: Range,
     invalid: frozenset[int] = frozenset(),
+    equipment: Equipment | None = None,
 ) -> Definition:
     return Definition(
         key=key,
+        equipment=equipment,
         quantity=Quantity.PERCENTAGE,
         kind=EntityKind.NUMBER,
         access=Access.WRITE_ONLY,
@@ -1189,9 +1258,12 @@ def _ems_percentage(
     )
 
 
-def _ems_current_limit(*, key: str, maximum: float) -> Definition:
+def _ems_current_limit(
+    *, key: str, maximum: float, equipment: Equipment | None = None
+) -> Definition:
     return Definition(
         key=key,
+        equipment=equipment,
         quantity=Quantity.CURRENT,
         kind=EntityKind.NUMBER,
         access=Access.WRITE_ONLY,
@@ -1223,6 +1295,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_serial_number",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.TEXT,
         encoding=Encoding.TEXT,
         words=16,
@@ -1230,6 +1303,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_model",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.TEXT,
         encoding=Encoding.TEXT,
         words=8,
@@ -1237,6 +1311,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_software_version",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.VERSION,
         encoding=Encoding.TEXT,
         words=5,
@@ -1244,47 +1319,66 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_hardware_version",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.VERSION,
         encoding=Encoding.TEXT,
         words=5,
         invalid=frozenset({EMPTY_TEXT}),
     ),
-    Definition(key="ev_phase_count", quantity=Quantity.COUNT, encoding=Encoding.U16),
+    Definition(
+        key="ev_phase_count",
+        equipment=Equipment.EV_CHARGER,
+        quantity=Quantity.COUNT,
+        encoding=Encoding.U16,
+    ),
     Definition(
         key="ev_minimum_power",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
     ),
     Definition(
         key="ev_maximum_power",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.POWER,
         encoding=Encoding.U32,
         unit=Unit.WATT,
     ),
     Definition(
         key="ev_work_mode",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.CODE,
         encoding=Encoding.U16,
         options=EV_MODE_OPTIONS,
     ),
     Definition(
         key="ev_status",
+        core=True,
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.CODE,
         encoding=Encoding.U16,
         options=EV_STATUS_OPTIONS,
     ),
     Definition(
-        key="ev_power", quantity=Quantity.POWER, encoding=Encoding.U32, unit=Unit.WATT
+        key="ev_power",
+        core=True,
+        equipment=Equipment.EV_CHARGER,
+        quantity=Quantity.POWER,
+        encoding=Encoding.U32,
+        unit=Unit.WATT,
     ),
     Definition(
         key="ev_charge_duration",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.DURATION,
         encoding=Encoding.U16,
         unit=Unit.MINUTE,
     ),
     Definition(
         key="ev_session_energy",
+        core=True,
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.ENERGY,
         encoding=Encoding.U32,
         scale=0.001,
@@ -1292,6 +1386,8 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_total_energy",
+        core=True,
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.ENERGY,
         encoding=Encoding.U32,
         scale=0.001,
@@ -1299,12 +1395,14 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_control_pilot_voltage",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.VOLTAGE,
         encoding=Encoding.U16,
         unit=Unit.VOLT,
     ),
     Definition(
         key="ev_duty_cycle",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.PERCENTAGE,
         encoding=Encoding.U16,
         scale=0.1,
@@ -1312,22 +1410,30 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_remote_control",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.CODE,
         encoding=Encoding.U16,
         options=EV_REMOTE_CONTROL_OPTIONS,
     ),
     Definition(
         key="ev_current_setpoint",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.CURRENT,
         encoding=Encoding.U16,
         scale=0.1,
         unit=Unit.AMPERE,
     ),
     Definition(
-        key="ev_session_start", quantity=Quantity.TIMESTAMP, encoding=Encoding.UNIX_TIME
+        key="ev_session_start",
+        equipment=Equipment.EV_CHARGER,
+        quantity=Quantity.TIMESTAMP,
+        encoding=Encoding.UNIX_TIME,
     ),
     Definition(
-        key="ev_session_end", quantity=Quantity.TIMESTAMP, encoding=Encoding.UNIX_TIME
+        key="ev_session_end",
+        equipment=Equipment.EV_CHARGER,
+        quantity=Quantity.TIMESTAMP,
+        encoding=Encoding.UNIX_TIME,
     ),
     Definition(
         key="settings_sequence",
@@ -1385,8 +1491,12 @@ SINGLES: tuple[Definition, ...] = (
     ),
     _power_limit_setting(key="passive_grid_charge_power"),
     _power_limit_setting(key="passive_grid_discharge_power"),
-    _power_limit_setting(key="passive_battery_charge_power"),
-    _power_limit_setting(key="passive_battery_discharge_power"),
+    _power_limit_setting(
+        key="passive_battery_charge_power", equipment=Equipment.BATTERY
+    ),
+    _power_limit_setting(
+        key="passive_battery_discharge_power", equipment=Equipment.BATTERY
+    ),
     Definition(
         key="battery_protocol",
         quantity=Quantity.CODE,
@@ -1397,15 +1507,20 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="battery_auto_wake",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.TOGGLE,
         kind=EntityKind.SWITCH,
         access=Access.READ_WRITE,
         encoding=Encoding.U16,
         range=SWITCH_RANGE,
     ),
-    _percent_setting(key="battery_discharge_limit_on_grid"),
-    _percent_setting(key="battery_discharge_limit_off_grid"),
-    _percent_setting(key="battery_charge_limit"),
+    _percent_setting(
+        key="battery_discharge_limit_on_grid", equipment=Equipment.BATTERY
+    ),
+    _percent_setting(
+        key="battery_discharge_limit_off_grid", equipment=Equipment.BATTERY
+    ),
+    _percent_setting(key="battery_charge_limit", equipment=Equipment.BATTERY),
     Definition(
         key="application_mode",
         quantity=Quantity.CODE,
@@ -1415,12 +1530,15 @@ SINGLES: tuple[Definition, ...] = (
         options=APPLICATION_MODE_OPTIONS,
         core=True,
     ),
-    _power_limit_setting(key="battery_charge_power_limit"),
-    _power_limit_setting(key="battery_discharge_power_limit"),
+    _power_limit_setting(key="battery_charge_power_limit", equipment=Equipment.BATTERY),
+    _power_limit_setting(
+        key="battery_discharge_power_limit", equipment=Equipment.BATTERY
+    ),
     _power_limit_setting(key="grid_import_power_limit"),
     _power_limit_setting(key="grid_export_power_limit"),
     Definition(
         key="backup_reserve_soc",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.STATE_OF_CHARGE,
         kind=EntityKind.NUMBER,
         access=Access.READ_WRITE,
@@ -1548,6 +1666,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="battery_discharge_current_setpoint",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.CURRENT,
         encoding=Encoding.I16,
         scale=0.1,
@@ -1555,34 +1674,42 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="battery_charge_current_setpoint",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.CURRENT,
         encoding=Encoding.I16,
         scale=0.1,
         unit=Unit.AMPERE,
     ),
     Definition(
-        key="battery_status_code", quantity=Quantity.CODE, encoding=Encoding.U16
+        key="battery_status_code",
+        equipment=Equipment.BATTERY,
+        quantity=Quantity.CODE,
+        encoding=Encoding.U16,
     ),
     Definition(
         key="battery_protocol_active", quantity=Quantity.CODE, encoding=Encoding.I16
     ),
     Definition(
         key="battery_charge_limit_active",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.COUNT,
         encoding=Encoding.I16,
     ),
     Definition(
         key="battery_discharge_limit_active",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.COUNT,
         encoding=Encoding.I16,
     ),
     Definition(
         key="battery_depth_of_discharge_active",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.COUNT,
         encoding=Encoding.I16,
     ),
     Definition(
         key="backup_reserve_soc_active",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.STATE_OF_CHARGE,
         encoding=Encoding.I16,
         unit=Unit.PERCENT,
@@ -1606,6 +1733,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="battery_voltage",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.VOLTAGE,
         encoding=Encoding.U16,
         scale=0.1,
@@ -1614,6 +1742,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="battery_current",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.CURRENT,
         encoding=Encoding.I16,
         scale=0.01,
@@ -1622,12 +1751,14 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="battery_port_power",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.POWER,
         encoding=Encoding.I16,
         unit=Unit.WATT,
     ),
     Definition(
         key="battery_temperature",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.TEMPERATURE,
         encoding=Encoding.I16,
         scale=0.1,
@@ -1636,6 +1767,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="battery_soc",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.STATE_OF_CHARGE,
         encoding=Encoding.U16,
         scale=0.01,
@@ -1644,7 +1776,12 @@ SINGLES: tuple[Definition, ...] = (
         core=True,
     ),
     Definition(key="pv_direction", quantity=Quantity.CODE, encoding=Encoding.U16),
-    Definition(key="battery_direction", quantity=Quantity.CODE, encoding=Encoding.I16),
+    Definition(
+        key="battery_direction",
+        equipment=Equipment.BATTERY,
+        quantity=Quantity.CODE,
+        encoding=Encoding.I16,
+    ),
     Definition(key="grid_direction", quantity=Quantity.CODE, encoding=Encoding.I16),
     Definition(key="output_direction", quantity=Quantity.CODE, encoding=Encoding.U16),
     Definition(
@@ -1663,6 +1800,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="battery_power",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.POWER,
         encoding=Encoding.I16,
         unit=Unit.WATT,
@@ -1689,43 +1827,60 @@ SINGLES: tuple[Definition, ...] = (
         unit=Unit.WATT,
     ),
     Definition(key="parallel_mode", quantity=Quantity.CODE, encoding=Encoding.U16),
-    Definition(key="parallel_id", quantity=Quantity.COUNT, encoding=Encoding.U16),
-    Definition(key="parallel_count", quantity=Quantity.COUNT, encoding=Encoding.U16),
+    Definition(
+        key="parallel_id",
+        equipment=Equipment.PARALLEL,
+        quantity=Quantity.COUNT,
+        encoding=Encoding.U16,
+    ),
+    Definition(
+        key="parallel_count",
+        equipment=Equipment.PARALLEL,
+        quantity=Quantity.COUNT,
+        encoding=Encoding.U16,
+    ),
     Definition(
         key="parallel_online_count", quantity=Quantity.COUNT, encoding=Encoding.U16
     ),
     Definition(
         key="parallel_pv_power_low_word",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
     ),
     Definition(
         key="parallel_battery_power_low_word",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
     ),
     Definition(
         key="parallel_grid_power_low_word",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
     ),
     Definition(
         key="parallel_load_power_low_word",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
     ),
     Definition(
         key="parallel_backup_load_power_low_word",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
     ),
     Definition(
         key="parallel_battery_soc",
+        core=True,
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.STATE_OF_CHARGE,
         encoding=Encoding.U16,
         scale=0.01,
@@ -1733,60 +1888,70 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="parallel_grid_load_power_low_word",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
     ),
     Definition(
         key="parallel_battery_capacity",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.CAPACITY,
         encoding=Encoding.U16,
         unit=Unit.AMPERE_HOUR,
     ),
     Definition(
         key="parallel_pv_power_high_word",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
     ),
     Definition(
         key="parallel_battery_power_high_word",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.I16,
         unit=Unit.WATT,
     ),
     Definition(
         key="parallel_grid_power_high_word",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.I16,
         unit=Unit.WATT,
     ),
     Definition(
         key="parallel_load_power_high_word",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
     ),
     Definition(
         key="parallel_backup_load_power_high_word",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.I16,
         unit=Unit.WATT,
     ),
     Definition(
         key="parallel_grid_load_power_high_word",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.I16,
         unit=Unit.WATT,
     ),
     Definition(
         key="parallel_meter_b_power",
+        equipment=Equipment.PARALLEL,
         quantity=Quantity.POWER,
         encoding=Encoding.I32,
         unit=Unit.WATT,
     ),
     Definition(
         key="ev_settings_protocol_version",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.VERSION,
         encoding=Encoding.U16,
         invalid=frozenset({INVALID_VERSION}),
@@ -1801,6 +1966,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_address",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.COUNT,
         kind=EntityKind.NUMBER,
         access=Access.READ_WRITE,
@@ -1809,6 +1975,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_baud_rate",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
         access=Access.READ_WRITE,
@@ -1817,6 +1984,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_charger_count",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.COUNT,
         kind=EntityKind.NUMBER,
         access=Access.READ_WRITE,
@@ -1825,6 +1993,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_communication_timeout",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.DURATION,
         kind=EntityKind.NUMBER,
         access=Access.READ_WRITE,
@@ -1834,6 +2003,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_port_mode",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
         access=Access.READ_WRITE,
@@ -1842,6 +2012,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_port_address",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.COUNT,
         kind=EntityKind.NUMBER,
         access=Access.READ_WRITE,
@@ -1850,6 +2021,8 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_mode",
+        core=True,
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
         access=Access.READ_WRITE,
@@ -1858,6 +2031,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_charge_power",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.POWER,
         kind=EntityKind.NUMBER,
         access=Access.READ_WRITE,
@@ -1873,12 +2047,14 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="average_battery_power",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.POWER,
         encoding=Encoding.I32,
         unit=Unit.WATT,
     ),
     Definition(
         key="average_battery_soc",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.STATE_OF_CHARGE,
         encoding=Encoding.U16,
         scale=0.01,
@@ -1908,10 +2084,17 @@ SINGLES: tuple[Definition, ...] = (
         encoding=Encoding.I16,
         value_range=SIGNED_PERCENT_RANGE,
     ),
-    _ems_current_limit(key="ems_battery_charge_current_limit", maximum=200),
-    _ems_current_limit(key="ems_battery_discharge_current_limit", maximum=20),
+    _ems_current_limit(
+        key="ems_battery_charge_current_limit", maximum=200, equipment=Equipment.BATTERY
+    ),
+    _ems_current_limit(
+        key="ems_battery_discharge_current_limit",
+        maximum=20,
+        equipment=Equipment.BATTERY,
+    ),
     _ems_percentage(
         key="ems_battery_power_target",
+        equipment=Equipment.BATTERY,
         encoding=Encoding.I16,
         value_range=SIGNED_PERCENT_RANGE,
     ),
@@ -1987,19 +2170,31 @@ SINGLES: tuple[Definition, ...] = (
         invalid=frozenset({INVALID_VERSION}),
     ),
     Definition(
-        key="battery_pack_count", quantity=Quantity.COUNT, encoding=Encoding.U16
+        key="battery_pack_count",
+        quantity=Quantity.COUNT,
+        encoding=Encoding.U16,
     ),
     Definition(
-        key="battery_capacity", quantity=Quantity.CAPACITY, encoding=Encoding.U16
+        key="battery_capacity",
+        equipment=Equipment.BATTERY,
+        quantity=Quantity.CAPACITY,
+        encoding=Encoding.U16,
     ),
     Definition(
-        key="battery_usable_capacity", quantity=Quantity.CAPACITY, encoding=Encoding.U16
+        key="battery_usable_capacity",
+        equipment=Equipment.BATTERY,
+        quantity=Quantity.CAPACITY,
+        encoding=Encoding.U16,
     ),
     Definition(
-        key="battery_online_code", quantity=Quantity.CODE, encoding=Encoding.U16
+        key="battery_online_code",
+        equipment=Equipment.BATTERY,
+        quantity=Quantity.CODE,
+        encoding=Encoding.U16,
     ),
     Definition(
         key="battery_discharge_current_limit",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.CURRENT,
         encoding=Encoding.U16,
         scale=0.1,
@@ -2007,6 +2202,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="battery_charge_current_limit",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.CURRENT,
         encoding=Encoding.U16,
         scale=0.1,
@@ -2082,6 +2278,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="battery_voltage_high_protection",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.VOLTAGE,
         encoding=Encoding.U16,
         scale=0.1,
@@ -2089,6 +2286,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="battery_charge_voltage",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.VOLTAGE,
         encoding=Encoding.U16,
         scale=0.1,
@@ -2096,6 +2294,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="battery_discharge_cutoff_voltage",
+        equipment=Equipment.BATTERY,
         quantity=Quantity.VOLTAGE,
         encoding=Encoding.U16,
         scale=0.1,
@@ -2103,6 +2302,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_minimum_current_charging",
+        equipment=Equipment.EV_CHARGER,
         quantity=Quantity.TOGGLE,
         kind=EntityKind.SWITCH,
         access=Access.READ_WRITE,
@@ -2110,9 +2310,42 @@ SINGLES: tuple[Definition, ...] = (
         field=EV_MINIMUM_CURRENT_CHARGING_FIELD,
         range=SWITCH_RANGE,
     ),
+    Definition(
+        key="ev_ems_charging",
+        equipment=Equipment.EV_CHARGER,
+        quantity=Quantity.TOGGLE,
+        kind=EntityKind.SWITCH,
+        access=Access.READ_WRITE,
+        encoding=Encoding.U16,
+        field=EV_EMS_CHARGING_FIELD,
+        inverted=True,
+        range=SWITCH_RANGE,
+    ),
+    Definition(
+        key="ev_ems_phase_mode",
+        equipment=Equipment.EV_CHARGER,
+        quantity=Quantity.CODE,
+        kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
+        encoding=Encoding.U16,
+        field=EV_EMS_PHASE_MODE_FIELD,
+        options=EV_EMS_PHASE_MODE_OPTIONS,
+    ),
+    Definition(
+        key="ev_ems_charge_current",
+        equipment=Equipment.EV_CHARGER,
+        quantity=Quantity.CURRENT,
+        kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
+        encoding=Encoding.U16,
+        scale=0.1,
+        unit=Unit.AMPERE,
+        range=EV_EMS_CHARGE_CURRENT_RANGE,
+    ),
     *(
         Definition(
             key=key,
+            equipment=EMS_CONTROL_EQUIPMENT.get(key),
             quantity=Quantity.TOGGLE,
             kind=EntityKind.SWITCH,
             access=Access.READ_WRITE,
@@ -2122,22 +2355,13 @@ SINGLES: tuple[Definition, ...] = (
         )
         for key, bit in EMS_CONTROL_BITS.items()
     ),
-    Definition(
-        key="meter_a_power",
-        quantity=Quantity.POWER,
-        encoding=Encoding.I32,
-        unit=Unit.WATT,
-        core=True,
-        combination=Combination(
-            operation=Operation.SUM,
-            sources=tuple(
-                f"meter_a_l{phase}_power" for phase in range(1, PHASE_COUNT + 1)
-            ),
-        ),
-    ),
+    _meter_power(meter="a", equipment=Equipment.METER_A),
+    _meter_power(meter="b", equipment=Equipment.METER_B),
     *(
         Definition(
             key=f"parallel_{subject}_power",
+            equipment=Equipment.PARALLEL,
+            core=subject in PARALLEL_CORE_POWER_SUBJECTS,
             quantity=Quantity.POWER,
             encoding=Encoding.I32,
             unit=Unit.WATT,

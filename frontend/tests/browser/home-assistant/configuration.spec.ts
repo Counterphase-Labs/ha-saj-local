@@ -247,6 +247,10 @@ const setNumber = async (
     });
 };
 
+const REQUEST_BUDGET_WINDOW_MS = 60_000;
+const SETTING_CHANGE_TIMEOUT_MS = REQUEST_BUDGET_WINDOW_MS + 15_000;
+const TEST_TIMEOUT_MS = 2 * SETTING_CHANGE_TIMEOUT_MS + 120_000;
+
 const expectSettingChangeToShow = async (
     page: Page,
     entityId: string,
@@ -257,14 +261,17 @@ const expectSettingChangeToShow = async (
     expect(await stateOf(page, entityId)).toBe(before);
     await allowControl(page, entityId);
     await expect
-        .poll(async () => {
-            try {
-                await setNumber(page, entityId, Number(wanted));
-            } catch {
-                return "";
-            }
-            return stateOf(page, entityId);
-        })
+        .poll(
+            async () => {
+                try {
+                    await setNumber(page, entityId, Number(wanted));
+                } catch {
+                    return "";
+                }
+                return stateOf(page, entityId);
+            },
+            { timeout: SETTING_CHANGE_TIMEOUT_MS },
+        )
         .toBe(wanted);
 };
 
@@ -272,6 +279,7 @@ test("an HS3 and an H2 endpoint load, report values, refuse a change until contr
     page,
     browserFailures,
 }) => {
+    test.setTimeout(TEST_TIMEOUT_MS);
     await finishOnboarding(page);
 
     await addIntegration(page, browserFailures, "modbus-mock");

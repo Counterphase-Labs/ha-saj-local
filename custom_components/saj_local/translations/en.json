@@ -77,6 +77,26 @@
           "prefix": "Optional. Adds a prefix to this installation's entity IDs, for example sensor.saj_house_pv_power instead of sensor.saj_pv_power. Use it when you have more than one SAJ system. Lowercase letters and digits only, no underscores, up to 32 characters, and no two installations can share one. Changing it renames this installation's entities after you confirm.",
           "allow_control": "Off by default. When on, entity changes, buttons and automations can change the inverter's settings. Settings that commission the inverter (meter, RS485, battery protocol, network, EV charger link) stay read-only. You are asked to confirm when you switch this on.",
           "ems_heartbeat": "How often the targets of the EMS functions you switch on from Home Assistant, and the EMS limits, are read to keep them alive, from 30 to 3600 seconds. The inverter's EMS timeout must be longer than this. Shown only for models with EMS."
+        },
+        "sections": {
+          "equipment": {
+            "name": "Equipment",
+            "description": "Treated as fitted now: {equipment_fitted}. Automatic detects each at every start and every reload, and keeps what it has detected until you choose Not fitted. Fitted creates its entities without detecting. Not fitted removes its entities from Home Assistant, including any customisations you made to them, and forgets what was detected. Entity IDs stay the same if it is fitted again, so history continues.",
+            "data": {
+              "battery": "Battery",
+              "meter_a": "Meter A",
+              "meter_b": "Meter B",
+              "ev_charger": "EV charger",
+              "parallel": "Parallel system"
+            },
+            "data_description": {
+              "battery": "Battery entities. When the inverter does not answer the detection, a battery is assumed.",
+              "meter_a": "Entities of the first meter. When the inverter does not answer the detection, the meter is assumed.",
+              "meter_b": "Entities of the second meter, detected from the inverter's meter B status.",
+              "ev_charger": "Entities of the SAJ EV charger, detected from the inverter's EV charger enable setting.",
+              "parallel": "Entities of a parallel machine system, detected from the inverter's parallel mode and the number of machines online."
+            }
+          }
         }
       },
       "confirm_replacement": {
@@ -119,7 +139,8 @@
       "entity_id_taken": "The entity ID {entity_id} is already taken in Home Assistant. Choose a different prefix.",
       "statistics_exist": "Home Assistant already holds long-term statistics under {entity_id}, so this installation's history could not be moved there. Choose a different prefix.",
       "prefix_shadows_entity": "This prefix would make entity IDs that clash with the name of an entity. Choose a different prefix.",
-      "invalid_ems_heartbeat": "Enter a whole-number heartbeat from 30 to 3600 seconds."
+      "invalid_ems_heartbeat": "Enter a whole-number heartbeat from 30 to 3600 seconds.",
+      "invalid_equipment": "Choose Automatic, Fitted or Not fitted for each piece of equipment."
     },
     "abort": {
       "changes_saved": "SAJ Local settings were saved.",
@@ -1487,6 +1508,9 @@
       "meter_a_power": {
         "name": "Meter A power"
       },
+      "meter_b_power": {
+        "name": "Meter B power"
+      },
       "parallel_backup_load_power": {
         "name": "Parallel system backup load power"
       },
@@ -1825,6 +1849,9 @@
       "ev_charge_power": {
         "name": "EV charging power"
       },
+      "ev_ems_charge_current": {
+        "name": "EV charger EMS charge current"
+      },
       "ev_slot_1_days": {
         "name": "EV charger slot 1 weekdays"
       },
@@ -1924,7 +1951,11 @@
         "name": "Battery protocol",
         "state": {
           "not_in_use": "Not in use",
-          "saj_bu3": "SAJ BU3"
+          "saj_bu3": "SAJ BU3",
+          "lead_acid": "Lead-acid",
+          "dyness_h": "Dyness DYNESS-H",
+          "pylon_sc0500": "Pylon SC0500",
+          "b2_can": "B2 CAN"
         }
       },
       "application_mode": {
@@ -1989,6 +2020,13 @@
           "4800": "4800 baud",
           "2400": "2400 baud",
           "1200": "1200 baud"
+        }
+      },
+      "ev_ems_phase_mode": {
+        "name": "EV charger EMS phase mode",
+        "state": {
+          "three_phase": "Three-phase",
+          "single_phase": "Single-phase"
         }
       },
       "ev_port_mode": {
@@ -2162,6 +2200,9 @@
       },
       "ev_minimum_current_charging": {
         "name": "EV charger minimum current charging"
+      },
+      "ev_ems_charging": {
+        "name": "EV charger EMS charging"
       },
       "ems_inverter_control": {
         "name": "EMS inverter control"
@@ -2339,6 +2380,12 @@
       }
     }
   },
+  "issues": {
+    "equipment_not_detected": {
+      "title": "{equipment} is no longer detected",
+      "description": "{installation} was set up with {equipment}, but the inverter now reports that it is not there. The {equipment} entities stay and show whatever the inverter answers. Check the {equipment}, or set it to Not fitted in Configure to remove its entities."
+    }
+  },
   "exceptions": {
     "unsupported_device": {
       "message": "The connected device reports type {device_type}, which is not recognised. Choose its model in Configure."
@@ -2449,6 +2496,23 @@
     "entity_state": {
       "options": {
         "disabled": "{entity} (disabled)"
+      }
+    },
+    "equipment": {
+      "options": {
+        "battery": "Battery",
+        "meter_a": "Meter A",
+        "meter_b": "Meter B",
+        "ev_charger": "EV charger",
+        "parallel": "Parallel system",
+        "none": "no optional equipment"
+      }
+    },
+    "equipment_setting": {
+      "options": {
+        "automatic": "Automatic",
+        "fitted": "Fitted",
+        "not_fitted": "Not fitted"
       }
     }
   }

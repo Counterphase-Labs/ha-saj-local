@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from .catalogue import Fit
+from .models import ALL_EQUIPMENT, Equipment
 from .profiles import AUTOMATIC, resolve_profile
 
 if TYPE_CHECKING:
@@ -22,6 +24,17 @@ class Device:
     rated_power: int
     profile: Profile
     detected: bool
+    equipment: frozenset[Equipment] = field(default=ALL_EQUIPMENT)
+    pack_limit: int | None = None
+
+    @property
+    def fit(self) -> Fit:
+        return Fit(
+            profile=self.profile,
+            device_type=self.device_type,
+            equipment=self.equipment,
+            pack_limit=self.pack_limit,
+        )
 
 
 async def identify(client: RegisterReader, selection: str = AUTOMATIC) -> Device:

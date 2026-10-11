@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from enum import StrEnum
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, ClassVar
@@ -14,12 +15,14 @@ if TYPE_CHECKING:
 
     from custom_components.saj_local.saj.models import Profile
 
-from custom_components.saj_local import config_flow
+from custom_components.saj_local import config_flow, const
 from custom_components.saj_local.errors import Translation
 from custom_components.saj_local.saj import errors as saj_errors
 from custom_components.saj_local.saj.catalogue import blocks_by_key
 from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessage
 from custom_components.saj_local.saj.device import Device
+from custom_components.saj_local.saj.models import Equipment
+from custom_components.saj_local.saj.models.h2 import PROFILE as H2
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from custom_components.saj_local.saj.telemetry import Readout
 from tests.profiles import profile
@@ -55,8 +58,16 @@ SAVED_DATA = {
     "model": "automatic",
     "device_type": 0x0001,
 }
+REMEMBERED = {"fitted_equipment": ["battery"]}
 DISABLED_LABEL = "{entity} (disabled)"
 BLOCK_LABELS = {"realtime": "Realtime", "settings": "Settings", "energy": "Energy"}
+EQUIPMENT_LABELS = {
+    "battery": "Battery",
+    "meter_b": "Meter B",
+    "ev_charger": "EV charger",
+    "parallel": "Parallel system",
+    "none": "nothing",
+}
 
 
 class FlowAbortError(Exception):
@@ -170,13 +181,13 @@ _nothing_enabled.asked = []
 _nothing_enabled.keys = frozenset()
 
 
-def _one_request_per_key(
-    *, profile, device_type, enabled, default_interval, groups
-) -> float:
+def _one_request_per_key(*, fit, enabled, default_interval, groups) -> float:
     _one_request_per_key.asked.append(
         {
-            "profile": profile,
-            "device_type": device_type,
+            "profile": fit.profile,
+            "device_type": fit.device_type,
+            "equipment": fit.equipment,
+            "pack_limit": fit.pack_limit,
             "enabled": enabled,
             "default_interval": default_interval,
             "groups": list(groups),
@@ -189,18 +200,25 @@ def _one_request_per_key(
 _one_request_per_key.asked = []
 
 
-def _requests_per_key(*, profile, device_type, keys) -> int:
-    del profile, device_type
+def _requests_per_key(*, fit, keys) -> int:
+    del fit
     return len(keys)
 
 
 async def _block_translations(hass, language, category, integrations):
     del hass
     assert (language, category, integrations) == ("en", "selector", ["saj_local"])
-    return {
-        f"component.saj_local.selector.block.options.{block}": label
-        for block, label in BLOCK_LABELS.items()
-    } | {"component.saj_local.selector.entity_state.options.disabled": DISABLED_LABEL}
+    return (
+        {
+            f"component.saj_local.selector.block.options.{block}": label
+            for block, label in BLOCK_LABELS.items()
+        }
+        | {"component.saj_local.selector.entity_state.options.disabled": DISABLED_LABEL}
+        | {
+            f"component.saj_local.selector.equipment.options.{name}": label
+            for name, label in EQUIPMENT_LABELS.items()
+        }
+    )
 
 
 def _identifying(device: Device):
@@ -245,7 +263,7 @@ def reset_flow_client_instances(monkeypatch):
     monkeypatch.setattr(config_flow, "enabled_entity_keys", _nothing_enabled)
     monkeypatch.setattr(config_flow, "installation_load", _one_request_per_key)
     monkeypatch.setattr(config_flow, "requests_per_read", _requests_per_key)
-    monkeypatch.setattr(config_flow, "async_get_translations", _block_translations)
+    monkeypatch.setattr(const, "async_get_translations", _block_translations)
 
 
 def _form(**kwargs):
@@ -668,6 +686,7 @@ def _saved_entry(*, entry_id="entry-a", serial=SERIAL, model="automatic", prefix
         title=f"SAJ {serial}",
         data={
             **SAVED_DATA,
+            **REMEMBERED,
             "model": model,
             "device_type": STORED_DEVICE_TYPES[model],
         },
@@ -699,7 +718,7 @@ def _submission(**changes):
 
 
 def _unchanged(entry, *, data=None, options=None, serial=SERIAL):
-    assert entry.data == (data or SAVED_DATA)
+    assert entry.data == {**REMEMBERED, **(data or SAVED_DATA)}
     assert entry.options == (options or {"scan_interval": 45, "prefix": ""})
     assert entry.unique_id == serial
     assert entry.update_count == 0
@@ -812,7 +831,7 @@ async def test_validated_edit_saves_once_and_keeps_entry_identity(
     assert len(FlowClient.instances) == 1
     assert FlowClient.instances[0].closed
     assert entry.entry_id == "entry-a"
-    assert entry.data == expected_data
+    assert entry.data == {**REMEMBERED, **expected_data}
     assert entry.options == {
         "scan_interval": expected_interval,
         "prefix": "",
@@ -975,7 +994,11 @@ async def test_replacement_across_models_asks_confirmation_before_any_change(
     assert entry.entry_id == "entry-a"
     assert entry.unique_id == REPLACEMENT_SERIAL
     assert entry.title == f"SAJ {SERIAL}"
-    assert entry.data == {**SAVED_DATA, "host": new_host, "device_type": new_type}
+    assert entry.data == {
+        **SAVED_DATA,
+        "host": new_host,
+        "device_type": new_type,
+    }
     assert entry.options == {"scan_interval": 75, "prefix": "", "allow_control": False}
     assert entry.update_count == 1
 
@@ -1143,6 +1166,7 @@ async def test_assumed_model_is_saved_only_after_confirmation(monkeypatch, seria
     assert result == _abort(reason="changes_saved")
     assert entry.data == {
         **SAVED_DATA,
+        **(REMEMBERED if serial == SERIAL else {}),
         "model": "beta",
         "device_type": UNRECOGNISED_TYPE,
     }
@@ -1345,7 +1369,7 @@ def _group_flow(
 ):
     entry = SimpleNamespace(
         entry_id=ENTRY_ID,
-        data={"model": "automatic", "device_type": GAMMA_TYPE},
+        data={**REMEMBERED, "model": "automatic", "device_type": GAMMA_TYPE},
         options={"scan_interval": 60},
         subentries={subentry.subentry_id: subentry for subentry in subentries},
     )
@@ -1376,8 +1400,10 @@ def _group_flow(
     monkeypatch.setattr(
         config_flow,
         "blocks_by_key",
-        lambda *, profile, device_type: (
-            dict(blocks) if (profile, device_type) == (GAMMA, GAMMA_TYPE) else {}
+        lambda *, fit: (
+            dict(blocks)
+            if (fit.profile, fit.device_type) == (GAMMA, GAMMA_TYPE)
+            else {}
         ),
     )
     monkeypatch.setattr(flow, "async_show_form", _form)
@@ -1492,6 +1518,8 @@ async def test_the_load_comes_from_the_stored_device_enabled_entities_and_cadenc
         {
             "profile": GAMMA,
             "device_type": GAMMA_TYPE,
+            "equipment": frozenset({Equipment.BATTERY}),
+            "pack_limit": None,
             "enabled": ENABLED,
             "default_interval": 45,
         }
@@ -3030,7 +3058,7 @@ async def test_changing_a_rule_breaking_saved_prefix_to_a_bad_value_is_still_ref
     assert flow.hass.config_entries.events == []
     _unchanged(
         entry,
-        data={**SAVED_DATA, "device_type": 4},
+        data={**SAVED_DATA, **REMEMBERED, "device_type": 4},
         options={"scan_interval": 45, "prefix": saved},
     )
 
@@ -3246,7 +3274,7 @@ EMS_PROFILE = profile(
 def _ems_flow(monkeypatch, **saved_options):
     monkeypatch.setattr(config_flow, "PROFILES", (ALPHA, EMS_PROFILE))
     entry = _saved_entry()
-    entry.data = {**SAVED_DATA, "device_type": EMS_TYPE}
+    entry.data = {**SAVED_DATA, **REMEMBERED, "device_type": EMS_TYPE}
     entry.options = {"scan_interval": 45, "prefix": "", **saved_options}
     monkeypatch.setattr(
         config_flow,
@@ -3424,7 +3452,7 @@ async def test_control_is_confirmed_after_model_replacement_prefix_and_load(
 async def test_the_load_of_an_installation_counts_only_rows_that_are_read(monkeypatch):
     monkeypatch.setattr(config_flow, "PROFILES", (ALPHA, EMS_PROFILE))
     entry = _saved_entry()
-    entry.data = {**SAVED_DATA, "device_type": EMS_TYPE}
+    entry.data = {**SAVED_DATA, **REMEMBERED, "device_type": EMS_TYPE}
     flow = _options_flow(monkeypatch, entry=entry)
 
     await flow.async_step_init()
@@ -3443,7 +3471,7 @@ async def test_polling_group_options_leave_out_rows_that_are_not_read(monkeypatc
             _registered("ems_battery_power_target", domain="number"),
         ],
     )
-    entry.data = {"model": "automatic", "device_type": EMS_TYPE}
+    entry.data = {**REMEMBERED, "model": "automatic", "device_type": EMS_TYPE}
     monkeypatch.setattr(config_flow, "blocks_by_key", blocks_by_key)
 
     form = await flow.async_step_user()
@@ -3575,3 +3603,336 @@ async def test_failed_setup_validation_keeps_the_control_tick(monkeypatch):
 
     assert result["step_id"] == "user"
     assert _marker(result["data_schema"], "allow_control").default() is True
+
+
+OPTIONAL_TYPE = 0x0005
+OPTIONAL_KEYS = {
+    "pv_power",
+    "battery_protocol",
+    "battery_protocol_active",
+    "meter_a_status",
+    "meter_b_status",
+    "ev_enabled",
+    "parallel_mode",
+    "parallel_online_count",
+}
+OPTIONAL_MODELS = {
+    "four": replace(
+        profile(
+            base=HS3,
+            key="epsilon",
+            device_types={OPTIONAL_TYPE},
+            keys=OPTIONAL_KEYS,
+            hand_verified=True,
+        ),
+        probes=HS3.probes,
+    ),
+    "two": replace(
+        profile(
+            base=HS3,
+            key="epsilon",
+            device_types={OPTIONAL_TYPE},
+            keys=OPTIONAL_KEYS,
+            hand_verified=True,
+        ),
+        probes=H2.probes,
+    ),
+}
+OFFERED = {
+    "four": ["battery", "meter_a", "meter_b", "ev_charger", "parallel"],
+    "two": ["battery", "meter_a", "meter_b", "parallel"],
+}
+
+
+def _optional_entry(monkeypatch, *, model, options=None, remembered=()):
+    monkeypatch.setattr(
+        config_flow, "PROFILES", (OPTIONAL_MODELS[model], ALPHA, BETA, GAMMA)
+    )
+    entry = _saved_entry()
+    entry.data = {
+        **SAVED_DATA,
+        "device_type": OPTIONAL_TYPE,
+        "fitted_equipment": list(remembered),
+    }
+    entry.options = {"scan_interval": 45, "prefix": "", **(options or {})}
+    return entry, _options_flow(monkeypatch, entry=entry)
+
+
+def _section_of(form):
+    schema = form["data_schema"]
+    return schema.schema[_marker(schema, "equipment")]
+
+
+@pytest.mark.parametrize("model", ["four", "two"])
+async def test_the_configure_form_offers_one_collapsed_equipment_field_per_equipment(
+    monkeypatch, model
+):
+    _, flow = _optional_entry(monkeypatch, model=model)
+
+    form = await flow.async_step_init()
+
+    equipment = _section_of(form)
+    assert equipment.options == {"collapsed": True}
+    assert _field_names(equipment.schema) == OFFERED[model]
+    assert all(
+        _marker(equipment.schema, name).default() == "automatic"
+        for name in OFFERED[model]
+    )
+
+
+async def test_the_configure_form_has_no_equipment_section_for_a_model_without_any(
+    monkeypatch,
+):
+    entry = _saved_entry()
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    form = await flow.async_step_init()
+
+    assert "equipment" not in _field_names(form["data_schema"])
+    assert "equipment_fitted" not in form["description_placeholders"]
+
+
+async def test_the_equipment_fields_start_from_the_saved_settings(monkeypatch):
+    _, flow = _optional_entry(
+        monkeypatch,
+        model="four",
+        options={"equipment": {"battery": "fitted", "ev_charger": "not_fitted"}},
+    )
+
+    form = await flow.async_step_init()
+
+    defaults = {
+        name: _marker(_section_of(form).schema, name).default()
+        for name in OFFERED["four"]
+    }
+    assert defaults == {
+        "battery": "fitted",
+        "meter_a": "automatic",
+        "meter_b": "automatic",
+        "ev_charger": "not_fitted",
+        "parallel": "automatic",
+    }
+
+
+@pytest.mark.parametrize(
+    ("options", "remembered", "described"),
+    [
+        ({}, [], "nothing"),
+        ({}, ["battery"], "Battery"),
+        ({}, ["battery", "parallel"], "Battery, Parallel system"),
+        ({"equipment": {"meter_b": "fitted"}}, [], "Meter B"),
+        ({"equipment": {"battery": "not_fitted"}}, ["battery"], "nothing"),
+    ],
+)
+async def test_the_equipment_section_says_what_is_treated_as_fitted(
+    monkeypatch, options, remembered, described
+):
+    _, flow = _optional_entry(
+        monkeypatch, model="four", options=options, remembered=remembered
+    )
+
+    form = await flow.async_step_init()
+
+    assert form["description_placeholders"]["equipment_fitted"] == described
+
+
+async def test_a_submitted_equipment_setting_is_saved_and_applied_on_the_next_load(
+    monkeypatch,
+):
+    entry, flow = _optional_entry(monkeypatch, model="four", remembered=["battery"])
+    monkeypatch.setattr(
+        config_flow, "identify", _identifying(_device(profile=OPTIONAL_MODELS["four"]))
+    )
+    submitted = {"battery": "not_fitted", "meter_b": "fitted"}
+
+    result = await flow.async_step_init(
+        _submission(model="automatic", equipment=submitted)
+    )
+
+    assert result == _abort(reason="changes_saved")
+    assert entry.options["equipment"] == submitted
+    assert entry.data["fitted_equipment"] == ["battery"]
+
+
+@pytest.mark.parametrize(
+    "submitted",
+    [
+        {"battery": "sometimes"},
+        {"toaster": "fitted"},
+        "automatic",
+    ],
+)
+async def test_an_equipment_choice_that_is_not_one_of_the_options_is_refused(
+    monkeypatch, submitted
+):
+    entry, flow = _optional_entry(monkeypatch, model="four")
+
+    form = await flow.async_step_init(_submission(equipment=submitted))
+
+    assert form["errors"] == {"equipment": "invalid_equipment"}
+    assert entry.update_count == 0
+
+
+async def test_the_stored_load_and_group_choices_follow_the_stored_fitted_equipment(
+    monkeypatch,
+):
+    entry, _ = _optional_entry(
+        monkeypatch,
+        model="four",
+        options={"equipment": {"meter_b": "fitted", "battery": "not_fitted"}},
+        remembered=["battery", "ev_charger"],
+    )
+    entry.data["highest_pack_count"] = 2
+    hass = SimpleNamespace(config=SimpleNamespace(language="en"))
+
+    load = config_flow.stored_installation_load(hass=hass, entry=entry)
+
+    assert load.fit.equipment == {Equipment.METER_B, Equipment.EV_CHARGER}
+    assert load.fit.pack_limit == 2
+    assert load.fit.profile is OPTIONAL_MODELS["four"]
+
+
+@pytest.mark.parametrize(
+    ("submitted", "expected"),
+    [
+        ({}, {Equipment.BATTERY}),
+        ({"battery": "not_fitted"}, set()),
+        ({"battery": "not_fitted", "meter_b": "fitted"}, {Equipment.METER_B}),
+        (
+            {"meter_b": "fitted", "ev_charger": "fitted"},
+            {
+                Equipment.BATTERY,
+                Equipment.METER_B,
+                Equipment.EV_CHARGER,
+            },
+        ),
+        ({"battery": "automatic"}, {Equipment.BATTERY}),
+    ],
+)
+async def test_the_load_after_an_interval_change_applies_the_submitted_equipment(
+    monkeypatch, submitted, expected
+):
+    _, flow = _optional_entry(monkeypatch, model="four", remembered=["battery"])
+    monkeypatch.setattr(
+        config_flow, "identify", _identifying(_device(profile=OPTIONAL_MODELS["four"]))
+    )
+
+    await flow.async_step_init(_submission(scan_interval=10, equipment=submitted))
+
+    assert _one_request_per_key.asked[0]["equipment"] == expected
+
+
+@pytest.mark.parametrize(
+    ("serial", "pack_limit"), [(SERIAL, 3), (REPLACEMENT_SERIAL, None)]
+)
+async def test_the_load_after_an_interval_change_uses_the_pack_limit_of_the_same_unit(
+    monkeypatch, serial, pack_limit
+):
+    entry, flow = _optional_entry(monkeypatch, model="four", remembered=["battery"])
+    entry.data["highest_pack_count"] = 3
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _identifying(_device(serial=serial, profile=OPTIONAL_MODELS["four"])),
+    )
+
+    await flow.async_step_init(_submission(scan_interval=10))
+    if serial == REPLACEMENT_SERIAL:
+        await flow.async_step_confirm_replacement({})
+
+    assert _one_request_per_key.asked[0]["pack_limit"] == pack_limit
+
+
+async def test_a_replacement_forgets_what_the_old_unit_had(monkeypatch):
+    entry, flow = _optional_entry(
+        monkeypatch,
+        model="four",
+        options={"equipment": {"battery": "automatic"}},
+        remembered=["battery"],
+    )
+    entry.data["detected_equipment"] = ["battery"]
+    entry.data["highest_pack_count"] = 3
+    monkeypatch.setattr(
+        config_flow,
+        "identify",
+        _identifying(
+            _device(serial=REPLACEMENT_SERIAL, profile=OPTIONAL_MODELS["four"])
+        ),
+    )
+
+    await flow.async_step_init(_submission(equipment={"battery": "automatic"}))
+    result = await flow.async_step_confirm_replacement({})
+
+    assert result == _abort(reason="changes_saved")
+    assert "fitted_equipment" not in entry.data
+    assert "detected_equipment" not in entry.data
+    assert "highest_pack_count" not in entry.data
+    assert entry.unique_id == REPLACEMENT_SERIAL
+
+
+async def test_the_same_unit_keeps_what_was_detected(monkeypatch):
+    entry, flow = _optional_entry(monkeypatch, model="four", remembered=["battery"])
+    entry.data["detected_equipment"] = ["battery"]
+    entry.data["highest_pack_count"] = 3
+    monkeypatch.setattr(
+        config_flow, "identify", _identifying(_device(profile=OPTIONAL_MODELS["four"]))
+    )
+
+    await flow.async_step_init(_submission(equipment={"battery": "automatic"}))
+
+    assert entry.data["fitted_equipment"] == ["battery"]
+    assert entry.data["detected_equipment"] == ["battery"]
+    assert entry.data["highest_pack_count"] == 3
+
+
+def _saved_equipment_flow(monkeypatch, *, saved):
+    entry, flow = _optional_entry(
+        monkeypatch, model="four", options={"equipment": saved} if saved else {}
+    )
+    monkeypatch.setattr(
+        config_flow, "identify", _identifying(_device(profile=OPTIONAL_MODELS["four"]))
+    )
+    return entry, flow
+
+
+@pytest.mark.parametrize(
+    "saved",
+    [{}, {"battery": "not_fitted", "meter_b": "fitted"}],
+    ids=["nothing-saved", "settings-saved"],
+)
+async def test_a_submission_without_the_equipment_section_keeps_the_saved_settings(
+    monkeypatch, saved
+):
+    entry, flow = _saved_equipment_flow(monkeypatch, saved=saved)
+    submission = _submission()
+    assert "equipment" not in submission
+
+    result = await flow.async_step_init(submission)
+
+    assert result == _abort(reason="changes_saved")
+    assert entry.options.get("equipment", {}) == saved
+
+
+@pytest.mark.parametrize(
+    "saved",
+    [{}, {"battery": "not_fitted"}],
+    ids=["nothing-saved", "settings-saved"],
+)
+async def test_a_submission_with_the_equipment_section_replaces_the_saved_settings(
+    monkeypatch, saved
+):
+    entry, flow = _saved_equipment_flow(monkeypatch, saved=saved)
+    replacement = {"battery": "fitted", "meter_b": "automatic"}
+
+    await flow.async_step_init(_submission(equipment=replacement))
+
+    assert entry.options["equipment"] == replacement
+
+
+async def test_the_equipment_section_is_optional_in_the_schema(monkeypatch):
+    _, flow = _optional_entry(monkeypatch, model="four")
+
+    form = await flow.async_step_init()
+
+    marker = _marker(form["data_schema"], "equipment")
+    assert isinstance(marker, config_flow.vol.Optional)

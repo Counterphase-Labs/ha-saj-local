@@ -59,10 +59,14 @@ MODULE_STATE_REGISTERS = 6
 MODULE_ALARM_REGISTERS = 2
 MODULE_DISCHARGE_WORDS = 2
 THIRD_PHASE = 2
-BATTERY_PROTOCOLS = frozenset({0, 24})
+NO_BATTERY_PROTOCOL = 0
 FACTORY_BLOCK_START = 0x8015
 FACTORY_BLOCK_END = 0x8023
 EMS_ENABLE_BITS = (1, 2, 8, 32)
+
+
+def _battery_protocol(*, scenario: Scenario, code: int) -> int:
+    return code if scenario.battery.modules else NO_BATTERY_PROTOCOL
 
 
 def ems_combinations() -> frozenset[int]:
@@ -362,7 +366,15 @@ def _status_and_mirrors(*, scenario: Scenario) -> list[Field]:
             scale=0.1,
         ),
         fixed(address=0x4027, name="battery_status_display", value=2048),
-        fixed(address=0x4028, name="battery_protocol_set", value=24, enc=I16),
+        fixed(
+            address=0x4028,
+            name="battery_protocol_set",
+            value=_battery_protocol(
+                scenario=scenario,
+                code=scenario.device.model.battery_protocol_active,
+            ),
+            enc=I16,
+        ),
         live(
             address=0x4029,
             name="charge_limit_mirror",
@@ -599,8 +611,18 @@ def settings_fields(
         setting(
             address=0x363B,
             name="battery_protocol",
-            value=24,
-            shape=Shape(options=BATTERY_PROTOCOLS),
+            value=_battery_protocol(
+                scenario=scenario,
+                code=scenario.device.model.battery_protocol_setting,
+            ),
+            shape=Shape(
+                options=frozenset(
+                    {
+                        NO_BATTERY_PROTOCOL,
+                        scenario.device.model.battery_protocol_setting,
+                    }
+                )
+            ),
         ),
         setting(
             address=0x3643, name="battery_auto_wake", value=0, shape=Shape(maximum=1)

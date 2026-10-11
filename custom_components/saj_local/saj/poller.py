@@ -203,8 +203,7 @@ class Poller:
 
     def planned_load(self) -> float:
         return planned_load(
-            profile=self._device.profile,
-            device_type=self._device.device_type,
+            fit=self._device.fit,
             enabled=self._enabled,
             cadences=self._schedule.cadences,
             breaks=self._health.breaks,

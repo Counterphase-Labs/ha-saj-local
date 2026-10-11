@@ -59,4 +59,5 @@ def profile(
         ),
         families=(),
         replacements=(),
+        probes=(),
     )

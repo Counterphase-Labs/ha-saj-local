@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import SimpleNamespace
 from typing import ClassVar
 
@@ -12,9 +12,11 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 import custom_components.saj_local as integration
 from custom_components.saj_local import SajRuntimeData, errors
 from custom_components.saj_local.const import DOMAIN, endpoint_guard
+from custom_components.saj_local.equipment import PackReport
 from custom_components.saj_local.saj import errors as saj_errors
 from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessage
 from custom_components.saj_local.saj.device import Device
+from custom_components.saj_local.saj.models import Equipment
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from tests.profiles import profile
 
@@ -26,6 +28,7 @@ OTHER_PROFILE = profile(
     base=HS3, key="beta", device_types={0x0010}, keys=(), hand_verified=False
 )
 DEVICE = Device(SERIAL, 0x1610, 12000, PROFILE, detected=True)
+PACKS = PackReport(count_read=None, limit=None)
 
 
 class FakeClient:
@@ -145,6 +148,12 @@ def _patch_success(monkeypatch) -> None:
         return DEVICE
 
     monkeypatch.setattr(integration, "identify", identify)
+
+    async def settle_equipment(*, hass, entry, client, device):
+        del hass, entry, client
+        return device, {}, PACKS
+
+    monkeypatch.setattr(integration, "settle_equipment", settle_equipment)
 
 
 async def test_entry_loads_into_runtime_and_unloads_owned_resources(monkeypatch):
@@ -372,7 +381,7 @@ async def test_unload_failure_preserves_entry_resources(monkeypatch):
     entry = _entry()
     client = FakeClient()
     coordinator = FakeCoordinator()
-    entry.runtime_data = SajRuntimeData(client, DEVICE, coordinator)
+    entry.runtime_data = SajRuntimeData(client, DEVICE, coordinator, {}, PACKS)
 
     async def fail_unload(_entry, _platforms):
         return False
@@ -570,7 +579,7 @@ async def test_nothing_is_released_when_the_platforms_fail_to_unload(monkeypatch
     hass = _hass()
     entry = _entry()
     coordinator = FakeCoordinator()
-    entry.runtime_data = SajRuntimeData(FakeClient(), DEVICE, coordinator)
+    entry.runtime_data = SajRuntimeData(FakeClient(), DEVICE, coordinator, {}, PACKS)
 
     async def fail_unload(_entry, _platforms):
         return False
@@ -579,3 +588,74 @@ async def test_nothing_is_released_when_the_platforms_fail_to_unload(monkeypatch
     assert not await integration.async_unload_entry(hass, entry)
 
     assert coordinator.released == 0
+
+
+async def test_the_device_with_its_fitted_equipment_is_what_the_installation_uses(
+    monkeypatch,
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    entry = _entry()
+    settled = replace(DEVICE, equipment=frozenset({Equipment.BATTERY}))
+    reports = {Equipment.BATTERY: "report"}
+    packs = PackReport(count_read=2, limit=2)
+    seen = []
+
+    async def settle_equipment(*, hass, entry, client, device):
+        seen.append((hass, entry, client, device))
+        return settled, reports, packs
+
+    monkeypatch.setattr(integration, "settle_equipment", settle_equipment)
+
+    assert await integration.async_setup_entry(hass, entry)
+
+    assert seen == [(hass, entry, FakeClient.instances[0], DEVICE)]
+    assert FakeCoordinator.instances[0].installation.device is settled
+    assert entry.runtime_data.device is settled
+    assert entry.runtime_data.equipment is reports
+    assert entry.runtime_data.packs is packs
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_error"),
+    [
+        (ModbusError(ModbusErrorMessage.REQUEST_TIMEOUT), ConfigEntryNotReady),
+        (ValueError("bad"), ConfigEntryError),
+    ],
+)
+async def test_a_failed_detection_fails_setup_like_any_other_read(
+    monkeypatch, failure, expected_error
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+
+    async def settle_equipment(*, hass, entry, client, device):
+        raise failure
+
+    monkeypatch.setattr(integration, "settle_equipment", settle_equipment)
+    monkeypatch.setattr(
+        integration,
+        "translate_error",
+        lambda **_: errors.Translation(key="stubbed", placeholders={}),
+    )
+
+    with pytest.raises(expected_error):
+        await integration.async_setup_entry(hass, _entry())
+
+    assert FakeClient.instances[0].closed
+    assert FakeCoordinator.instances == []
+
+
+async def test_removing_the_installation_removes_its_repair_issues(monkeypatch):
+    hass = _hass()
+    entry = _entry()
+    removed = []
+    monkeypatch.setattr(
+        integration,
+        "remove_equipment_issues",
+        lambda *, hass, entry: removed.append((hass, entry)),
+    )
+
+    await integration.async_remove_entry(hass, entry)
+
+    assert removed == [(hass, entry)]

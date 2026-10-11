@@ -10,6 +10,7 @@ from .const import (
     KEY_PLACEHOLDER,
     fixed_entity_id,
 )
+from .equipment import pack_summary, report_summary
 from .saj.budget import BUDGET_PER_MINUTE
 from .saj.catalogue import device_registers
 
@@ -47,6 +48,8 @@ async def async_get_config_entry_diagnostics(
             prefix=REDACTED_PREFIX if entry.options.get(CONF_PREFIX, "") else "",
             key=KEY_PLACEHOLDER,
         ),
+        "equipment": report_summary(reports=runtime.equipment),
+        "battery_packs": pack_summary(packs=runtime.packs),
         "enabled_keys": sorted(coordinator.enabled_keys),
         "connected": runtime.client.is_connected(),
         "last_update_success": coordinator.last_update_success,
@@ -138,9 +141,7 @@ def _unknown_codes(*, coordinator: Any) -> dict[str, float]:
         return {}
     device = coordinator.device
     codes: dict[str, float] = {}
-    for register in device_registers(
-        profile=device.profile, device_type=device.device_type
-    ):
+    for register in device_registers(fit=device.fit):
         value = coordinator.data.get(key=register.key)
         if (
             register.options is not None

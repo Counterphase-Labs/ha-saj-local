@@ -261,3 +261,30 @@ def test_phase_share_counters_are_requested_only_for_phases_the_model_has(
 
     assert fields[0x4147].source == f"counter:sell_phase2:{present}:False"
     assert fields[0x415F].source == f"counter:feed_in_phase3:{present}:False"
+
+
+@pytest.mark.parametrize("model", ["hs3", "h2"])
+@pytest.mark.parametrize("modules", [0, 1, 3])
+def test_both_battery_protocol_registers_read_not_in_use_without_battery_modules(
+    model, modules
+):
+    spec = MODELS[model]
+    scenario = make_scenario(model=model, battery={"modules": modules})
+    realtime = by_address(
+        fields=common.realtime_energy_fields(
+            scenario=scenario, phases=spec.phases, extended=False
+        )
+    )
+    settings = by_name(
+        fields=common.settings_fields(
+            scenario=scenario, modes=frozenset({0}), extended=False
+        )
+    )
+
+    expected = (
+        (spec.battery_protocol_active, spec.battery_protocol_setting)
+        if modules
+        else (0, 0)
+    )
+    assert (realtime[0x4028].initial, settings["battery_protocol"].initial) == expected
+    assert settings["battery_protocol"].options == {0, spec.battery_protocol_setting}

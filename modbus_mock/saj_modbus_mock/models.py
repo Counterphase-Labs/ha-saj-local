@@ -17,6 +17,8 @@ class ModelSpec:
     supports_parallel: bool
     supports_meter_b: bool
     battery_pack_voltage_v: float
+    battery_protocol_setting: int
+    battery_protocol_active: int
     default_serial_number: str
 
 
@@ -32,6 +34,8 @@ MODELS: dict[str, ModelSpec] = {
         supports_parallel=True,
         supports_meter_b=True,
         battery_pack_voltage_v=444.0,
+        battery_protocol_setting=24,
+        battery_protocol_active=24,
         default_serial_number="HS3MOCK0000000000001",
     ),
     H2: ModelSpec(
@@ -45,6 +49,8 @@ MODELS: dict[str, ModelSpec] = {
         supports_parallel=False,
         supports_meter_b=False,
         battery_pack_voltage_v=51.2,
+        battery_protocol_setting=22,
+        battery_protocol_active=13,
         default_serial_number="H2MOCK00000000000001",
     ),
 }
