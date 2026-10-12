@@ -208,6 +208,46 @@
         "reconfigure_successful": "The polling group was saved.",
         "confirmation_not_pending": "No validated polling group is awaiting a decision."
       }
+    },
+    "power_schedule": {
+      "entry_type": "Power control schedule",
+      "initiate_flow": {
+        "user": "Add power control schedule"
+      },
+      "step": {
+        "user": {
+          "title": "Add power control schedule",
+          "description": "Pick the function to hold at a set power and the Home Assistant schedule helper that says when. The integration switches the function on when the schedule turns on and off when it turns off. A schedule block can carry the additional data power, in whole watts, with a negative number to charge or import and a positive one to discharge or export; without it the function's power target is used. Allow control must be on.",
+          "data": {
+            "function": "Function",
+            "schedule": "Schedule"
+          },
+          "data_description": {
+            "function": "Each function can follow one schedule.",
+            "schedule": "A schedule helper can be used by one function of this system."
+          }
+        },
+        "reconfigure": {
+          "title": "Edit power control schedule",
+          "description": "Pick the function to hold at a set power and the Home Assistant schedule helper that says when. The integration switches the function on when the schedule turns on and off when it turns off. A schedule block can carry the additional data power, in whole watts, with a negative number to charge or import and a positive one to discharge or export; without it the function's power target is used. Allow control must be on.",
+          "data": {
+            "function": "Function",
+            "schedule": "Schedule"
+          },
+          "data_description": {
+            "function": "Each function can follow one schedule.",
+            "schedule": "A schedule helper can be used by one function of this system."
+          }
+        }
+      },
+      "error": {
+        "control_not_allowed": "Allow control is off, so a schedule could not do anything. Switch on Allow control in Configure first.",
+        "function_already_scheduled": "This function already follows a schedule in this system.",
+        "schedule_in_use": "This schedule helper is already used by another power control schedule of this system."
+      },
+      "abort": {
+        "reconfigure_successful": "The power control schedule was saved."
+      }
     }
   },
   "entity": {
@@ -1920,6 +1960,15 @@
       },
       "ems_pv_power_limit": {
         "name": "EMS PV power limit"
+      },
+      "battery_power_target": {
+        "name": "Battery power target"
+      },
+      "grid_power_target": {
+        "name": "Grid power target"
+      },
+      "inverter_power_target": {
+        "name": "Inverter power target"
       }
     },
     "select": {
@@ -2215,6 +2264,15 @@
       },
       "ems_grid_control": {
         "name": "EMS grid control"
+      },
+      "battery_power_control": {
+        "name": "Battery power control"
+      },
+      "grid_power_control": {
+        "name": "Grid power control"
+      },
+      "inverter_power_control": {
+        "name": "Inverter power control"
       }
     },
     "time": {
@@ -2467,6 +2525,15 @@
     },
     "write_mismatch": {
       "message": "The inverter accepted the change but now holds a different value, which is shown. The inverter was changed, but not to the value you asked for."
+    },
+    "no_power_target": {
+      "message": "No power has been set for the {function} function. Set its power target first. The inverter was not changed."
+    },
+    "another_function_running": {
+      "message": "The {running} function is running, and only one power control function can run at a time. Switch it off first. The inverter was not changed."
+    },
+    "unusable_power": {
+      "message": "The power must be a whole number of watts from {minimum} to {maximum}. The inverter was not changed."
     }
   },
   "selector": {
@@ -2513,6 +2580,13 @@
         "automatic": "Automatic",
         "fitted": "Fitted",
         "not_fitted": "Not fitted"
+      }
+    },
+    "power_function": {
+      "options": {
+        "battery": "Battery",
+        "grid": "Grid",
+        "inverter": "Inverter"
       }
     }
   }

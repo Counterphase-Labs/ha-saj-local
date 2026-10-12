@@ -14,7 +14,7 @@ from saj.catalogue import (
 )
 from saj.codec import Encoding, Value
 from saj.control import Control
-from saj.definitions import EMS_LIMIT_KEYS, EMS_TARGET_KEYS, EntityKind
+from saj.definitions import EntityKind
 from saj.device import Device
 from saj.errors import InvalidValueError, UnknownSettingError
 from saj.guard import EndpointGuard
@@ -29,6 +29,10 @@ if TYPE_CHECKING:
 
     from saj.models import Profile
 
+EMS_TARGET_KEYS = frozenset(method.target_key for method in HS3.power_control.values())
+EMS_LIMIT_KEYS = frozenset(
+    key for method in HS3.power_control.values() for key in method.limit_keys
+)
 HS3_DEVICE_TYPE = 0x1610
 H2_DEVICE_TYPE = 0x005A
 BACKUP_RESERVE_ADDRESS = 0x3651

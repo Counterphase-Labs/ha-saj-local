@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
 from .catalogue import Register, Row, device_registers
@@ -15,9 +15,6 @@ from .codec import (
     split_words,
 )
 from .definitions import (
-    EMS_CONTROL_BITS,
-    EMS_LIMIT_KEYS,
-    EMS_TARGET_KEYS,
     PROTECTED_KEYS,
     Access,
     Definition,
@@ -37,10 +34,11 @@ from .errors import (
     WriteRejectedError,
     WriteUnconfirmedError,
 )
+from .models import ems_rows
 from .telemetry import decode_values
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Callable, Collection, Mapping, Sequence
 
     from .device import Device
     from .guard import EndpointGuard
@@ -59,6 +57,14 @@ class ControlLink(RegisterReader, RegisterWriter, Protocol):
 class Inspection:
     extra_words: int
     check: Callable[[Sequence[int]], None]
+
+
+@dataclass(frozen=True)
+class Write:
+    key: str
+    value: Value
+    also: Mapping[str, Value] = field(default_factory=dict)
+    inspect_timeout: bool = False
 
 
 @dataclass(frozen=True)
@@ -126,13 +132,20 @@ class Control:
             for register in registers
             if register.writable and register.row is not None
         }
+        self._ems = ems_rows(profile=device.profile)
         self._limit_requests = _adjacent_groups(
             targets=tuple(
                 _Target(register=register, row=register.row)
                 for register in registers
-                if register.key in EMS_LIMIT_KEYS and register.row is not None
+                if register.key in self._ems.limits and register.row is not None
             )
         )
+        self._methods = tuple(device.profile.power_control.values())
+        self._readable = {
+            register.key: _Target(register=register, row=register.row)
+            for register in registers
+            if register.readable and register.row is not None
+        }
         self._sharing: dict[Row, list[Register]] = {}
         for register in registers:
             if register.readable and register.row is not None:
@@ -155,19 +168,55 @@ class Control:
         self._require_allowance()
         return await self._execute(edits=edits, inspection=inspection)
 
-    async def switch_off_ems(self, *, keys: Sequence[str]) -> WriteResult:
-        for key in keys:
-            if key not in EMS_CONTROL_BITS:
-                raise UnknownSettingError(key)
-        edits = self._edits(changes=dict.fromkeys(keys, 0))
+    async def switch_off(self, *, write: Write) -> WriteResult:
+        changes = {write.key: write.value, **write.also}
+        for key, value in changes.items():
+            self._require_stop_write(key=key, value=value)
+        edits = self._edits(changes=changes)
         self._require_reachable()
         return await self._execute(edits=edits, inspection=None)
 
+    def _require_stop_write(self, *, key: str, value: Value) -> None:
+        owners = [method for method in self._methods if key in method.stop_keys]
+        if not owners:
+            raise UnknownSettingError(key)
+        if not any(method.accepts_stop(key=key, value=value) for method in owners):
+            raise InvalidValueError(ValueProblem.OUT_OF_RANGE)
+
+    async def read_states(self, *, keys: Collection[str]) -> dict[str, Value]:
+        self._admit(keys=())
+        targets = [self._readable_target(key=key) for key in keys]
+        self._require_reachable()
+        values: dict[str, Value] = {}
+        for row in dict.fromkeys(target.row for target in targets):
+            words = await self._read_before(row=row, inspection=None)
+            values.update(self._values(row=row, words=words))
+        return {key: values[key] for key in keys}
+
+    def _readable_target(self, *, key: str) -> _Target:
+        target = self._readable.get(key)
+        if target is None:
+            raise UnknownSettingError(key)
+        return target
+
+    def require_admitted(self) -> None:
+        self._admit(keys=())
+
+    async def read_setting(self, *, key: str) -> Value:
+        (target,) = self._admit(keys=(key,))
+        if not target.register.readable:
+            raise UnknownSettingError(key)
+        self._require_reachable()
+        return await self._read_row(target=target)
+
     async def keep_alive_read_ems(self, *, key: str) -> Value:
-        if key not in EMS_TARGET_KEYS:
+        if key not in self._ems.target_functions:
             raise UnknownSettingError(key)
         (target,) = self._admit(keys=(key,))
         self._require_reachable()
+        return await self._read_row(target=target)
+
+    async def _read_row(self, *, target: _Target) -> Value:
         try:
             words = await self._link.read_holding_registers(
                 address=target.row.address, count=target.row.words

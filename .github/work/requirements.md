@@ -38,12 +38,15 @@ Platform stability and correctness is paramount.
 
 - Writing is off for every new system. It is switched on per system, with a warning first
 - A system whose model could not be verified is never written to
-- Commissioning settings (meter, RS485, battery protocol, network, EV charger link) are read-only. This may be revisited
-- Actions that cannot be undone (factory reset, clearing energy history) are not offered; the official app covers them. This may be revisited
+- Dangerous changes are never made from Home Assistant. Users make them in the SAJ elekeeper app. This covers:
+  - Commissioning settings (meter, RS485, battery protocol, network, EV charger link). They are read-only: a wrong value can cut the inverter off from its meter, battery, charger or Home Assistant
+  - Actions that cannot be undone (factory reset, clearing energy history). They are not offered
 - After a change, the entity shows the value the inverter actually holds
 - A failed change says clearly whether the inverter was changed, was not changed, or is in an unknown state
 - Changes are rate limited so they cannot overload the inverter
 - EMS functions switched on from Home Assistant are kept alive by a heartbeat, every 60 seconds by default and configurable, and are switched off when Home Assistant stops
+- Power control (holding the battery, the grid connection point or the inverter at a set power) is offered the same way on every model that can do it: the same entities, in watts. How it is done on the inverter belongs to its model
+- Optionally, a power control function can follow a Home Assistant schedule helper the user picks. The integration switches the function on when the schedule turns on and off when it turns off
 
 ### Modbus Mock
 
@@ -58,7 +61,8 @@ Platform stability and correctness is paramount.
 - Backwards compatibility MUST drive architecture decisions. Sensor names must remain stable. Architecture decisions should limit the possibility of being boxed into creating breaking changes.
 - **CRITICAL**: While this line is in place, DO NOT create backwards compatibility layers. The integration is not released yet. Breaking changes to address the backwards compatible architecture are acceptable while this line is in place (before release). Build as if it is released.
 
-- In some sense providing an abstraction layer across SAJ systems to ensure consistent sensor names, values, formats etc. In some cases that might mean translating or massaging into a common format.
+- The different implementations of SAJ systems form an abstraction layer. There is a single unified interface (entities, controls, Lovelace elements) that does the same thing across all models, as closely as each model allows: consistent names, values, units and behaviour. Where models differ, each model's implementation translates to and from the common form.
+- A feature is left out only on a model that lacks the possibility to do it.
 
 - option to enable debug logging which will provide clear and helpful debug logs rather than spam that creates log fatigue
 

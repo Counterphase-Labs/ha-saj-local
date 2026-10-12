@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from .codec import Value
-    from .models import Profile
+    from .models import PowerFunction, Profile
 
 
 class ModelError(Exception):
@@ -106,6 +106,25 @@ class EmsTimeoutError(WriteError):
         )
         self.timeout = timeout
         self.interval = interval
+
+
+class NoPowerTargetError(WriteError):
+    def __init__(self, *, function: PowerFunction) -> None:
+        super().__init__(f"No power has been set for {function}")
+        self.function = function
+
+
+class AnotherFunctionRunningError(WriteError):
+    def __init__(self, *, running: PowerFunction) -> None:
+        super().__init__(f"The {running} function is running")
+        self.running = running
+
+
+class UnusablePowerError(WriteError):
+    def __init__(self, *, minimum: int, maximum: int) -> None:
+        super().__init__(f"Power must be a whole number from {minimum} to {maximum} W")
+        self.minimum = minimum
+        self.maximum = maximum
 
 
 class WriteRejectedError(WriteError):

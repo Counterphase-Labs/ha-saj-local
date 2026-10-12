@@ -12,6 +12,7 @@ from custom_components.saj_local.const import DOMAIN
 from custom_components.saj_local.coordinator import (
     Installation,
     SajCoordinator,
+    power_control_store,
     wakeup_delay,
 )
 from custom_components.saj_local.errors import Translation
@@ -24,6 +25,7 @@ from custom_components.saj_local.saj.errors import (
     UnknownModelError,
     UnsupportedDeviceError,
 )
+from custom_components.saj_local.saj.models import ems_rows
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from custom_components.saj_local.saj.poller import (
     CadencePlan,
@@ -33,6 +35,7 @@ from custom_components.saj_local.saj.poller import (
 )
 from custom_components.saj_local.saj.schedule import Cadence
 from custom_components.saj_local.saj.telemetry import Telemetry
+from tests.coordinators import FakeStore, statements
 from tests.profiles import profile
 
 SUPPORTED_KEYS = frozenset(
@@ -115,6 +118,12 @@ def every_supported_entity_is_enabled(monkeypatch):
         "enabled_entity_keys",
         lambda **asked: frozenset(register.key for register in asked["registers"]),
     )
+    monkeypatch.setattr(
+        coordinator_module, "enabled_power_keys", lambda **_: frozenset()
+    )
+    monkeypatch.setattr(
+        coordinator_module, "power_control_store", lambda **_: FakeStore()
+    )
 
 
 def _coordinator(
@@ -138,6 +147,17 @@ def _coordinator(
     coordinator._update_task = None
     coordinator._stop_heartbeat = None
     coordinator.ems = EmsOwnership()
+    coordinator.ems_rows = ems_rows(profile=statements())
+    coordinator.power_controls = {}
+    coordinator.power_offered = ()
+    coordinator.schedules = ()
+    coordinator.assumed = {}
+    coordinator.remembered_modes = {}
+    coordinator.outstanding = {}
+    coordinator._closed = False
+    coordinator._stopping = set()
+    coordinator._stop_listening = None
+    coordinator._stop_retry = None
     active_contexts = contexts or set()
     coordinator.async_contexts = lambda: iter(active_contexts)
     return coordinator, client, poller
@@ -759,3 +779,27 @@ async def test_shutdown_without_active_callback_still_closes_client(monkeypatch)
     await coordinator.async_shutdown()
 
     assert client.closed
+
+
+def test_the_stored_power_state_of_an_installation_has_its_own_versioned_file(
+    monkeypatch,
+):
+    created = []
+
+    class RecordingStore:
+        def __init__(self, hass, version, key) -> None:
+            created.append((hass, version, key))
+
+    monkeypatch.setattr(coordinator_module, "Store", RecordingStore)
+    hass = object()
+
+    store = power_control_store(hass=hass, entry_id="entry-1")
+
+    assert isinstance(store, RecordingStore)
+    assert created == [
+        (
+            hass,
+            coordinator_module.POWER_STORAGE_VERSION,
+            "saj_local.power_control.entry-1",
+        )
+    ]

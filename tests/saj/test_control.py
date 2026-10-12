@@ -12,6 +12,7 @@ from saj.control import (
     Control,
     Inspection,
     RequestPlan,
+    Write,
     request_plan,
     validate_value,
 )
@@ -32,7 +33,17 @@ from saj.errors import (
     WriteRejectedError,
     WriteUnconfirmedError,
 )
-from saj.models import Equipment, Evidence, Placement, Profile, Shape, Span
+from saj.models import (
+    EnableBitMethod,
+    Equipment,
+    Evidence,
+    OperatingModeMethod,
+    Placement,
+    PowerFunction,
+    Profile,
+    Shape,
+    Span,
+)
 from tests.saj.fakes import WritableClient
 
 SHAPE = Shape(phases=1, strings=1)
@@ -207,6 +218,36 @@ def _registers():
         largest_request=32,
         spans=(SPAN,),
         placements=placements,
+        power_control={
+            PowerFunction.INVERTER: EnableBitMethod(
+                enable_key="ems_inverter_control",
+                target_key="ems_inverter_power_target",
+                alternate_keys=("ems_battery_control",),
+                timeout_key="ems_timeout",
+            ),
+            PowerFunction.GRID: EnableBitMethod(
+                enable_key="ems_grid_control",
+                target_key=EMS_TARGET,
+                limit_keys=(
+                    "ems_battery_charge_current_limit",
+                    "ems_battery_discharge_current_limit",
+                    "ems_inverter_import_power_limit",
+                    "ems_inverter_export_power_limit",
+                    "ems_pv_power_limit",
+                ),
+            ),
+            PowerFunction.BATTERY: OperatingModeMethod(
+                mode_key="mode",
+                passive_mode=3,
+                default_mode=0,
+                direction_key="level",
+                standby=0,
+                discharge=1,
+                charge=2,
+                charge_power_key="charge",
+                discharge_power_key="discharge",
+            ),
+        },
     )
     return profile, Catalogue(profile=profile, definitions=definitions).registers
 
@@ -355,7 +396,7 @@ async def test_a_full_allowance_refuses_a_write_but_not_the_ems_switch_off(
         await control.write(key="ems_inverter_control", value=0)
     assert link.writes == []
 
-    result = await control.switch_off_ems(keys=["ems_inverter_control"])
+    result = await control.switch_off(write=Write(key="ems_inverter_control", value=0))
 
     assert link.writes == [("single", EMS_FLAGS, (0b10,))]
     assert result.values["ems_inverter_control"] == 0
@@ -368,27 +409,45 @@ async def test_the_ems_switch_off_clears_every_named_bit_and_keeps_the_rest(
 ):
     link = WritableClient({EMS_FLAGS: 0xFFFF})
 
-    await _control(device, link).switch_off_ems(
-        keys=["ems_inverter_control", "ems_battery_control"]
+    await _control(device, link).switch_off(
+        write=Write(
+            key="ems_inverter_control", value=0, also={"ems_battery_control": 0}
+        )
     )
 
     assert link.writes == [("single", EMS_FLAGS, (0xFFFC,))]
 
 
 @pytest.mark.parametrize(
-    "keys",
+    ("key", "value", "address", "sent"),
+    [("mode", 5, 0x1030, 5), ("level", 0, 0x1010, 0)],
+)
+async def test_the_switch_off_sends_the_rows_of_a_models_stop_with_the_allowance_full(
+    device: Device, key: str, value: int, address: int, sent: int
+):
+    link = WritableClient()
+    guard = StubGuard(allowance=StubAllowance(room=False))
+
+    await _control(device, link, guard=guard).switch_off(
+        write=Write(key=key, value=value)
+    )
+
+    assert link.writes == [("single", address, (sent,))]
+    assert guard.allowance.recorded == [NOW]
+
+
+@pytest.mark.parametrize(
+    "write",
     [
-        ["flag_a"],
-        ["flag_a", "flag_b"],
-        ["ems_inverter_control", "flag_a"],
-        ["flag_a", "ems_battery_control"],
-        ["level"],
-        [EMS_TARGET],
-        ["nothing"],
+        Write(key="flag_a", value=0),
+        Write(key="ems_inverter_control", value=0, also={"flag_a": 0}),
+        Write(key="flag_a", value=0, also={"ems_inverter_control": 0}),
+        Write(key="wide", value=0),
+        Write(key=EMS_TARGET, value=0),
+        Write(key="nothing", value=0),
     ],
     ids=[
         "other-switch",
-        "two-other-switches",
         "ems-first-then-other",
         "other-first-then-ems",
         "number",
@@ -396,17 +455,28 @@ async def test_the_ems_switch_off_clears_every_named_bit_and_keeps_the_rest(
         "unknown",
     ],
 )
-async def test_the_switch_off_refuses_anything_but_ems_switches_and_sends_nothing(
-    device: Device, keys: list[str]
+async def test_the_switch_off_refuses_what_is_not_part_of_a_stop_and_sends_nothing(
+    device: Device, write: Write
 ):
     link = WritableClient({FLAGS: 0b11, EMS_FLAGS: 0b11})
     guard = StubGuard(allowance=StubAllowance(room=False))
 
     with pytest.raises(UnknownSettingError):
-        await _control(device, link, guard=guard).switch_off_ems(keys=keys)
+        await _control(device, link, guard=guard).switch_off(write=write)
 
     assert link.requests == []
     assert guard.allowance.recorded == []
+
+
+async def test_the_switch_off_never_sets_an_ems_bit(device: Device):
+    link = WritableClient()
+
+    with pytest.raises(InvalidValueError):
+        await _control(device, link).switch_off(
+            write=Write(key="ems_inverter_control", value=1)
+        )
+
+    assert link.requests == []
 
 
 @EVERY_RULE
@@ -416,10 +486,71 @@ async def test_the_switch_off_keeps_every_other_rule_and_sends_nothing(
     control, link, guard = _rule_scenario(device, {**changes, "room": False})
 
     with pytest.raises(error):
-        await control.switch_off_ems(keys=["ems_inverter_control"])
+        await control.switch_off(write=Write(key="ems_inverter_control", value=0))
 
     assert link.requests == []
     assert guard.allowance.recorded == []
+
+
+async def test_a_setting_is_read_with_one_request_and_without_touching_the_allowance(
+    device: Device,
+):
+    link = WritableClient({0x1030: 5})
+    guard = StubGuard(allowance=StubAllowance(room=False))
+
+    value = await _control(device, link, guard=guard).read_setting(key="mode")
+
+    assert link.requests == [("read", 0x1030, (0,))]
+    assert value == 5
+    assert guard.allowance.recorded == []
+
+
+@pytest.mark.parametrize("key", ["reading", EMS_TARGET, "nothing"])
+async def test_only_a_readable_writable_setting_can_be_read_through_control(
+    device: Device, key: str
+):
+    link = WritableClient()
+
+    with pytest.raises(UnknownSettingError):
+        await _control(device, link).read_setting(key=key)
+
+    assert link.requests == []
+
+
+@EVERY_RULE
+async def test_reading_a_setting_keeps_the_write_rules_and_sends_nothing(
+    device: Device, changes: dict, error: type[Exception]
+):
+    control, link, _ = _rule_scenario(device, changes)
+
+    with pytest.raises(error):
+        await control.read_setting(key="mode")
+
+    assert link.requests == []
+
+
+@pytest.mark.parametrize(
+    ("changes", "error"),
+    [
+        ({"enabled": False}, ControlDisabledError),
+        ({"detected": False}, ModelUnverifiedError),
+    ],
+)
+def test_require_admitted_refuses_a_disabled_control_and_an_unverified_model(
+    device: Device, changes: dict, error: type[Exception]
+):
+    control, _, _ = _rule_scenario(device, changes)
+
+    with pytest.raises(error):
+        control.require_admitted()
+
+
+def test_require_admitted_passes_an_enabled_control_on_a_verified_model(
+    device: Device,
+):
+    control, _, _ = _rule_scenario(device, {})
+
+    control.require_admitted()
 
 
 async def test_the_keep_alive_reads_the_one_word_target_and_returns_its_value(
@@ -488,6 +619,121 @@ async def test_a_keep_alive_nobody_answers_fails_the_link(device: Device):
         await _control(device, link).keep_alive_read_ems(key=EMS_TARGET)
 
     assert caught.value.link_failed
+
+
+@pytest.mark.parametrize(
+    "write",
+    [
+        Write(key="level", value=1),
+        Write(key="level", value=2),
+        Write(key="level", value=0.5),
+        Write(key="mode", value=3),
+        Write(key="ems_inverter_control", value=1),
+        Write(key="ems_battery_control", value=2),
+        Write(key="ems_inverter_control", value=0, also={"ems_battery_control": 1}),
+        Write(key="mode", value=5, also={"level": 2}),
+    ],
+    ids=[
+        "direction-discharge",
+        "direction-charge",
+        "direction-other",
+        "mode-the-methods-own",
+        "enable-on",
+        "alternate-on",
+        "alternate-on-with-the-enable-off",
+        "mode-with-a-direction-that-is-not-standby",
+    ],
+)
+async def test_the_switch_off_refuses_a_stop_row_given_a_value_a_stop_does_not_have(
+    device: Device, write: Write
+):
+    link = WritableClient({EMS_FLAGS: 0b11})
+    guard = StubGuard(allowance=StubAllowance(room=False))
+
+    with pytest.raises(InvalidValueError):
+        await _control(device, link, guard=guard).switch_off(write=write)
+
+    assert link.requests == []
+    assert guard.allowance.recorded == []
+
+
+@pytest.mark.parametrize(
+    "write",
+    [
+        Write(key="mode", value=0),
+        Write(key="mode", value=1),
+        Write(key="level", value=0),
+        Write(key="ems_battery_control", value=0),
+    ],
+)
+async def test_the_switch_off_accepts_only_the_values_a_stop_has(
+    device: Device, write: Write
+):
+    link = WritableClient({EMS_FLAGS: 0b11, 0x1030: 4, 0x1010: 40})
+    guard = StubGuard(allowance=StubAllowance(room=False))
+
+    await _control(device, link, guard=guard).switch_off(write=write)
+
+    assert guard.allowance.recorded == [NOW]
+
+
+async def test_the_states_of_rows_in_one_register_are_read_in_one_request(
+    device: Device,
+):
+    link = WritableClient({EMS_FLAGS: 0b10, 0x1030: 5})
+    guard = StubGuard(allowance=StubAllowance(room=False))
+
+    values = await _control(device, link, guard=guard).read_states(
+        keys=["ems_inverter_control", "ems_battery_control", "mode"]
+    )
+
+    assert values == {"ems_inverter_control": 0, "ems_battery_control": 1, "mode": 5}
+    assert link.requests == [("read", EMS_FLAGS, (0,)), ("read", 0x1030, (0,))]
+    assert guard.allowance.recorded == []
+
+
+@pytest.mark.parametrize("key", ["nothing", EMS_TARGET, "clear_history"])
+async def test_only_readable_rows_have_their_state_read(device: Device, key: str):
+    link = WritableClient()
+
+    with pytest.raises(UnknownSettingError):
+        await _control(device, link).read_states(keys=[key])
+
+    assert link.requests == []
+
+
+@EVERY_RULE
+async def test_reading_states_keeps_the_write_rules_and_sends_nothing(
+    device: Device, changes: dict, error: type[Exception]
+):
+    control, link, _ = _rule_scenario(device, changes)
+
+    with pytest.raises(error):
+        await control.read_states(keys=["mode"])
+
+    assert link.requests == []
+
+
+@pytest.mark.parametrize(
+    ("failure", "error", "link_failed"),
+    [
+        (
+            ModbusError(ModbusErrorMessage.EXCEPTION_RESPONSE, exception_code=2),
+            WriteRejectedError,
+            False,
+        ),
+        (ModbusError(ModbusErrorMessage.REQUEST_TIMEOUT), LinkUnavailableError, True),
+    ],
+)
+async def test_a_failed_state_read_fails_like_a_failed_read_before_a_write(
+    device: Device, failure, error, *, link_failed: bool
+):
+    link = WritableClient(failures={1: failure})
+
+    with pytest.raises(error) as caught:
+        await _control(device, link).read_states(keys=["mode"])
+
+    assert caught.value.link_failed is link_failed
 
 
 async def test_a_write_never_opens_a_connection_of_its_own(device: Device):

@@ -11,6 +11,7 @@ from .const import DOMAIN
 from .saj.client import ModbusError, ModbusErrorMessage
 from .saj.device_type import format_device_type
 from .saj.errors import (
+    AnotherFunctionRunningError,
     ControlDisabledError,
     EmsTimeoutError,
     InvalidValueError,
@@ -18,11 +19,13 @@ from .saj.errors import (
     ModelError,
     ModelMismatchError,
     ModelUnverifiedError,
+    NoPowerTargetError,
     ProtectedSettingError,
     SeparateRegistersError,
     UnknownModelError,
     UnknownSettingError,
     UnsupportedDeviceError,
+    UnusablePowerError,
     WriteAllowanceError,
     WriteError,
     WriteMismatchError,
@@ -41,6 +44,7 @@ TIMEOUT_MESSAGES = frozenset(
 HANDLED_ERRORS: tuple[type[Exception], ...] = (ModelError, ValueError, ModbusError)
 WRITE_ERRORS: tuple[type[WriteError], ...] = (WriteError,)
 UNKNOWN_EXCEPTION_CODE = "unknown"
+FUNCTION_PLACEHOLDERS = frozenset({"function", "running"})
 
 
 class WriteOutcome(StrEnum):
@@ -129,8 +133,18 @@ def read_back_values(*, error: WriteError) -> Mapping[str, Value]:
     return error.read_back if isinstance(error, WriteMismatchError) else {}
 
 
-def write_failure(*, error: WriteError) -> HomeAssistantError:
-    return _write_failure(error)
+def write_failure(
+    *, error: WriteError, function_names: Mapping[str, str] | None = None
+) -> HomeAssistantError:
+    failure = _write_failure(error)
+    names = function_names or {}
+    placeholders = failure.translation_placeholders
+    if placeholders:
+        failure.translation_placeholders = {
+            key: names.get(value, value) if key in FUNCTION_PLACEHOLDERS else value
+            for key, value in placeholders.items()
+        }
+    return failure
 
 
 def _refusal(
@@ -214,6 +228,26 @@ def _ems_timeout(error: EmsTimeoutError) -> HomeAssistantError:
             "timeout": str(error.timeout),
             "interval": str(error.interval),
         },
+    )
+
+
+@_write_failure.register
+def _no_power_target(error: NoPowerTargetError) -> HomeAssistantError:
+    return _refusal(key="no_power_target", placeholders={"function": error.function})
+
+
+@_write_failure.register
+def _another_function_running(error: AnotherFunctionRunningError) -> HomeAssistantError:
+    return _refusal(
+        key="another_function_running", placeholders={"running": error.running}
+    )
+
+
+@_write_failure.register
+def _unusable_power(error: UnusablePowerError) -> HomeAssistantError:
+    return _refusal(
+        key="unusable_power",
+        placeholders={"minimum": str(error.minimum), "maximum": str(error.maximum)},
     )
 
 

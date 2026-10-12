@@ -7,6 +7,8 @@ from . import (
     Equipment,
     Evidence,
     FamilyPlacement,
+    OperatingModeMethod,
+    PowerFunction,
     Probe,
     Profile,
     Replacement,
@@ -260,4 +262,17 @@ PROFILE = Profile(
         METER_B_PROBE,
         PARALLEL_PROBE,
     ),
+    power_control={
+        PowerFunction.BATTERY: OperatingModeMethod(
+            mode_key="application_mode",
+            passive_mode=3,
+            default_mode=0,
+            direction_key="passive_mode",
+            standby=0,
+            discharge=1,
+            charge=2,
+            charge_power_key="passive_battery_charge_power",
+            discharge_power_key="passive_battery_discharge_power",
+        ),
+    },
 )

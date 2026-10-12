@@ -139,6 +139,38 @@ def test_a_row_is_enabled_by_its_registry_entry_or_else_its_core_marking(
     assert enabled == expected
 
 
+@pytest.mark.parametrize(
+    ("registered", "expected"),
+    [
+        ({}, set()),
+        ({"battery_power_control": None}, {"battery_power_control"}),
+        (
+            {"battery_power_control": "user", "grid_power_target": None},
+            {"grid_power_target"},
+        ),
+        ({"other_row": None}, set()),
+    ],
+)
+def test_a_power_entity_is_enabled_only_when_it_is_in_the_registry_and_not_disabled(
+    monkeypatch, registered, expected
+):
+    _registry_of(
+        monkeypatch,
+        *(
+            _registry_entry(key, disabled_by=disabled_by)
+            for key, disabled_by in registered.items()
+        ),
+    )
+
+    enabled = const.enabled_power_keys(
+        hass=None,
+        entry_id="entry-1",
+        keys=["battery_power_control", "grid_power_target", "inverter_power_target"],
+    )
+
+    assert enabled == expected
+
+
 def _subentry(subentry_id, *, kind="polling_group", interval=10, keys=("a",)):
     return SimpleNamespace(
         subentry_id=subentry_id,

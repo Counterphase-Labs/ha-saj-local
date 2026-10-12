@@ -393,22 +393,6 @@ EMS_CONTROL_BITS = {
     "ems_grid_control": 5,
 }
 EMS_CONTROL_EQUIPMENT = {"ems_battery_control": Equipment.BATTERY}
-EMS_TARGET_KEYS = frozenset(
-    {
-        "ems_inverter_power_target",
-        "ems_battery_power_target",
-        "ems_grid_power_target",
-    }
-)
-EMS_LIMIT_KEYS = frozenset(
-    {
-        "ems_battery_charge_current_limit",
-        "ems_battery_discharge_current_limit",
-        "ems_inverter_import_power_limit",
-        "ems_inverter_export_power_limit",
-        "ems_pv_power_limit",
-    }
-)
 PARALLEL_POWER_SUBJECTS = ("pv", "battery", "grid", "load", "backup_load", "grid_load")
 PARALLEL_CORE_POWER_SUBJECTS = frozenset({"pv", "battery", "grid", "load"})
 

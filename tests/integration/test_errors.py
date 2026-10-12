@@ -15,6 +15,7 @@ from custom_components.saj_local.errors import (
 from custom_components.saj_local.saj import errors as saj_errors
 from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessage
 from custom_components.saj_local.saj.errors import (
+    AnotherFunctionRunningError,
     ControlDisabledError,
     EmsTimeoutError,
     InvalidValueError,
@@ -22,17 +23,20 @@ from custom_components.saj_local.saj.errors import (
     ModelError,
     ModelMismatchError,
     ModelUnverifiedError,
+    NoPowerTargetError,
     ProtectedSettingError,
     SeparateRegistersError,
     UnknownModelError,
     UnknownSettingError,
     UnsupportedDeviceError,
+    UnusablePowerError,
     ValueProblem,
     WriteAllowanceError,
     WriteMismatchError,
     WriteRejectedError,
     WriteUnconfirmedError,
 )
+from custom_components.saj_local.saj.models import PowerFunction
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from tests.profiles import profile
 
@@ -145,6 +149,24 @@ WRITE_FAILURES = [
         True,
     ),
     (
+        NoPowerTargetError(function=PowerFunction.BATTERY),
+        "no_power_target",
+        {"function": "battery"},
+        True,
+    ),
+    (
+        AnotherFunctionRunningError(running=PowerFunction.GRID),
+        "another_function_running",
+        {"running": "grid"},
+        True,
+    ),
+    (
+        UnusablePowerError(minimum=-8800, maximum=8800),
+        "unusable_power",
+        {"minimum": "-8800", "maximum": "8800"},
+        True,
+    ),
+    (
         WriteRejectedError(exception_code=3),
         "write_rejected",
         {"exception_code": "3"},
@@ -226,3 +248,25 @@ def test_a_device_outcome_is_classified_with_its_code_and_read_back(
     assert write_outcome(error=error) is outcome
     assert rejection_code(error=error) == code
     assert read_back_values(error=error) == read_back
+
+
+@pytest.mark.parametrize(
+    ("error", "placeholders"),
+    [
+        (NoPowerTargetError(function=PowerFunction.BATTERY), {"function": "Batterie"}),
+        (
+            AnotherFunctionRunningError(running=PowerFunction.GRID),
+            {"running": "Netz"},
+        ),
+        (
+            WriteAllowanceError(limit=10, window=60.0),
+            {"limit": "10", "window": "60"},
+        ),
+    ],
+)
+def test_a_message_names_a_function_by_its_translated_name_only(error, placeholders):
+    failure = write_failure(
+        error=error, function_names={"battery": "Batterie", "grid": "Netz"}
+    )
+
+    assert failure.translation_placeholders == placeholders

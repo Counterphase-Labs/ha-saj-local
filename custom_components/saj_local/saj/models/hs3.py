@@ -4,15 +4,26 @@ from . import (
     PARALLEL_PROBE,
     Comparison,
     Condition,
+    EnableBitMethod,
     Equipment,
     Evidence,
     FamilyPlacement,
+    PowerFunction,
     Probe,
     Profile,
     Replacement,
     Shape,
     Span,
     placements_by_evidence,
+)
+
+EMS_TIMEOUT = "ems_timeout"
+EMS_LIMITS = (
+    "ems_battery_charge_current_limit",
+    "ems_battery_discharge_current_limit",
+    "ems_inverter_import_power_limit",
+    "ems_inverter_export_power_limit",
+    "ems_pv_power_limit",
 )
 
 PROFILE = Profile(
@@ -361,4 +372,25 @@ PROFILE = Profile(
         ),
         PARALLEL_PROBE,
     ),
+    power_control={
+        PowerFunction.BATTERY: EnableBitMethod(
+            enable_key="ems_battery_control",
+            target_key="ems_battery_power_target",
+            timeout_key=EMS_TIMEOUT,
+            limit_keys=EMS_LIMITS,
+        ),
+        PowerFunction.GRID: EnableBitMethod(
+            enable_key="ems_grid_control",
+            target_key="ems_grid_power_target",
+            timeout_key=EMS_TIMEOUT,
+            limit_keys=EMS_LIMITS,
+        ),
+        PowerFunction.INVERTER: EnableBitMethod(
+            enable_key="ems_inverter_control_with_timeout_exit",
+            target_key="ems_inverter_power_target",
+            alternate_keys=("ems_inverter_control",),
+            timeout_key=EMS_TIMEOUT,
+            limit_keys=EMS_LIMITS,
+        ),
+    },
 )

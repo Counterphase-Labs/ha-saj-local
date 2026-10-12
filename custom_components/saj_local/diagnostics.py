@@ -8,6 +8,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN_PLACEHOLDER,
     KEY_PLACEHOLDER,
+    SCHEDULE_ON,
     fixed_entity_id,
 )
 from .equipment import pack_summary, report_summary
@@ -85,6 +86,7 @@ async def async_get_config_entry_diagnostics(
         "breaks": [_break_summary(block=block) for block in _ordered(poller.breaks)],
         "narrowing": [_region_summary(region=region) for region in poller.narrowing],
         **_control_summary(entry=entry, coordinator=coordinator, now=now),
+        "power_control": _power_control_summary(hass=hass, coordinator=coordinator),
     }
 
 
@@ -116,6 +118,33 @@ def _control_summary(
         "ems_beats_sent": writes.beats_sent,
         "ems_beats_dropped": writes.beats_dropped,
     }
+
+
+def _power_control_summary(*, hass: HomeAssistant, coordinator: Any) -> dict[str, Any]:
+    return {
+        "functions": {
+            function.value: {
+                "method": coordinator.power_controls[function].method_name,
+                "running": coordinator.power_running(function=function),
+                "owned": function in coordinator.ems.owned,
+            }
+            for function in coordinator.power_offered
+        },
+        "schedules": [
+            {
+                "function": schedule.function.value,
+                "schedule": schedule.entity_id,
+                "on": _schedule_on(hass=hass, entity_id=schedule.entity_id),
+                "outstanding": coordinator.outstanding.get(schedule.function),
+            }
+            for schedule in coordinator.schedules
+        ],
+    }
+
+
+def _schedule_on(*, hass: HomeAssistant, entity_id: str) -> bool:
+    state = hass.states.get(entity_id)
+    return state is not None and state.state == SCHEDULE_ON
 
 
 def _ordered(breaks: Iterable[Break]) -> list[Break]:

@@ -1444,7 +1444,10 @@ def _group_input(**changes):
     }
 
 
-async def test_the_polling_group_type_is_declared_by_the_config_flow():
+async def test_the_polling_group_type_is_declared_by_the_config_flow(monkeypatch):
+    monkeypatch.setattr(config_flow, "_stored_fit", lambda **_: None)
+    monkeypatch.setattr(config_flow, "power_functions", lambda **_: ())
+
     types = config_flow.SajLocalConfigFlow.async_get_supported_subentry_types(None)
 
     assert types == {"polling_group": config_flow.SajPollingGroupFlow}

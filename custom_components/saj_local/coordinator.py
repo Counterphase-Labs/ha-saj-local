@@ -6,22 +6,34 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, NoReturn
 
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.core import callback
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_track_time_interval,
+)
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
 
 from .const import (
+    CONF_ALLOW_CONTROL,
     CONF_EMS_HEARTBEAT,
     CONF_MODEL,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     EMS_RELEASE_TIMEOUT,
-    EMS_TIMEOUT_KEY,
+    POWER_STORAGE_VERSION,
+    SCHEDULE_ON,
+    SCHEDULE_POWER_ATTRIBUTE,
+    STORED_MODES,
+    STORED_TARGETS,
     enabled_entity_keys,
+    enabled_power_keys,
     group_cadences,
+    power_schedules,
 )
 from .errors import (
     WRITE_ERRORS,
@@ -38,13 +50,13 @@ from .saj.catalogue import device_keys, device_registers
 from .saj.client import ModbusError, ModbusTcpClient
 from .saj.ems import (
     DEFAULT_HEARTBEAT_INTERVAL,
-    FUNCTION_BY_ENABLE_KEY,
     EmsOwnership,
     switch_changes,
     timeout_check,
     timeout_inspection,
 )
 from .saj.health import ReadHealth
+from .saj.models import PowerFunction, ems_rows
 from .saj.poller import (
     CycleFailedError,
     CycleResult,
@@ -53,6 +65,18 @@ from .saj.poller import (
     Services,
     Target,
     Tracking,
+)
+from .saj.power_control import (
+    Action,
+    ActionKind,
+    Blocker,
+    Situation,
+    Wish,
+    decide,
+    power_controls,
+    power_functions,
+    require_none_running,
+    require_target,
 )
 from .saj.schedule import Schedule, build_cadences
 from .saj.telemetry import Telemetry
@@ -68,15 +92,22 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import Event, EventStateChangedData, HomeAssistant
 
-    from .saj.codec import Value
-    from .saj.control import Control, Inspection, WriteResult
+    from .const import PowerSchedule
+    from .saj.codec import Range, Value
+    from .saj.control import Control, Inspection, Write, WriteResult
     from .saj.device import Device
     from .saj.guard import EndpointGuard
+    from .saj.models import PowerMethod
+    from .saj.power_control import FunctionControl
 
 _LOGGER = logging.getLogger(__name__)
-RELEASE_FAILURES: tuple[type[Exception], ...] = (*WRITE_ERRORS, TimeoutError)
+BLOCKER_MESSAGES: dict[Blocker | None, str] = {
+    Blocker.NO_TARGET: "no power has been set and the schedule block has none",
+    Blocker.ANOTHER_RUNNING: "another power control function is running",
+    Blocker.UNUSABLE_POWER: "the schedule block's power is not a whole number in range",
+}
 
 
 @dataclass(frozen=True)
@@ -94,6 +125,12 @@ class WriteStatistics:
     last: LastWrite | None = None
     beats_sent: int = 0
     beats_dropped: int = 0
+
+
+def power_control_store(
+    *, hass: HomeAssistant, entry_id: str
+) -> Store[dict[str, dict[str, int]]]:
+    return Store(hass, POWER_STORAGE_VERSION, f"{DOMAIN}.power_control.{entry_id}")
 
 
 def wakeup_delay(*, target: float, now: float) -> timedelta:
@@ -130,6 +167,22 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             CONF_EMS_HEARTBEAT, DEFAULT_HEARTBEAT_INTERVAL
         )
         self.ems = EmsOwnership()
+        self.ems_rows = ems_rows(profile=device.profile)
+        self.power_controls = power_controls(device=device)
+        self.power_offered = power_functions(fit=device.fit)
+        self.power_targets: dict[PowerFunction, int] = {}
+        self.remembered_modes: dict[PowerFunction, int] = {}
+        self.schedules: tuple[PowerSchedule, ...] = power_schedules(entry=entry)
+        self.control_allowed: bool = bool(
+            entry.options.get(CONF_ALLOW_CONTROL, False) and device.detected
+        )
+        self.outstanding: dict[PowerFunction, str] = {}
+        self._started: dict[PowerFunction, int | None] = {}
+        self._stopping: set[PowerFunction] = set()
+        self._closed = False
+        self._stop_listening: Callable[[], None] | None = None
+        self._stop_retry: Callable[[], None] | None = None
+        self._store = power_control_store(hass=hass, entry_id=entry.entry_id)
         self.writes = WriteStatistics()
         self.assumed: dict[str, Value] = {}
         self.changed_keys: frozenset[str] = frozenset()
@@ -197,7 +250,9 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                     result = await self.poller.run(enabled=enabled)
                 except CycleFailedError as failure:
                     self._fail(failure=failure)
-                return self._publish(result=result, enabled=enabled)
+                telemetry = self._publish(result=result, enabled=enabled)
+                await self._release_switched_off(fresh=result.values)
+                return telemetry
             finally:
                 self._update_task = None
 
@@ -232,7 +287,6 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             if key in enabled and key not in result.unavailable
         }
         self.last_read = result.read
-        self._release_switched_off(values=result.values)
         self.unavailable_keys = result.unavailable
         self._schedule_wakeup(target=result.next_wakeup)
         return Telemetry(values=dict(self._values))
@@ -279,14 +333,14 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
     def _ems_request(
         self, *, key: str, value: Value
     ) -> tuple[dict[str, Value], Inspection | None, Callable[[Value], None] | None]:
-        if key == EMS_TIMEOUT_KEY:
+        if key in self.ems_rows.timeouts:
             return {}, None, timeout_check(interval=self.heartbeat_interval)
-        if key not in FUNCTION_BY_ENABLE_KEY:
+        if key not in self.ems_rows.functions:
             return {}, None, None
         on = bool(value)
         companions: dict[str, Value] = {
             name: sent
-            for name, sent in switch_changes(key=key, on=on).items()
+            for name, sent in switch_changes(rows=self.ems_rows, key=key, on=on).items()
             if name != key
         }
         inspection = (
@@ -358,31 +412,67 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         self, *, changes: Mapping[str, Value], result: WriteResult
     ) -> None:
         for name, sent in changes.items():
-            if name in FUNCTION_BY_ENABLE_KEY and (result.written or not sent):
-                self.ems.switched(key=name, on=bool(sent))
-        if self.ems.owned and self._stop_heartbeat is None:
+            function = self.ems_rows.functions.get(name)
+            if function is None or not (result.written or not sent):
+                continue
+            if sent:
+                self.ems.acquire(function=function, key=name)
+            else:
+                self.ems.release_function(function=function, key=name)
+        self._sync_heartbeat()
+
+    async def _release_switched_off(self, *, fresh: Mapping[str, Value]) -> None:
+        states: dict[PowerFunction, bool | None] = {}
+        if self.ems.owned:
+            values = {**self.power_values, **fresh}
+            for function in self.ems.owned:
+                control = self.power_controls[function]
+                if not control.state_keys.isdisjoint(fresh):
+                    states[function] = control.running(values=values)
+        released = sorted(self.ems.found_off(states=states))
+        for function in released:
+            _LOGGER.info(
+                "SAJ %s power control function was found switched off in the"
+                " inverter; it is no longer owned",
+                function,
+            )
+            self._stopping.discard(function)
+            self.outstanding.pop(function, None)
+        forgotten = [
+            function
+            for function in released
+            if self.remembered_modes.pop(function, None) is not None
+        ]
+        self._sync_heartbeat()
+        self._sync_retry()
+        if forgotten:
+            await self._save_power_state()
+
+    def _end_ownership(self) -> None:
+        self.ems.release()
+        self._started = {}
+        self._stopping.clear()
+        self._cancel_heartbeat()
+
+    def _sync_heartbeat(self) -> None:
+        if not self._beat_targets():
+            self._cancel_heartbeat()
+        elif self._stop_heartbeat is None:
             self._stop_heartbeat = async_track_time_interval(
                 self.hass,
                 self._beat,
                 timedelta(seconds=self.heartbeat_interval),
                 name="SAJ EMS heartbeat",
             )
-        elif not self.ems.owned:
-            self._cancel_heartbeat()
 
-    def _release_switched_off(self, *, values: Mapping[str, Value]) -> None:
-        for function in sorted(self.ems.found_off(values=values)):
-            _LOGGER.info(
-                "SAJ EMS %s function was found switched off in the inverter;"
-                " it is no longer kept alive",
-                function,
-            )
-        if not self.ems.owned:
-            self._cancel_heartbeat()
-
-    def _end_ownership(self) -> None:
-        self.ems.release()
-        self._cancel_heartbeat()
+    def _beat_targets(self) -> dict[PowerFunction, str]:
+        return {
+            function: control.beat_key
+            for function, control in self.power_controls.items()
+            if function in self.ems.owned
+            and function not in self._stopping
+            and control.beat_key is not None
+        }
 
     def _cancel_heartbeat(self) -> None:
         if self._stop_heartbeat is not None:
@@ -392,7 +482,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
     async def _beat(self, now: datetime) -> None:
         del now
         async with self._cycle_lock:
-            keys = self.ems.beat_keys()
+            keys = self.ems.beat_keys(targets=self._beat_targets())
             for key in keys:
                 try:
                     value = await self.control.keep_alive_read_ems(key=key)
@@ -403,7 +493,9 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                         return
                 else:
                     self.writes.beats_sent += 1
-                    if self.ems.beat_succeeded(target_key=key):
+                    if self.ems.beat_succeeded(
+                        function=self.ems_rows.target_functions[key]
+                    ):
                         _LOGGER.info("SAJ EMS heartbeat for %s recovered", key)
                     self._apply_written(values={key: value}, assumed=True)
             if keys:
@@ -421,7 +513,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
 
     def _beat_dropped(self, *, key: str, error: WriteError) -> None:
         self.writes.beats_dropped += 1
-        if self.ems.beat_dropped(target_key=key):
+        if self.ems.beat_dropped(function=self.ems_rows.target_functions[key]):
             _LOGGER.warning(
                 "SAJ EMS heartbeat for %s dropped: %s; the inverter's EMS timeout"
                 " will end the function if beats keep failing",
@@ -431,30 +523,424 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         else:
             _LOGGER.debug("SAJ EMS heartbeat for %s dropped: %s", key, error)
 
-    async def async_release_ems(self) -> None:
-        owned = self.ems.owned_enable_keys
+    @property
+    def power_values(self) -> dict[str, Value]:
+        return {**self.assumed, **self._values}
+
+    def power_running(self, *, function: PowerFunction) -> bool | None:
+        return self.power_controls[function].running(values=self.power_values)
+
+    def power_target_shown(self, *, function: PowerFunction) -> int | None:
+        if self.power_running(function=function):
+            held = self.power_controls[function].held(values=self.power_values)
+            if held is not None:
+                return held
+        return self.power_targets.get(function)
+
+    def power_range(self, *, function: PowerFunction) -> Range:
+        return self.power_controls[function].target_range
+
+    def _running_functions(self) -> frozenset[PowerFunction]:
+        return frozenset(
+            function
+            for function in self.power_controls
+            if self.power_running(function=function)
+        )
+
+    async def async_load_power_state(self) -> None:
+        stored = await self._store.async_load() or {}
+        self.power_targets = {
+            function: int(watts)
+            for name, watts in stored.get(STORED_TARGETS, {}).items()
+            if (function := PowerFunction(name)) in self.power_controls
+        }
+        self.remembered_modes = {
+            function: int(mode)
+            for name, mode in stored.get(STORED_MODES, {}).items()
+            if (function := PowerFunction(name)) in self.power_controls
+        }
+
+    async def _save_power_state(self) -> None:
+        await self._store.async_save(
+            {
+                STORED_TARGETS: {
+                    function.value: watts
+                    for function, watts in self.power_targets.items()
+                },
+                STORED_MODES: {
+                    function.value: mode
+                    for function, mode in self.remembered_modes.items()
+                },
+            }
+        )
+
+    async def async_power_on(self, *, function: PowerFunction) -> None:
+        async with self._cycle_lock:
+            self.control.require_admitted()
+            watts = require_target(function=function, targets=self.power_targets)
+            await self._start(function=function, watts=watts)
+
+    async def async_power_off(self, *, function: PowerFunction) -> None:
+        async with self._cycle_lock:
+            await self._stop(function=function)
+
+    async def async_set_power_target(
+        self, *, function: PowerFunction, raw: float
+    ) -> None:
+        watts = self.power_controls[function].require_usable(raw=raw)
+        async with self._cycle_lock:
+            if self.power_running(function=function):
+                await self._change(function=function, watts=watts)
+            self.power_targets[function] = watts
+            await self._save_power_state()
+        self.async_update_listeners()
+
+    async def _start(self, *, function: PowerFunction, watts: int) -> None:
+        control = self.power_controls[function]
+        await self._require_others_idle(function=function)
+        prior = await self._read_prior(control=control)
+        plan = control.start(watts=watts, prior=prior)
+        previous = self.remembered_modes.get(function)
+        if plan.remember is not None:
+            self.remembered_modes[function] = plan.remember
+        sent = 0
+        try:
+            for write in plan.writes:
+                await self._send(write=write)
+                sent += 1
+        except WRITE_ERRORS:
+            await self._undo_start(function=function, sent=sent, previous=previous)
+            raise
+        self.ems.acquire(function=function)
+        self._sync_heartbeat()
+        await self._save_power_state()
+        self.async_update_listeners()
+        _LOGGER.info("SAJ %s power control function started", function)
+
+    async def _require_others_idle(self, *, function: PowerFunction) -> None:
+        others = {
+            other: control
+            for other, control in self.power_controls.items()
+            if other != function
+        }
+        keys = frozenset().union(*(control.state_keys for control in others.values()))
+        running: set[PowerFunction] = set()
+        if keys:
+            fresh = await self._read_guarded(
+                key=min(keys), read=lambda: self.control.read_states(keys=keys)
+            )
+            self._apply_written(values=fresh, assumed=False)
+            running = {
+                other
+                for other, control in others.items()
+                if control.running(values=fresh)
+            }
+        require_none_running(function=function, running=running)
+
+    async def _read_prior(self, *, control: FunctionControl[PowerMethod]) -> Value:
+        key = control.prior_key
+        if key is None:
+            return None
+        return await self._read_guarded(
+            key=key, read=lambda: self.control.read_setting(key=key)
+        )
+
+    async def _read_guarded[Read](
+        self, *, key: str, read: Callable[[], Awaitable[Read]]
+    ) -> Read:
+        try:
+            return await read()
+        except WRITE_ERRORS as error:
+            await self._write_failed(key=key, error=error)
+            raise
+
+    async def _undo_start(
+        self, *, function: PowerFunction, sent: int, previous: int | None
+    ) -> None:
+        if sent:
+            try:
+                await self._stop(function=function)
+            except WRITE_ERRORS as error:
+                _LOGGER.warning(
+                    "SAJ could not undo the partial start of %s: %s;"
+                    " its stop is outstanding",
+                    function,
+                    error,
+                )
+                await self._leave_stop_outstanding(function=function)
+            return
+        if previous is None:
+            self.remembered_modes.pop(function, None)
+        else:
+            self.remembered_modes[function] = previous
+
+    async def _leave_stop_outstanding(self, *, function: PowerFunction) -> None:
+        self.ems.acquire(function=function)
+        self._stopping.add(function)
+        self.outstanding[function] = str(ActionKind.STOP)
+        self._sync_heartbeat()
+        self._sync_retry()
+        await self._save_power_state()
+        self.async_update_listeners()
+
+    async def _change(self, *, function: PowerFunction, watts: int) -> None:
+        writes = self.power_controls[function].change(
+            watts=watts, values=self.power_values
+        )
+        for write in writes:
+            await self._send(write=write)
+        self.async_update_listeners()
+
+    async def _stop(self, *, function: PowerFunction) -> None:
+        writes = self.power_controls[function].stop(
+            remembered=self.remembered_modes.get(function)
+        )
+        for write in writes:
+            await self._switch_off(write=write)
+        self.remembered_modes.pop(function, None)
+        self._stopping.discard(function)
+        self.ems.release_function(function=function)
+        self._sync_heartbeat()
+        await self._save_power_state()
+        self.async_update_listeners()
+        _LOGGER.info("SAJ %s power control function stopped", function)
+
+    async def _send(self, *, write: Write) -> None:
+        inspection = (
+            timeout_inspection(interval=self.heartbeat_interval)
+            if write.inspect_timeout
+            else None
+        )
+        changes = {write.key: write.value, **write.also}
+        await self._settle(
+            key=write.key,
+            changes=changes,
+            send=lambda: self.control.write(
+                key=write.key,
+                value=write.value,
+                also=write.also,
+                inspection=inspection,
+            ),
+        )
+
+    async def _switch_off(self, *, write: Write) -> None:
+        await self._settle(
+            key=write.key,
+            changes={write.key: write.value, **write.also},
+            send=lambda: self.control.switch_off(write=write),
+        )
+
+    async def async_follow_schedules(self) -> None:
+        if not self.schedules:
+            return
+        self._stop_listening = async_track_state_change_event(
+            self.hass,
+            [schedule.entity_id for schedule in self.schedules],
+            self._schedule_changed,
+        )
+        await self._follow()
+
+    @callback
+    def _schedule_changed(self, event: Event[EventStateChangedData]) -> None:
+        del event
+        self.hass.async_create_task(self._follow(), name="SAJ power control schedule")
+
+    def _wishes(self) -> dict[PowerFunction, Wish]:
+        wishes: dict[PowerFunction, Wish] = {}
+        for schedule in self.schedules:
+            state = self.hass.states.get(schedule.entity_id)
+            on = state is not None and state.state == SCHEDULE_ON
+            wishes[schedule.function] = Wish(
+                on=on,
+                power=state.attributes.get(SCHEDULE_POWER_ATTRIBUTE)
+                if on and state is not None
+                else None,
+            )
+        return wishes
+
+    async def _follow(self, now: datetime | None = None) -> None:
+        del now
+        async with self._cycle_lock:
+            if self._closed:
+                return
+            previous = self.outstanding
+            self.outstanding = {}
+            await self._finish_stops(previous=previous)
+            if self.schedules and self.control_allowed:
+                await self._follow_schedules(previous=previous)
+            self.outstanding.update(dict.fromkeys(self._stopping, str(ActionKind.STOP)))
+            self._sync_retry()
+
+    async def _finish_stops(self, *, previous: Mapping[PowerFunction, str]) -> None:
+        for function in sorted(self._stopping):
+            try:
+                await self._stop(function=function)
+            except WRITE_ERRORS as error:
+                label = str(ActionKind.STOP)
+                self.outstanding[function] = label
+                level = (
+                    logging.DEBUG
+                    if previous.get(function) == label
+                    else logging.WARNING
+                )
+                _LOGGER.log(
+                    level,
+                    "SAJ %s power control function could not be stopped: %s",
+                    function,
+                    error,
+                )
+
+    async def _follow_schedules(self, *, previous: Mapping[PowerFunction, str]) -> None:
+        wishes = {
+            function: wish
+            for function, wish in self._wishes().items()
+            if function not in self._stopping
+        }
+        actions = decide(
+            wishes=wishes,
+            situation=Situation(
+                controls={
+                    function: self.power_controls[function]
+                    for function in self.power_offered
+                },
+                running=self._running_functions(),
+                owned=self.ems.owned,
+                started=self._started,
+                targets=self.power_targets,
+            ),
+        )
+        for action in actions:
+            await self._act(action=action, previous=previous)
+
+    async def _act(
+        self, *, action: Action, previous: Mapping[PowerFunction, str]
+    ) -> None:
+        if action.kind is ActionKind.BLOCKED:
+            self._attempt_failed(action=action, previous=previous, error=None)
+            return
+        try:
+            await self._performers[action.kind](action)
+        except WRITE_ERRORS as error:
+            self._attempt_failed(action=action, previous=previous, error=error)
+            return
+        if action.function in previous:
+            _LOGGER.info(
+                "SAJ %s power control schedule action succeeded", action.function
+            )
+
+    async def _forget(self, action: Action) -> None:
+        self._started.pop(action.function, None)
+
+    async def _schedule_stop(self, action: Action) -> None:
+        await self._stop(function=action.function)
+        self._started.pop(action.function, None)
+
+    async def _apply_change(self, action: Action) -> None:
+        watts = action.watts
+        if watts is None:
+            return
+        await self._change(function=action.function, watts=watts)
+        self.power_targets[action.function] = watts
+
+    async def _schedule_change(self, action: Action) -> None:
+        await self._apply_change(action)
+        self._started[action.function] = action.watts
+
+    async def _schedule_take_over(self, action: Action) -> None:
+        await self._apply_change(action)
+        self.ems.acquire(function=action.function)
+        self._sync_heartbeat()
+        self._started[action.function] = action.watts
+
+    async def _schedule_start(self, action: Action) -> None:
+        function = action.function
+        if action.watts is not None:
+            self.power_targets[function] = action.watts
+        await self._start(function=function, watts=self.power_targets[function])
+        self._started[function] = action.watts
+
+    @property
+    def _performers(self) -> dict[ActionKind, Callable[[Action], Awaitable[None]]]:
+        return {
+            ActionKind.FORGET: self._forget,
+            ActionKind.STOP: self._schedule_stop,
+            ActionKind.CHANGE_POWER: self._schedule_change,
+            ActionKind.TAKE_OVER: self._schedule_take_over,
+            ActionKind.START: self._schedule_start,
+        }
+
+    def _attempt_failed(
+        self,
+        *,
+        action: Action,
+        previous: Mapping[PowerFunction, str],
+        error: Exception | None,
+    ) -> None:
+        function = action.function
+        label = str(action.blocker or action.kind)
+        self.outstanding[function] = label
+        level = logging.DEBUG if previous.get(function) == label else logging.WARNING
+        reason = BLOCKER_MESSAGES[action.blocker] if error is None else str(error)
+        _LOGGER.log(
+            level,
+            "SAJ %s power control schedule action %s did not complete: %s",
+            function,
+            label,
+            reason,
+        )
+
+    def _sync_retry(self) -> None:
+        if not (self.outstanding or self._stopping):
+            if self._stop_retry is not None:
+                self._stop_retry()
+                self._stop_retry = None
+        elif self._stop_retry is None:
+            self._stop_retry = async_track_time_interval(
+                self.hass,
+                self._follow,
+                timedelta(seconds=self.heartbeat_interval),
+                name="SAJ power control retry",
+            )
+
+    def _stop_following(self) -> None:
+        self._closed = True
+        if self._stop_listening is not None:
+            self._stop_listening()
+            self._stop_listening = None
+        if self._stop_retry is not None:
+            self._stop_retry()
+            self._stop_retry = None
+
+    async def async_release_power_control(self) -> None:
+        self._stop_following()
+        owned = sorted(self.ems.owned)
         if not owned:
             return
         async with self._cycle_lock:
             try:
                 async with asyncio.timeout(EMS_RELEASE_TIMEOUT):
-                    await self._settle(
-                        key=owned[0],
-                        changes=dict.fromkeys(owned, 0),
-                        send=lambda: self.control.switch_off_ems(keys=owned),
-                    )
-            except RELEASE_FAILURES as error:
+                    for function in owned:
+                        await self._release_function(function=function)
+            except TimeoutError:
                 _LOGGER.warning(
-                    "SAJ could not switch off the EMS functions it owns (%s);"
-                    " the inverter's EMS timeout ends them instead",
-                    type(error).__name__,
+                    "SAJ ran out of time switching off the power control"
+                    " functions it owns"
                 )
-            else:
-                _LOGGER.info("SAJ EMS enable bits cleared: %s", ", ".join(owned))
             finally:
                 self._end_ownership()
 
+    async def _release_function(self, *, function: PowerFunction) -> None:
+        try:
+            await self._stop(function=function)
+        except WRITE_ERRORS as error:
+            _LOGGER.warning(
+                "SAJ could not switch off the %s power control function it owns (%s)",
+                function,
+                type(error).__name__,
+            )
+
     async def async_shutdown(self) -> None:
+        self._stop_following()
         self._cancel_heartbeat()
         await super().async_shutdown()
         task = self._update_task
@@ -466,15 +952,42 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
 
     @property
     def enabled_keys(self) -> set[str]:
+        entity_keys = self._power_entity_keys()
         if self._initial_refresh:
-            return set(
+            wanted = set(
                 enabled_entity_keys(
                     hass=self.hass,
                     entry_id=self.entry_id,
                     registers=device_registers(fit=self.device.fit),
                 )
+            ) | enabled_power_keys(
+                hass=self.hass, entry_id=self.entry_id, keys=entity_keys
             )
-        return {str(context) for context in self.async_contexts()}
+        else:
+            wanted = {str(context) for context in self.async_contexts()}
+        return (wanted - entity_keys) | self._power_state_keys(wanted=wanted)
+
+    def _power_entity_keys(self) -> frozenset[str]:
+        return frozenset(
+            key
+            for function in self.power_offered
+            for key in (function.switch_key, function.target_key)
+        )
+
+    def _power_state_keys(self, *, wanted: Collection[str]) -> set[str]:
+        scheduled = {schedule.function for schedule in self.schedules}
+        followed = {
+            function
+            for function in self.power_offered
+            if function in scheduled
+            or function.switch_key in wanted
+            or function.target_key in wanted
+        }
+        return {
+            key
+            for function in followed | self.ems.owned
+            for key in self.power_controls[function].state_keys
+        }
 
 
 def _raise_update_failed(error: Exception) -> NoReturn:

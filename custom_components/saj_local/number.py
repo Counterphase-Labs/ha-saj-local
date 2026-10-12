@@ -5,9 +5,18 @@ from homeassistant.components.number import (
     NumberEntity,
     NumberMode,
 )
+from homeassistant.const import UnitOfPower
 
-from .entity import SajEntity, platform_setup, presentation_of
+from .entity import (
+    PowerPlatform,
+    SajEntity,
+    SajPowerEntity,
+    platform_setup,
+    presentation_of,
+)
 from .saj.definitions import Access, EntityKind
+
+POWER_STEP = 1
 
 if TYPE_CHECKING:
     from .coordinator import SajCoordinator
@@ -44,4 +53,38 @@ class SajNumber(SajEntity, NumberEntity):
         await self.async_change(value=value)
 
 
-async_setup_entry = platform_setup(kind=EntityKind.NUMBER, entity_class=SajNumber)
+class SajPowerNumber(SajPowerEntity, NumberEntity):
+    _attr_mode = NumberMode.BOX
+    _attr_device_class = NumberDeviceClass.POWER
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_native_step = POWER_STEP
+
+    @property
+    def native_min_value(self) -> float:
+        return self.coordinator.power_range(function=self.function).minimum
+
+    @property
+    def native_max_value(self) -> float:
+        return self.coordinator.power_range(function=self.function).maximum
+
+    @property
+    def native_value(self) -> float | None:
+        return self.coordinator.power_target_shown(function=self.function)
+
+    async def async_set_native_value(self, value: float) -> None:
+        await self.async_run(
+            action=self.coordinator.async_set_power_target(
+                function=self.function, raw=value
+            )
+        )
+
+
+async_setup_entry = platform_setup(
+    kind=EntityKind.NUMBER,
+    entity_class=SajNumber,
+    power=PowerPlatform(
+        kind=EntityKind.NUMBER,
+        entity_class=SajPowerNumber,
+        key_of=lambda function: function.target_key,
+    ),
+)

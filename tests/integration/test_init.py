@@ -57,14 +57,22 @@ class FakeCoordinator:
         self.shutdown = False
         self.released = 0
         self.events: list[str] = []
+        self.setup_events: list[str] = []
         self.instances.append(self)
 
-    async def async_release_ems(self) -> None:
+    async def async_release_power_control(self) -> None:
         self.released += 1
         self.events.append("release")
 
+    async def async_load_power_state(self) -> None:
+        self.setup_events.append("load")
+
     async def async_config_entry_first_refresh(self) -> None:
         self.refreshed = True
+        self.setup_events.append("refresh")
+
+    async def async_follow_schedules(self) -> None:
+        self.setup_events.append("follow")
 
     async def async_shutdown(self) -> None:
         self.shutdown = True
@@ -646,16 +654,52 @@ async def test_a_failed_detection_fails_setup_like_any_other_read(
     assert FakeCoordinator.instances == []
 
 
-async def test_removing_the_installation_removes_its_repair_issues(monkeypatch):
+class FakeStore:
+    removed = 0
+
+    async def async_remove(self) -> None:
+        FakeStore.removed += 1
+
+
+async def test_removing_the_installation_removes_its_repair_issues_and_stored_state(
+    monkeypatch,
+):
     hass = _hass()
     entry = _entry()
     removed = []
+    asked = []
+    FakeStore.removed = 0
     monkeypatch.setattr(
         integration,
         "remove_equipment_issues",
         lambda *, hass, entry: removed.append((hass, entry)),
     )
+    monkeypatch.setattr(
+        integration,
+        "power_control_store",
+        lambda **asked_for: asked.append(asked_for) or FakeStore(),
+    )
 
     await integration.async_remove_entry(hass, entry)
 
     assert removed == [(hass, entry)]
+    assert asked == [{"hass": hass, "entry_id": entry.entry_id}]
+    assert FakeStore.removed == 1
+
+
+async def test_power_state_loads_before_the_first_refresh_and_schedules_follow_after_it(
+    monkeypatch,
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    forwarded = []
+
+    async def forward(_entry, _platforms):
+        forwarded.append(list(FakeCoordinator.instances[0].setup_events))
+
+    monkeypatch.setattr(hass.config_entries, "async_forward_entry_setups", forward)
+
+    assert await integration.async_setup_entry(hass, _entry())
+
+    assert forwarded == [["load", "refresh"]]
+    assert FakeCoordinator.instances[0].setup_events == ["load", "refresh", "follow"]

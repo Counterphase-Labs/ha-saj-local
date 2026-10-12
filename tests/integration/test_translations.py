@@ -4,10 +4,17 @@ from pathlib import Path
 import pytest
 
 from custom_components.saj_local.config_flow import (
+    ERROR_CONTROL_NOT_ALLOWED,
+    ERROR_FUNCTION_SCHEDULED,
     ERROR_INVALID_EQUIPMENT,
+    ERROR_SCHEDULE_IN_USE,
     NO_EQUIPMENT,
 )
-from custom_components.saj_local.const import EQUIPMENT_ISSUE_TRANSLATION_KEY
+from custom_components.saj_local.const import (
+    CONF_FUNCTION,
+    CONF_SCHEDULE,
+    EQUIPMENT_ISSUE_TRANSLATION_KEY,
+)
 from custom_components.saj_local.saj.catalogue import (
     CATALOGUES,
     ENERGY_BLOCK,
@@ -16,7 +23,11 @@ from custom_components.saj_local.saj.catalogue import (
 )
 from custom_components.saj_local.saj.definitions import EntityKind
 from custom_components.saj_local.saj.equipment import Setting
-from custom_components.saj_local.saj.models import ALL_EQUIPMENT, Equipment
+from custom_components.saj_local.saj.models import (
+    ALL_EQUIPMENT,
+    Equipment,
+    PowerFunction,
+)
 
 TRANSLATIONS = json.loads(
     (
@@ -38,7 +49,13 @@ WRITE_KEYS = {
     "write_rejected",
     "write_unconfirmed",
     "write_mismatch",
+    "no_power_target",
+    "another_function_running",
+    "unusable_power",
 }
+POWER_ENTITIES = {
+    ("switch", function.switch_key): function for function in PowerFunction
+} | {("number", function.target_key): function for function in PowerFunction}
 
 
 def _shipped_registers(*, profile_key: str):
@@ -83,7 +100,7 @@ def test_there_are_no_translations_for_rows_that_do_not_exist():
         for key in entries
     }
 
-    assert translated == set(rows)
+    assert translated == set(rows) | set(POWER_ENTITIES)
 
 
 def test_there_are_no_option_labels_for_options_a_row_does_not_have():
@@ -231,3 +248,49 @@ def test_the_equipment_issue_names_the_installation_and_the_equipment_and_what_t
 
 def test_there_is_a_translation_for_every_issue_the_integration_raises():
     assert set(ISSUES) == {EQUIPMENT_ISSUE_TRANSLATION_KEY}
+
+
+def test_every_power_control_switch_and_target_has_a_display_name():
+    missing = [
+        (platform, key)
+        for platform, key in POWER_ENTITIES
+        if not ENTITY_TRANSLATIONS[platform].get(key, {}).get("name")
+    ]
+
+    assert missing == []
+
+
+def test_every_power_function_has_a_selector_label():
+    options = TRANSLATIONS["selector"]["power_function"]["options"]
+
+    assert set(options) == {function.value for function in PowerFunction}
+
+
+POWER_SCHEDULE = TRANSLATIONS["config_subentries"]["power_schedule"]
+
+
+@pytest.mark.parametrize("step", ["user", "reconfigure"])
+def test_the_power_schedule_form_labels_and_explains_both_fields(step):
+    form = POWER_SCHEDULE["step"][step]
+
+    assert form["title"]
+    assert "power" in form["description"]
+    assert set(form["data"]) == {CONF_FUNCTION, CONF_SCHEDULE}
+    assert set(form["data_description"]) == {CONF_FUNCTION, CONF_SCHEDULE}
+
+
+def test_every_refusal_of_the_power_schedule_form_has_its_own_message():
+    errors = POWER_SCHEDULE["error"]
+
+    assert set(errors) == {
+        ERROR_CONTROL_NOT_ALLOWED,
+        ERROR_FUNCTION_SCHEDULED,
+        ERROR_SCHEDULE_IN_USE,
+    }
+    assert len(set(errors.values())) == len(errors)
+
+
+def test_the_power_schedule_names_its_type_and_its_saved_result():
+    assert POWER_SCHEDULE["entry_type"]
+    assert POWER_SCHEDULE["initiate_flow"]["user"]
+    assert POWER_SCHEDULE["abort"]["reconfigure_successful"]

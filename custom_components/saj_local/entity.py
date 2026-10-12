@@ -12,10 +12,12 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     CONF_PREFIX,
     DOMAIN,
+    FUNCTION_SELECTOR,
     entity_id_in_use,
     entity_unique_id,
     fixed_entity_id,
     object_id,
+    selector_options,
 )
 from .coordinator import SajCoordinator
 from .errors import WRITE_ERRORS, write_failure
@@ -33,6 +35,7 @@ if TYPE_CHECKING:
     from .saj.codec import Value
     from .saj.definitions import EntityKind
     from .saj.device import Device
+    from .saj.models import PowerFunction
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -79,28 +82,34 @@ def model_name(*, device: Device) -> str:
     return f"{device.profile.display_name} ({device.rated_power} W{qualifier})"
 
 
-class SajEntity(CoordinatorEntity[SajCoordinator]):
+@dataclass(frozen=True)
+class EntityIdentity:
+    domain: str
+    key: str
+    prefix: str
+
+
+class SajBaseEntity(CoordinatorEntity[SajCoordinator]):
     _attr_has_entity_name = True
 
     def __init__(
-        self, *, coordinator: SajCoordinator, register: Register, prefix: str
+        self,
+        *,
+        coordinator: SajCoordinator,
+        identity: EntityIdentity,
+        category: EntityCategory | None,
+        enabled_default: bool,
     ) -> None:
-        super().__init__(coordinator=coordinator, context=register.key)
-        self.key = register.key
-        self.register = register
+        key = identity.key
+        super().__init__(coordinator=coordinator, context=key)
+        self.key = key
         self.entity_id = fixed_entity_id(
-            domain=register.kind, prefix=prefix, key=register.key
+            domain=identity.domain, prefix=identity.prefix, key=key
         )
-        self._written_available: bool | None = None
-        self._attr_translation_key = register.key
-        self._attr_unique_id = entity_unique_id(
-            entry_id=coordinator.entry_id, key=register.key
-        )
-        self._attr_entity_registry_enabled_default = register.core
-        category = register.definition.category
-        self._attr_entity_category = (
-            None if category is None else EntityCategory(category.value)
-        )
+        self._attr_translation_key = key
+        self._attr_unique_id = entity_unique_id(entry_id=coordinator.entry_id, key=key)
+        self._attr_entity_registry_enabled_default = enabled_default
+        self._attr_entity_category = category
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry_id)},
             name="SAJ",
@@ -108,6 +117,23 @@ class SajEntity(CoordinatorEntity[SajCoordinator]):
             model=model_name(device=coordinator.device),
             serial_number=coordinator.device.serial,
         )
+
+
+class SajEntity(SajBaseEntity):
+    def __init__(
+        self, *, coordinator: SajCoordinator, register: Register, prefix: str
+    ) -> None:
+        category = register.definition.category
+        super().__init__(
+            coordinator=coordinator,
+            identity=EntityIdentity(
+                domain=register.kind, key=register.key, prefix=prefix
+            ),
+            category=None if category is None else EntityCategory(category.value),
+            enabled_default=register.core,
+        )
+        self.register = register
+        self._written_available: bool | None = None
 
     @property
     def read_value(self) -> Value:
@@ -140,6 +166,70 @@ class SajEntity(CoordinatorEntity[SajCoordinator]):
             self.async_write_ha_state()
 
 
+class SajPowerEntity(SajBaseEntity):
+    def __init__(
+        self,
+        *,
+        coordinator: SajCoordinator,
+        function: PowerFunction,
+        identity: EntityIdentity,
+    ) -> None:
+        super().__init__(
+            coordinator=coordinator,
+            identity=identity,
+            category=EntityCategory.CONFIG,
+            enabled_default=False,
+        )
+        self.function = function
+
+    async def async_run(self, *, action: Awaitable[None]) -> None:
+        try:
+            await action
+        except WRITE_ERRORS as error:
+            names = await selector_options(
+                hass=self.hass, selector_name=FUNCTION_SELECTOR
+            )
+            raise write_failure(error=error, function_names=names) from error
+
+
+@dataclass(frozen=True)
+class PowerPlatform:
+    kind: EntityKind
+    entity_class: type[SajPowerEntity]
+    key_of: Callable[[PowerFunction], str]
+
+
+def add_power_entities(
+    *,
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+    platform: PowerPlatform,
+) -> None:
+    coordinator: SajCoordinator = entry.runtime_data.coordinator
+    prefix: str = entry.options.get(CONF_PREFIX, "")
+    keys = {
+        function: platform.key_of(function) for function in coordinator.power_offered
+    }
+    if not keys:
+        return
+    _warn_about_displaced_entities(
+        hass=hass,
+        entry_id=coordinator.entry_id,
+        prefix=prefix,
+        kind=platform.kind,
+        keys=list(keys.values()),
+    )
+    async_add_entities(
+        platform.entity_class(
+            coordinator=coordinator,
+            function=function,
+            identity=EntityIdentity(domain=platform.kind, key=key, prefix=prefix),
+        )
+        for function, key in keys.items()
+    )
+
+
 def add_entities(
     *,
     hass: HomeAssistant,
@@ -169,7 +259,10 @@ def add_entities(
 
 
 def platform_setup(
-    *, kind: EntityKind, entity_class: type[SajEntity]
+    *,
+    kind: EntityKind,
+    entity_class: type[SajEntity],
+    power: PowerPlatform | None = None,
 ) -> Callable[[HomeAssistant, ConfigEntry, AddEntitiesCallback], Awaitable[None]]:
     async def async_setup_entry(
         hass: HomeAssistant,
@@ -183,6 +276,13 @@ def platform_setup(
             kind=kind,
             entity_class=entity_class,
         )
+        if power is not None:
+            add_power_entities(
+                hass=hass,
+                entry=entry,
+                async_add_entities=async_add_entities,
+                platform=power,
+            )
 
     return async_setup_entry
 

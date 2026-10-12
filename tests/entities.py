@@ -14,7 +14,7 @@ from custom_components.saj_local.saj.definitions import (
     Quantity,
 )
 from custom_components.saj_local.saj.device import Device
-from custom_components.saj_local.saj.models import Evidence
+from custom_components.saj_local.saj.models import Evidence, PowerFunction
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from custom_components.saj_local.saj.telemetry import Telemetry
 
@@ -74,6 +74,13 @@ class FakeCoordinator:
         self.changed_keys: frozenset[str] = frozenset()
         self.assumed: dict[str, Value] = {}
         self.write = AsyncMock()
+        self.power_offered: tuple[PowerFunction, ...] = ()
+        self.power_state: dict[PowerFunction, bool | None] = {}
+        self.power_shown: dict[PowerFunction, int | None] = {}
+        self.power_limits = Range(minimum=-1000, maximum=1000)
+        self.async_power_on = AsyncMock()
+        self.async_power_off = AsyncMock()
+        self.async_set_power_target = AsyncMock()
         self.client = SimpleNamespace(
             read_holding_registers=AsyncMock(), write_registers=AsyncMock()
         )
@@ -81,6 +88,16 @@ class FakeCoordinator:
     def async_add_listener(self, _listener, context=None):
         del context
         return lambda: None
+
+    def power_running(self, *, function: PowerFunction) -> bool | None:
+        return self.power_state.get(function)
+
+    def power_target_shown(self, *, function: PowerFunction) -> int | None:
+        return self.power_shown.get(function)
+
+    def power_range(self, *, function: PowerFunction) -> Range:
+        del function
+        return self.power_limits
 
     def requests_sent(self) -> int:
         return sum(

@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from custom_components.saj_local.const import PowerSchedule
 from custom_components.saj_local.coordinator import LastWrite, WriteStatistics
 from custom_components.saj_local.diagnostics import async_get_config_entry_diagnostics
 from custom_components.saj_local.equipment import (
@@ -16,7 +17,7 @@ from custom_components.saj_local.saj.device import Device
 from custom_components.saj_local.saj.ems import EmsOwnership
 from custom_components.saj_local.saj.equipment import Detection, Setting
 from custom_components.saj_local.saj.health import Break, Refusal, Region
-from custom_components.saj_local.saj.models import Equipment
+from custom_components.saj_local.saj.models import Equipment, PowerFunction
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from custom_components.saj_local.saj.poller import CadencePlan
 from custom_components.saj_local.saj.telemetry import Telemetry
@@ -43,7 +44,11 @@ DEVICE = Device("PRIVATE-SERIAL", 0x1610, 12000, PROFILE, detected=True)
 
 
 NOW = 5000.0
-HASS = SimpleNamespace(loop=SimpleNamespace(time=lambda: NOW))
+SCHEDULE_STATES: dict[str, SimpleNamespace] = {}
+HASS = SimpleNamespace(
+    loop=SimpleNamespace(time=lambda: NOW),
+    states=SimpleNamespace(get=SCHEDULE_STATES.get),
+)
 
 
 class FakeClient:
@@ -94,6 +99,14 @@ class FakeCoordinator:
         self.writes = WriteStatistics()
         self.ems = EmsOwnership()
         self.heartbeat_interval = 60
+        self.power_offered = ()
+        self.power_controls = {}
+        self.power_state = {}
+        self.schedules = ()
+        self.outstanding = {}
+
+    def power_running(self, *, function):
+        return self.power_state.get(function)
 
     def async_contexts(self):
         return iter(self._contexts)
@@ -455,8 +468,8 @@ async def test_diagnostics_count_writes_beats_and_name_the_last_write_without_a_
         beats_dropped=1,
     )
     coordinator.heartbeat_interval = 90
-    coordinator.ems.switched(key="ems_grid_control", on=True)
-    coordinator.ems.switched(key="ems_battery_control", on=True)
+    coordinator.ems.acquire(function=PowerFunction.GRID)
+    coordinator.ems.acquire(function=PowerFunction.BATTERY)
 
     result = await async_get_config_entry_diagnostics(
         HASS, _entry_of(coordinator, allow_control=True)
@@ -516,3 +529,80 @@ async def test_diagnostics_report_each_equipment_with_its_probe_values_and_resul
     assert result["equipment"] == report_summary(reports=entry.runtime_data.equipment)
     assert result["equipment"]["battery"]["probe_values"] == {"battery_protocol": 24}
     assert result["equipment"]["meter_b"]["probe_values"] is None
+
+
+class FakeMethod:
+    def __init__(self, name: str) -> None:
+        self.method_name = name
+
+
+@pytest.fixture
+def schedule_states():
+    SCHEDULE_STATES.clear()
+    yield SCHEDULE_STATES
+    SCHEDULE_STATES.clear()
+
+
+async def test_diagnostics_list_power_control_functions_schedules_and_outstanding(
+    schedule_states,
+):
+    coordinator = FakeCoordinator(set(), Telemetry(values={}))
+    coordinator.power_offered = (PowerFunction.BATTERY, PowerFunction.GRID)
+    coordinator.power_controls = {
+        PowerFunction.BATTERY: FakeMethod("operating_mode"),
+        PowerFunction.GRID: FakeMethod("enable_bit"),
+    }
+    coordinator.power_state = {PowerFunction.BATTERY: True, PowerFunction.GRID: None}
+    coordinator.ems.acquire(function=PowerFunction.BATTERY)
+    coordinator.schedules = (
+        PowerSchedule(function=PowerFunction.BATTERY, entity_id="schedule.night"),
+        PowerSchedule(function=PowerFunction.GRID, entity_id="schedule.gone"),
+    )
+    coordinator.outstanding = {PowerFunction.GRID: "no_target"}
+    schedule_states["schedule.night"] = SimpleNamespace(state="on")
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry_for(coordinator))
+
+    assert result["power_control"] == {
+        "functions": {
+            "battery": {"method": "operating_mode", "running": True, "owned": True},
+            "grid": {"method": "enable_bit", "running": None, "owned": False},
+        },
+        "schedules": [
+            {
+                "function": "battery",
+                "schedule": "schedule.night",
+                "on": True,
+                "outstanding": None,
+            },
+            {
+                "function": "grid",
+                "schedule": "schedule.gone",
+                "on": False,
+                "outstanding": "no_target",
+            },
+        ],
+    }
+
+
+async def test_diagnostics_have_no_power_control_where_a_system_has_none():
+    coordinator = FakeCoordinator(set(), Telemetry(values={}))
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry_for(coordinator))
+
+    assert result["power_control"] == {"functions": {}, "schedules": []}
+
+
+def _entry_for(coordinator):
+    return SimpleNamespace(
+        data={"model": "automatic"},
+        options={},
+        unique_id="PRIVATE-SERIAL",
+        runtime_data=SimpleNamespace(
+            device=DEVICE,
+            client=FakeClient(),
+            equipment={},
+            packs=PackReport(count_read=None, limit=None),
+            coordinator=coordinator,
+        ),
+    )

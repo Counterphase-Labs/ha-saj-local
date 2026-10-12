@@ -36,10 +36,12 @@ from .const import (
     CONF_EMS_HEARTBEAT,
     CONF_EQUIPMENT,
     CONF_FITTED_EQUIPMENT,
+    CONF_FUNCTION,
     CONF_HIGHEST_PACK_COUNT,
     CONF_MODEL,
     CONF_PREFIX,
     CONF_SCAN_INTERVAL,
+    CONF_SCHEDULE,
     CONF_SENSORS,
     CONF_UNIT_ID,
     DEFAULT_PORT,
@@ -48,18 +50,23 @@ from .const import (
     DOMAIN,
     DOMAIN_PLACEHOLDER,
     EQUIPMENT_SELECTOR,
+    FUNCTION_SELECTOR,
     KEY_PLACEHOLDER,
     MAX_PORT,
     MAX_UNIT_ID,
     MIN_UNIT_ID,
     REQUEST_TIMEOUT,
+    SCHEDULE_DOMAIN,
     SUBENTRY_POLLING_GROUP,
+    SUBENTRY_POWER_SCHEDULE,
+    PowerSchedule,
     enabled_entity_keys,
     endpoint_guard,
     entity_id_in_use,
     fixed_entity_id,
     group_cadences,
     installation_entities,
+    power_schedules,
     selector_options,
 )
 from .equipment import (
@@ -80,14 +87,11 @@ from .saj.catalogue import (
 from .saj.client import ClientEnvironment, ModbusTcpClient
 from .saj.device import Device, identify
 from .saj.device_type import format_device_type
-from .saj.ems import (
-    DEFAULT_HEARTBEAT_INTERVAL,
-    FUNCTION_BY_ENABLE_KEY,
-    valid_heartbeat_interval,
-)
+from .saj.ems import DEFAULT_HEARTBEAT_INTERVAL, valid_heartbeat_interval
 from .saj.equipment import Setting
 from .saj.load import installation_load, requests_per_read
-from .saj.models import Equipment
+from .saj.models import Equipment, PowerFunction, ems_rows
+from .saj.power_control import power_functions
 from .saj.profiles import AUTOMATIC, PROFILES, resolve_profile
 from .saj.schedule import MIN_INTERVAL, Cadence
 from .saj.telemetry import read_telemetry, setup_keys
@@ -103,6 +107,10 @@ STEP_REVIEW_GROUP_OVER_BUDGET = "review_group_over_budget"
 STEP_SAVE_GROUP = "save_group"
 STEP_CHANGE_SELECTION = "change_selection"
 BLOCK_SELECTOR = "block"
+ERROR_CONTROL_NOT_ALLOWED = "control_not_allowed"
+ERROR_FUNCTION_SCHEDULED = "function_already_scheduled"
+ERROR_SCHEDULE_IN_USE = "schedule_in_use"
+BASE_ERROR = "base"
 ENTITY_STATE_SELECTOR = "entity_state"
 EQUIPMENT_SETTING_TRANSLATION_KEY = "equipment_setting"
 NO_EQUIPMENT = "none"
@@ -376,8 +384,12 @@ class SajLocalConfigFlow(ConfigFlow, domain=DOMAIN):
     def async_get_supported_subentry_types(
         cls, config_entry: ConfigEntry
     ) -> dict[str, type[ConfigSubentryFlow]]:
-        del config_entry
-        return {SUBENTRY_POLLING_GROUP: SajPollingGroupFlow}
+        flows: dict[str, type[ConfigSubentryFlow]] = {
+            SUBENTRY_POLLING_GROUP: SajPollingGroupFlow
+        }
+        if power_functions(fit=_stored_fit(entry=config_entry)):
+            flows[SUBENTRY_POWER_SCHEDULE] = SajPowerScheduleFlow
+        return flows
 
 
 class SajOptionsFlow(OptionsFlow):
@@ -936,6 +948,110 @@ class SajPollingGroupFlow(ConfigSubentryFlow):
                 "requests": str(installation.requests_per_read(keys=keys)),
             },
         )
+
+
+class SajPowerScheduleFlow(ConfigSubentryFlow):
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        return await self._schedule_step(user_input=user_input, subentry=None)
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        return await self._schedule_step(
+            user_input=user_input, subentry=self._get_reconfigure_subentry()
+        )
+
+    async def _schedule_step(
+        self, *, user_input: dict[str, Any] | None, subentry: ConfigSubentry | None
+    ) -> SubentryFlowResult:
+        entry = self._get_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            schedule, errors = validate_schedule(
+                user_input=user_input,
+                allowed=entry.options.get(CONF_ALLOW_CONTROL, False),
+                others=power_schedules(
+                    entry=entry,
+                    excluding=None if subentry is None else subentry.subentry_id,
+                ),
+            )
+            if schedule is not None:
+                return await self._save(schedule=schedule, subentry=subentry)
+        return self.async_show_form(
+            step_id="user" if subentry is None else "reconfigure",
+            data_schema=_schedule_schema(
+                functions=power_functions(fit=_stored_fit(entry=entry)),
+                defaults=_schedule_defaults(subentry=subentry, submitted=user_input),
+            ),
+            errors=errors,
+        )
+
+    async def _save(
+        self, *, schedule: PowerSchedule, subentry: ConfigSubentry | None
+    ) -> SubentryFlowResult:
+        titles = await selector_options(hass=self.hass, selector_name=FUNCTION_SELECTOR)
+        title = titles[schedule.function]
+        data = {CONF_FUNCTION: schedule.function, CONF_SCHEDULE: schedule.entity_id}
+        if subentry is None:
+            return self.async_create_entry(title=title, data=data)
+        return self.async_update_and_abort(
+            self._get_entry(), subentry, title=title, data=data
+        )
+
+
+def validate_schedule(
+    *,
+    user_input: Mapping[str, Any],
+    allowed: bool,
+    others: Collection[PowerSchedule],
+) -> tuple[PowerSchedule | None, dict[str, str]]:
+    function = PowerFunction(user_input[CONF_FUNCTION])
+    entity_id = user_input[CONF_SCHEDULE]
+    errors: dict[str, str] = {}
+    if not allowed:
+        errors[BASE_ERROR] = ERROR_CONTROL_NOT_ALLOWED
+    if any(other.function == function for other in others):
+        errors[CONF_FUNCTION] = ERROR_FUNCTION_SCHEDULED
+    if any(other.entity_id == entity_id for other in others):
+        errors[CONF_SCHEDULE] = ERROR_SCHEDULE_IN_USE
+    if errors:
+        return None, errors
+    return PowerSchedule(function=function, entity_id=entity_id), errors
+
+
+def _schedule_defaults(
+    *, subentry: ConfigSubentry | None, submitted: Mapping[str, Any] | None
+) -> dict[str, Any]:
+    if submitted is not None:
+        return dict(submitted)
+    if subentry is None:
+        return {}
+    return dict(subentry.data)
+
+
+def _schedule_schema(
+    *, functions: Collection[PowerFunction], defaults: Mapping[str, Any]
+) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_FUNCTION, default=defaults.get(CONF_FUNCTION, vol.UNDEFINED)
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[function.value for function in functions],
+                    translation_key=FUNCTION_SELECTOR,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required(
+                CONF_SCHEDULE, default=defaults.get(CONF_SCHEDULE, vol.UNDEFINED)
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain=SCHEDULE_DOMAIN)
+            ),
+        }
+    )
 
 
 def validate_group(
@@ -1540,9 +1656,8 @@ def offers_ems_device(*, device: Device) -> bool:
 
 
 def _has_ems_rows(*, fit: Fit) -> bool:
-    return any(
-        register.key in FUNCTION_BY_ENABLE_KEY for register in device_registers(fit=fit)
-    )
+    keys = {register.key for register in device_registers(fit=fit)}
+    return not keys.isdisjoint(ems_rows(profile=fit.profile).functions)
 
 
 def _stored_fit(*, entry: ConfigEntry) -> Fit:

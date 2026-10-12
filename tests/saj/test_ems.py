@@ -1,45 +1,79 @@
+from types import SimpleNamespace
+
 import pytest
 
-from saj.definitions import EMS_CONTROL_BITS, EMS_TARGET_KEYS
 from saj.ems import (
-    FUNCTION_BY_ENABLE_KEY,
-    FUNCTIONS,
     MAX_HEARTBEAT_INTERVAL,
     MIN_HEARTBEAT_INTERVAL,
     NO_TIMEOUT,
-    EmsFunction,
     EmsOwnership,
-    FunctionSpec,
     check_timeout,
+    clearing_changes,
     switch_changes,
     timeout_check,
     timeout_inspection,
     valid_heartbeat_interval,
 )
 from saj.errors import EmsTimeoutError, InvalidValueError
+from saj.models import EnableBitMethod, PowerFunction, ems_rows
 
 INTERVAL = 60
-INVERTER_KEYS = FUNCTIONS[EmsFunction.INVERTER].enable_keys
-INVERTER_TARGET = FUNCTIONS[EmsFunction.INVERTER].target_key
-BATTERY_KEY = FUNCTIONS[EmsFunction.BATTERY].enable_keys[0]
-BATTERY_TARGET = FUNCTIONS[EmsFunction.BATTERY].target_key
-GRID_KEY = FUNCTIONS[EmsFunction.GRID].enable_keys[0]
-GRID_TARGET = FUNCTIONS[EmsFunction.GRID].target_key
+MAIN = "x_main"
+ALTERNATE = "x_alternate"
+INVERTER_KEYS = (MAIN, ALTERNATE)
+INVERTER_TARGET = "x_target"
+BATTERY_KEY = "y_on"
+BATTERY_TARGET = "y_target"
+GRID_KEY = "z_on"
+GRID_TARGET = "z_target"
+TIMEOUT = "x_timeout"
+LIMITS = ("x_limit_a", "x_limit_b")
+ROWS = ems_rows(
+    profile=SimpleNamespace(
+        power_control={
+            PowerFunction.INVERTER: EnableBitMethod(
+                enable_key=MAIN,
+                alternate_keys=(ALTERNATE,),
+                target_key=INVERTER_TARGET,
+                timeout_key=TIMEOUT,
+                limit_keys=LIMITS,
+            ),
+            PowerFunction.BATTERY: EnableBitMethod(
+                enable_key=BATTERY_KEY, target_key=BATTERY_TARGET, limit_keys=LIMITS[:1]
+            ),
+            PowerFunction.GRID: EnableBitMethod(
+                enable_key=GRID_KEY, target_key=GRID_TARGET
+            ),
+        }
+    )
+)
+BEAT_TARGETS = {
+    PowerFunction.BATTERY: BATTERY_TARGET,
+    PowerFunction.GRID: GRID_TARGET,
+    PowerFunction.INVERTER: INVERTER_TARGET,
+}
 
 
-def test_a_function_reports_the_bits_of_its_enable_keys_in_order():
-    spec = FunctionSpec(enable_keys=tuple(EMS_CONTROL_BITS), target_key="target")
+def test_the_rows_of_a_model_come_from_its_enable_bit_statements_alone():
+    assert ROWS.functions == {
+        MAIN: PowerFunction.INVERTER,
+        ALTERNATE: PowerFunction.INVERTER,
+        BATTERY_KEY: PowerFunction.BATTERY,
+        GRID_KEY: PowerFunction.GRID,
+    }
+    assert ROWS.targets == BEAT_TARGETS
+    assert ROWS.target_functions == {
+        target: function for function, target in BEAT_TARGETS.items()
+    }
+    assert ROWS.timeouts == {TIMEOUT}
+    assert ROWS.limits == set(LIMITS)
 
-    assert spec.enable_bits == tuple(EMS_CONTROL_BITS.values())
 
+def test_a_model_without_a_statement_or_with_another_method_has_no_ems_rows():
+    rows = ems_rows(profile=SimpleNamespace(power_control={}))
 
-def test_every_enable_key_belongs_to_exactly_one_function_with_a_distinct_target():
-    owners = [key for spec in FUNCTIONS.values() for key in spec.enable_keys]
-    targets = [spec.target_key for spec in FUNCTIONS.values()]
-
-    assert len(owners) == len(set(owners)) == len(FUNCTION_BY_ENABLE_KEY)
-    assert len(targets) == len(set(targets))
-    assert set(owners) <= set(EMS_CONTROL_BITS)
+    assert (rows.functions, rows.forms, rows.targets) == ({}, {}, {})
+    assert (rows.timeouts, rows.limits) == (frozenset(), frozenset())
 
 
 @pytest.mark.parametrize(
@@ -122,8 +156,8 @@ def test_the_timeout_value_check_leaves_a_non_number_to_the_value_rules(value):
 def test_switching_an_inverter_form_on_clears_the_other_form_in_the_same_write():
     first, second = INVERTER_KEYS
 
-    assert switch_changes(key=first, on=True) == {first: 1, second: 0}
-    assert switch_changes(key=second, on=True) == {second: 1, first: 0}
+    assert switch_changes(rows=ROWS, key=first, on=True) == {first: 1, second: 0}
+    assert switch_changes(rows=ROWS, key=second, on=True) == {second: 1, first: 0}
 
 
 @pytest.mark.parametrize(
@@ -136,194 +170,206 @@ def test_switching_an_inverter_form_on_clears_the_other_form_in_the_same_write()
     ],
 )
 def test_nothing_else_is_changed_with_a_switch(key: str, *, on: bool):
-    assert switch_changes(key=key, on=on) == {key: int(on)}
+    assert switch_changes(rows=ROWS, key=key, on=on) == {key: int(on)}
+
+
+@pytest.mark.parametrize(
+    ("key", "cleared"),
+    [
+        (INVERTER_KEYS[0], set(INVERTER_KEYS)),
+        (INVERTER_KEYS[1], set(INVERTER_KEYS)),
+        (BATTERY_KEY, {BATTERY_KEY}),
+        ("other", {"other"}),
+    ],
+)
+def test_clearing_a_function_clears_every_form_of_it(key: str, cleared: set[str]):
+    assert clearing_changes(rows=ROWS, key=key) == dict.fromkeys(cleared, 0)
 
 
 def test_an_installation_that_switched_nothing_on_owns_nothing_and_beats_nothing():
     ownership = EmsOwnership()
 
     assert ownership.owned == frozenset()
-    assert ownership.owned_enable_keys == ()
-    assert ownership.beat_keys() == ()
+    assert ownership.beat_keys(targets=BEAT_TARGETS) == ()
 
 
-def test_the_keep_alive_targets_are_exactly_the_targets_of_the_functions():
-    assert {spec.target_key for spec in FUNCTIONS.values()} == EMS_TARGET_KEYS
-
-
-def test_a_function_is_owned_from_the_moment_it_is_switched_on_until_it_is_off():
+def test_a_function_is_owned_from_the_moment_it_is_acquired_until_it_is_released():
     ownership = EmsOwnership()
 
-    ownership.switched(key=BATTERY_KEY, on=True)
-    assert ownership.owned == {EmsFunction.BATTERY}
-    assert ownership.owned_enable_keys == (BATTERY_KEY,)
+    ownership.acquire(function=PowerFunction.BATTERY)
+    assert ownership.owned == {PowerFunction.BATTERY}
 
-    ownership.switched(key=BATTERY_KEY, on=False)
-    assert ownership.owned == frozenset()
-    assert ownership.owned_enable_keys == ()
-
-
-def test_the_two_forms_of_the_inverter_function_are_one_ownership():
-    first, second = INVERTER_KEYS
-    ownership = EmsOwnership()
-
-    ownership.switched(key=first, on=True)
-    ownership.switched(key=second, on=True)
-
-    assert ownership.owned == {EmsFunction.INVERTER}
-    assert ownership.owned_enable_keys == (second,)
-
-
-def test_a_key_that_is_not_an_enable_key_changes_nothing():
-    ownership = EmsOwnership()
-
-    ownership.switched(key=BATTERY_TARGET, on=True)
-
+    ownership.release_function(function=PowerFunction.BATTERY)
     assert ownership.owned == frozenset()
 
 
-def test_each_owned_function_beats_its_own_target_without_any_value_having_been_set():
+def test_each_owned_function_with_a_target_beats_it_in_function_order():
     ownership = EmsOwnership()
-    ownership.switched(key=BATTERY_KEY, on=True)
-    assert ownership.beat_keys() == (BATTERY_TARGET,)
+    ownership.acquire(function=PowerFunction.BATTERY)
+    assert ownership.beat_keys(targets=BEAT_TARGETS) == (BATTERY_TARGET,)
 
-    ownership.switched(key=INVERTER_KEYS[0], on=True)
-    ownership.switched(key=GRID_KEY, on=True)
+    ownership.acquire(function=PowerFunction.INVERTER)
+    ownership.acquire(function=PowerFunction.GRID)
 
-    assert set(ownership.beat_keys()) == {
-        INVERTER_TARGET,
+    assert ownership.beat_keys(targets=BEAT_TARGETS) == (
         BATTERY_TARGET,
         GRID_TARGET,
-    }
+        INVERTER_TARGET,
+    )
 
 
-def test_switching_a_function_off_stops_its_beat():
+def test_an_owned_function_that_has_no_target_to_beat_is_not_beaten():
     ownership = EmsOwnership()
-    ownership.switched(key=BATTERY_KEY, on=True)
-    ownership.switched(key=GRID_KEY, on=True)
+    ownership.acquire(function=PowerFunction.BATTERY)
+    ownership.acquire(function=PowerFunction.GRID)
 
-    ownership.switched(key=BATTERY_KEY, on=False)
+    assert ownership.beat_keys(targets={PowerFunction.GRID: GRID_TARGET}) == (
+        GRID_TARGET,
+    )
 
-    assert ownership.beat_keys() == (GRID_TARGET,)
 
-
-def test_switching_off_one_form_of_a_function_still_owned_keeps_its_beat():
-    first, second = INVERTER_KEYS
+def test_releasing_a_function_stops_its_beat():
     ownership = EmsOwnership()
-    ownership.switched(key=first, on=True)
+    ownership.acquire(function=PowerFunction.BATTERY)
+    ownership.acquire(function=PowerFunction.GRID)
 
-    ownership.switched(key=second, on=False)
+    ownership.release_function(function=PowerFunction.BATTERY)
 
-    assert ownership.beat_keys() == (INVERTER_TARGET,)
+    assert ownership.beat_keys(targets=BEAT_TARGETS) == (GRID_TARGET,)
 
 
-def test_releasing_ends_every_ownership_and_beat():
+def test_releasing_everything_ends_every_ownership_and_beat():
     ownership = EmsOwnership()
-    ownership.switched(key=BATTERY_KEY, on=True)
-    ownership.switched(key=GRID_KEY, on=True)
+    ownership.acquire(function=PowerFunction.BATTERY)
+    ownership.acquire(function=PowerFunction.GRID)
 
     ownership.release()
 
     assert ownership.owned == frozenset()
-    assert ownership.beat_keys() == ()
+    assert ownership.beat_keys(targets=BEAT_TARGETS) == ()
 
 
-def test_a_freshly_read_off_switch_ends_only_that_ownership():
+def test_only_an_owned_function_read_not_running_is_found_off_and_ended():
     ownership = EmsOwnership()
-    ownership.switched(key=BATTERY_KEY, on=True)
-    ownership.switched(key=GRID_KEY, on=True)
+    ownership.acquire(function=PowerFunction.BATTERY)
+    ownership.acquire(function=PowerFunction.GRID)
+    ownership.acquire(function=PowerFunction.INVERTER)
 
-    ended = ownership.found_off(values={BATTERY_KEY: 0, GRID_KEY: 1})
+    ended = ownership.found_off(
+        states={
+            PowerFunction.BATTERY: False,
+            PowerFunction.GRID: True,
+            PowerFunction.INVERTER: None,
+        }
+    )
 
-    assert ended == {EmsFunction.BATTERY}
-    assert ownership.owned == {EmsFunction.GRID}
+    assert ended == {PowerFunction.BATTERY}
+    assert ownership.owned == {PowerFunction.GRID, PowerFunction.INVERTER}
 
 
-def test_a_switch_that_was_not_read_or_reads_on_keeps_its_ownership():
+def test_a_function_that_is_not_owned_is_not_affected_by_reading_it_off():
     ownership = EmsOwnership()
-    ownership.switched(key=BATTERY_KEY, on=True)
-    ownership.switched(key=GRID_KEY, on=True)
+    ownership.acquire(function=PowerFunction.INVERTER)
 
-    ended = ownership.found_off(values={GRID_KEY: 1, "other": 0})
+    ended = ownership.found_off(states={PowerFunction.BATTERY: False})
 
     assert ended == frozenset()
-    assert ownership.owned == {EmsFunction.BATTERY, EmsFunction.GRID}
-
-
-def test_a_switch_that_is_not_owned_is_not_affected_by_reading_it_off():
-    first, second = INVERTER_KEYS
-    ownership = EmsOwnership()
-    ownership.switched(key=first, on=True)
-
-    ended = ownership.found_off(values={second: 0})
-
-    assert ended == frozenset()
-    assert ownership.owned == {EmsFunction.INVERTER}
-
-
-def test_reading_the_owned_form_of_the_inverter_function_off_ends_it():
-    first, second = INVERTER_KEYS
-    ownership = EmsOwnership()
-    ownership.switched(key=second, on=True)
-
-    ended = ownership.found_off(values={first: 1, second: 0})
-
-    assert ended == {EmsFunction.INVERTER}
-    assert ownership.owned == frozenset()
+    assert ownership.owned == {PowerFunction.INVERTER}
 
 
 def test_only_the_first_of_consecutive_dropped_beats_is_new():
     ownership = EmsOwnership()
-    ownership.switched(key=BATTERY_KEY, on=True)
+    ownership.acquire(function=PowerFunction.BATTERY)
 
-    assert ownership.beat_dropped(target_key=BATTERY_TARGET)
-    assert not ownership.beat_dropped(target_key=BATTERY_TARGET)
+    assert ownership.beat_dropped(function=PowerFunction.BATTERY)
+    assert not ownership.beat_dropped(function=PowerFunction.BATTERY)
 
 
 def test_a_beat_that_succeeds_after_a_drop_is_a_recovery_once():
     ownership = EmsOwnership()
-    ownership.switched(key=BATTERY_KEY, on=True)
-    assert not ownership.beat_succeeded(target_key=BATTERY_TARGET)
-    ownership.beat_dropped(target_key=BATTERY_TARGET)
+    ownership.acquire(function=PowerFunction.BATTERY)
+    assert not ownership.beat_succeeded(function=PowerFunction.BATTERY)
+    ownership.beat_dropped(function=PowerFunction.BATTERY)
 
-    assert ownership.beat_succeeded(target_key=BATTERY_TARGET)
-    assert not ownership.beat_succeeded(target_key=BATTERY_TARGET)
-    assert ownership.beat_dropped(target_key=BATTERY_TARGET)
+    assert ownership.beat_succeeded(function=PowerFunction.BATTERY)
+    assert not ownership.beat_succeeded(function=PowerFunction.BATTERY)
+    assert ownership.beat_dropped(function=PowerFunction.BATTERY)
 
 
 def test_functions_fail_and_recover_independently():
     ownership = EmsOwnership()
-    ownership.switched(key=BATTERY_KEY, on=True)
-    ownership.switched(key=GRID_KEY, on=True)
+    ownership.acquire(function=PowerFunction.BATTERY)
+    ownership.acquire(function=PowerFunction.GRID)
 
-    assert ownership.beat_dropped(target_key=BATTERY_TARGET)
-    assert ownership.beat_dropped(target_key=GRID_TARGET)
-    assert not ownership.beat_dropped(target_key=BATTERY_TARGET)
-    assert ownership.beat_succeeded(target_key=GRID_TARGET)
-    assert not ownership.beat_succeeded(target_key=GRID_TARGET)
-    assert not ownership.beat_dropped(target_key=BATTERY_TARGET)
+    assert ownership.beat_dropped(function=PowerFunction.BATTERY)
+    assert ownership.beat_dropped(function=PowerFunction.GRID)
+    assert not ownership.beat_dropped(function=PowerFunction.BATTERY)
+    assert ownership.beat_succeeded(function=PowerFunction.GRID)
+    assert not ownership.beat_succeeded(function=PowerFunction.GRID)
+    assert not ownership.beat_dropped(function=PowerFunction.BATTERY)
 
 
 def test_a_failing_state_ends_with_the_ownership_of_its_function():
     ownership = EmsOwnership()
-    ownership.switched(key=BATTERY_KEY, on=True)
-    ownership.switched(key=GRID_KEY, on=True)
-    ownership.beat_dropped(target_key=BATTERY_TARGET)
-    ownership.beat_dropped(target_key=GRID_TARGET)
+    ownership.acquire(function=PowerFunction.BATTERY)
+    ownership.acquire(function=PowerFunction.GRID)
+    ownership.beat_dropped(function=PowerFunction.BATTERY)
+    ownership.beat_dropped(function=PowerFunction.GRID)
 
-    ownership.switched(key=BATTERY_KEY, on=False)
-    ownership.switched(key=BATTERY_KEY, on=True)
+    ownership.release_function(function=PowerFunction.BATTERY)
+    ownership.acquire(function=PowerFunction.BATTERY)
 
-    assert ownership.beat_dropped(target_key=BATTERY_TARGET)
-    assert not ownership.beat_dropped(target_key=GRID_TARGET)
+    assert ownership.beat_dropped(function=PowerFunction.BATTERY)
+    assert not ownership.beat_dropped(function=PowerFunction.GRID)
 
 
 def test_a_failing_state_does_not_survive_a_release():
     ownership = EmsOwnership()
-    ownership.switched(key=GRID_KEY, on=True)
-    ownership.beat_dropped(target_key=GRID_TARGET)
+    ownership.acquire(function=PowerFunction.GRID)
+    ownership.beat_dropped(function=PowerFunction.GRID)
 
     ownership.release()
-    ownership.switched(key=GRID_KEY, on=True)
+    ownership.acquire(function=PowerFunction.GRID)
 
-    assert ownership.beat_dropped(target_key=GRID_TARGET)
+    assert ownership.beat_dropped(function=PowerFunction.GRID)
+
+
+def test_the_two_forms_of_a_function_are_one_ownership():
+    ownership = EmsOwnership()
+
+    ownership.acquire(function=PowerFunction.INVERTER, key=MAIN)
+    ownership.acquire(function=PowerFunction.INVERTER, key=ALTERNATE)
+
+    assert ownership.owned == {PowerFunction.INVERTER}
+
+
+def test_clearing_a_form_that_is_not_the_owned_one_keeps_the_ownership_and_its_beat():
+    ownership = EmsOwnership()
+    ownership.acquire(function=PowerFunction.INVERTER, key=ALTERNATE)
+
+    ownership.release_function(function=PowerFunction.INVERTER, key=MAIN)
+
+    assert ownership.owned == {PowerFunction.INVERTER}
+    assert ownership.beat_keys(targets=BEAT_TARGETS) == (INVERTER_TARGET,)
+
+
+def test_clearing_the_owned_form_ends_the_ownership():
+    ownership = EmsOwnership()
+    ownership.acquire(function=PowerFunction.INVERTER, key=ALTERNATE)
+
+    ownership.release_function(function=PowerFunction.INVERTER, key=ALTERNATE)
+
+    assert ownership.owned == frozenset()
+
+
+def test_reading_the_owned_function_not_running_ends_only_that_ownership():
+    ownership = EmsOwnership()
+    ownership.acquire(function=PowerFunction.INVERTER, key=ALTERNATE)
+    ownership.acquire(function=PowerFunction.GRID, key=GRID_KEY)
+
+    ended = ownership.found_off(
+        states={PowerFunction.INVERTER: False, PowerFunction.GRID: True}
+    )
+
+    assert ended == {PowerFunction.INVERTER}
+    assert ownership.owned == {PowerFunction.GRID}

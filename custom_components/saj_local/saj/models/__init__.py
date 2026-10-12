@@ -29,6 +29,118 @@ ENABLED_WITHOUT_EVIDENCE = frozenset(
 )
 
 
+class PowerFunction(StrEnum):
+    BATTERY = "battery"
+    GRID = "grid"
+    INVERTER = "inverter"
+
+    @property
+    def switch_key(self) -> str:
+        return f"{self.value}_power_control"
+
+    @property
+    def target_key(self) -> str:
+        return f"{self.value}_power_target"
+
+
+@dataclass(frozen=True)
+class EnableBitMethod:
+    enable_key: str
+    target_key: str
+    alternate_keys: tuple[str, ...] = ()
+    timeout_key: str | None = None
+    limit_keys: tuple[str, ...] = ()
+
+    @property
+    def forms(self) -> tuple[str, ...]:
+        return (self.enable_key, *self.alternate_keys)
+
+    @property
+    def stop_keys(self) -> frozenset[str]:
+        return frozenset(self.forms)
+
+    @property
+    def row_keys(self) -> frozenset[str]:
+        return frozenset({self.enable_key, self.target_key})
+
+    def accepts_stop(self, *, key: str, value: object) -> bool:
+        return key in self.forms and value == 0
+
+
+@dataclass(frozen=True)
+class OperatingModeMethod:
+    mode_key: str
+    passive_mode: int
+    default_mode: int
+    direction_key: str
+    standby: int
+    discharge: int
+    charge: int
+    charge_power_key: str
+    discharge_power_key: str
+
+    @property
+    def stop_keys(self) -> frozenset[str]:
+        return frozenset({self.mode_key, self.direction_key})
+
+    def accepts_stop(self, *, key: str, value: object) -> bool:
+        if key == self.direction_key:
+            return value == self.standby
+        return key == self.mode_key and value != self.passive_mode
+
+    @property
+    def row_keys(self) -> frozenset[str]:
+        return frozenset(
+            {
+                self.mode_key,
+                self.direction_key,
+                self.charge_power_key,
+                self.discharge_power_key,
+            }
+        )
+
+
+PowerMethod = EnableBitMethod | OperatingModeMethod
+
+
+@dataclass(frozen=True)
+class EmsRows:
+    functions: Mapping[str, PowerFunction]
+    forms: Mapping[str, tuple[str, ...]]
+    targets: Mapping[PowerFunction, str]
+    timeouts: frozenset[str]
+    limits: frozenset[str]
+
+    @property
+    def target_functions(self) -> dict[str, PowerFunction]:
+        return {key: function for function, key in self.targets.items()}
+
+
+def ems_rows(*, profile: Profile) -> EmsRows:
+    methods = {
+        function: method
+        for function, method in profile.power_control.items()
+        if isinstance(method, EnableBitMethod)
+    }
+    return EmsRows(
+        functions={
+            key: function
+            for function, method in methods.items()
+            for key in method.forms
+        },
+        forms={
+            key: method.forms for method in methods.values() for key in method.forms
+        },
+        targets={function: method.target_key for function, method in methods.items()},
+        timeouts=frozenset(
+            method.timeout_key for method in methods.values() if method.timeout_key
+        ),
+        limits=frozenset(
+            key for method in methods.values() for key in method.limit_keys
+        ),
+    )
+
+
 class Comparison(StrEnum):
     EQUALS = "equals"
     DIFFERS = "differs"
@@ -152,6 +264,7 @@ class Profile:
     families: tuple[FamilyPlacement, ...] = field(default_factory=tuple)
     replacements: tuple[Replacement, ...] = field(default_factory=tuple)
     probes: tuple[Probe, ...] = field(default_factory=tuple)
+    power_control: Mapping[PowerFunction, PowerMethod] = field(default_factory=dict)
 
     @property
     def equipment(self) -> frozenset[Equipment]:

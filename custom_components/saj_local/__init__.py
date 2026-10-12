@@ -19,7 +19,7 @@ from .const import (
     SUBENTRY_POLLING_GROUP,
     endpoint_guard,
 )
-from .coordinator import Installation, SajCoordinator
+from .coordinator import Installation, SajCoordinator, power_control_store
 from .equipment import (
     EquipmentReport,
     PackReport,
@@ -89,6 +89,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             ),
             entry=entry,
         )
+        await coordinator.async_load_power_state()
         await coordinator.async_config_entry_first_refresh()
     except HANDLED_ERRORS as err:
         await client.close()
@@ -120,6 +121,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        await coordinator.async_follow_schedules()
     except asyncio.CancelledError:
         await coordinator.async_shutdown()
         await client.close()
@@ -131,7 +133,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     entry.async_on_unload(
         hass.bus.async_listen_once(
-            EVENT_HOMEASSISTANT_STOP, _release_ems_on_stop(coordinator=coordinator)
+            EVENT_HOMEASSISTANT_STOP,
+            _release_power_control_on_stop(coordinator=coordinator),
         )
     )
     return True
@@ -140,7 +143,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        await entry.runtime_data.coordinator.async_release_ems()
+        await entry.runtime_data.coordinator.async_release_power_control()
         await entry.runtime_data.coordinator.async_shutdown()
         await entry.runtime_data.client.close()
     return unloaded
@@ -148,14 +151,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     remove_equipment_issues(hass=hass, entry=entry)
+    await power_control_store(hass=hass, entry_id=entry.entry_id).async_remove()
 
 
-def _release_ems_on_stop(
+def _release_power_control_on_stop(
     *, coordinator: SajCoordinator
 ) -> Callable[[Event], Coroutine[Any, Any, None]]:
     async def release(event: Event) -> None:
         del event
-        await coordinator.async_release_ems()
+        await coordinator.async_release_power_control()
 
     return release
 

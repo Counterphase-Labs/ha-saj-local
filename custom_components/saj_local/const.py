@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from homeassistant.const import Platform
@@ -5,6 +6,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.translation import async_get_translations
 
 from .saj.guard import EndpointGuard
+from .saj.models import PowerFunction
 from .saj.schedule import Cadence
 
 if TYPE_CHECKING:
@@ -31,11 +33,20 @@ CONF_FITTED_EQUIPMENT = "fitted_equipment"
 CONF_HIGHEST_PACK_COUNT = "highest_pack_count"
 EQUIPMENT_SELECTOR = "equipment"
 EQUIPMENT_ISSUE_TRANSLATION_KEY = "equipment_not_detected"
-EMS_TIMEOUT_KEY = "ems_timeout"
 OBJECT_ID_ROOT = "saj"
 KEY_PLACEHOLDER = "<key>"
 DOMAIN_PLACEHOLDER = "<domain>"
 SUBENTRY_POLLING_GROUP = "polling_group"
+SUBENTRY_POWER_SCHEDULE = "power_schedule"
+CONF_FUNCTION = "function"
+CONF_SCHEDULE = "schedule"
+SCHEDULE_DOMAIN = "schedule"
+FUNCTION_SELECTOR = "power_function"
+SCHEDULE_ON = "on"
+SCHEDULE_POWER_ATTRIBUTE = "power"
+POWER_STORAGE_VERSION = 1
+STORED_TARGETS = "targets"
+STORED_MODES = "remembered_modes"
 DEFAULT_PORT = 502
 MAX_PORT = 65535
 MIN_UNIT_ID = 1
@@ -138,3 +149,32 @@ def group_cadences(
         if subentry.subentry_type == SUBENTRY_POLLING_GROUP
         and subentry.subentry_id != excluding
     ]
+
+
+@dataclass(frozen=True)
+class PowerSchedule:
+    function: PowerFunction
+    entity_id: str
+
+
+def power_schedules(
+    *, entry: ConfigEntry, excluding: str | None = None
+) -> tuple[PowerSchedule, ...]:
+    return tuple(
+        PowerSchedule(
+            function=PowerFunction(subentry.data[CONF_FUNCTION]),
+            entity_id=subentry.data[CONF_SCHEDULE],
+        )
+        for subentry in entry.subentries.values()
+        if subentry.subentry_type == SUBENTRY_POWER_SCHEDULE
+        and subentry.subentry_id != excluding
+    )
+
+
+def enabled_power_keys(
+    *, hass: HomeAssistant, entry_id: str, keys: Iterable[str]
+) -> frozenset[str]:
+    registered = installation_entities(hass=hass, entry_id=entry_id)
+    return frozenset(
+        key for key in keys if key in registered and registered[key].disabled_by is None
+    )
