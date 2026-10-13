@@ -60,4 +60,5 @@ def profile(
         families=(),
         replacements=(),
         probes=(),
+        faults=type(base.faults)(),
     )

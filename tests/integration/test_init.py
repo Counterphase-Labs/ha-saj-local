@@ -18,6 +18,7 @@ from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessa
 from custom_components.saj_local.saj.device import Device
 from custom_components.saj_local.saj.models import Equipment
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
+from tests.issues import IssueRecorder
 from tests.profiles import profile
 
 SERIAL = "HS3-TEST-001"
@@ -87,6 +88,7 @@ class FakeEntry:
     subentries: dict[str, object] = field(default_factory=dict)
     runtime_data: SajRuntimeData | None = None
     entry_id: str = "entry-1"
+    title: str = "Roof inverter"
     unload_callbacks: list = field(default_factory=list)
 
     def add_update_listener(self, _listener):
@@ -128,6 +130,23 @@ def reset_fake_instances():
 
 
 NOW = 500.0
+
+
+@pytest.fixture(autouse=True)
+def issues(monkeypatch) -> IssueRecorder:
+    recorder = IssueRecorder()
+    recorder.install(
+        monkeypatch,
+        module=integration,
+        names=(
+            "check_unreachable",
+            "clear_model_issues",
+            "raise_identity_issue",
+            "raise_model_issue",
+            "remove_issues",
+        ),
+    )
+    return recorder
 
 
 def _hass():
@@ -273,7 +292,7 @@ async def test_setup_closes_client_and_applies_translation_to_device_failure(
     assert FakeClient.instances[0].closed
 
 
-async def test_setup_rejects_replacement_serial_and_closes_client(monkeypatch):
+async def test_setup_rejects_replacement_serial_and_closes_client(monkeypatch, issues):
     hass = _hass()
     _patch_success(monkeypatch)
 
@@ -287,6 +306,10 @@ async def test_setup_rejects_replacement_serial_and_closes_client(monkeypatch):
         await integration.async_setup_entry(hass, entry)
     assert FakeClient.instances[0].closed
     assert FakeCoordinator.instances == []
+    assert issues.called("raise_identity_issue") == [
+        {"hass": hass, "entry": entry, "serial": "OTHER-SERIAL"}
+    ]
+    assert issues.called("clear_model_issues") == []
 
 
 async def test_initial_telemetry_failure_after_identity_closes_client_with_translation(
@@ -478,7 +501,7 @@ async def test_a_failed_load_counts_as_a_failure_from_the_shortest_interval(
 
 
 async def test_a_configuration_failure_does_not_count_against_the_endpoint(
-    monkeypatch,
+    monkeypatch, issues
 ):
     hass = _hass()
     _patch_success(monkeypatch)
@@ -492,6 +515,7 @@ async def test_a_configuration_failure_does_not_count_against_the_endpoint(
         await integration.async_setup_entry(hass, _entry())
 
     assert _guard(hass).consecutive_failures == 0
+    assert issues.called("raise_model_issue") == []
 
 
 async def test_every_load_of_an_endpoint_reuses_its_guard_and_budget(monkeypatch):
@@ -671,7 +695,7 @@ async def test_removing_the_installation_removes_its_repair_issues_and_stored_st
     FakeStore.removed = 0
     monkeypatch.setattr(
         integration,
-        "remove_equipment_issues",
+        "remove_issues",
         lambda *, hass, entry: removed.append((hass, entry)),
     )
     monkeypatch.setattr(
@@ -703,3 +727,81 @@ async def test_power_state_loads_before_the_first_refresh_and_schedules_follow_a
 
     assert forwarded == [["load", "refresh"]]
     assert FakeCoordinator.instances[0].setup_events == ["load", "refresh", "follow"]
+
+
+async def test_every_load_attempt_checks_whether_the_endpoint_has_been_down_too_long(
+    monkeypatch, issues
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    guard = _guard(hass)
+    guard.failed(now=NOW - 5, base_delay=30)
+    entry = _entry()
+
+    with pytest.raises(ConfigEntryNotReady):
+        await integration.async_setup_entry(hass, entry)
+
+    assert issues.calls == [
+        (
+            "check_unreachable",
+            {"hass": hass, "entry": entry, "guard": guard, "now": NOW},
+        )
+    ]
+
+
+async def test_a_load_that_fails_to_connect_checks_the_endpoint_after_recording_it(
+    monkeypatch, issues
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+
+    async def fail(client, selection):
+        raise ModbusError(ModbusErrorMessage.CONNECTION_FAILED)
+
+    monkeypatch.setattr(integration, "identify", fail)
+
+    with pytest.raises(ConfigEntryNotReady):
+        await integration.async_setup_entry(hass, _entry())
+
+    assert [name for name, _ in issues.calls] == [
+        "check_unreachable",
+        "check_unreachable",
+    ]
+    assert _guard(hass).consecutive_failures == 1
+
+
+async def test_a_model_error_at_load_raises_the_model_issue_it_is_found_to_be(
+    monkeypatch, issues
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    failure = saj_errors.UnsupportedDeviceError(0x1234)
+    issues.finding = "finding"
+
+    async def fail(client, selection):
+        raise failure
+
+    monkeypatch.setattr(integration, "identify", fail)
+    entry = _entry()
+
+    with pytest.raises(ConfigEntryError):
+        await integration.async_setup_entry(hass, entry)
+
+    assert issues.called("raise_model_issue") == [
+        {"hass": hass, "entry": entry, "finding": "finding"}
+    ]
+
+
+async def test_a_load_that_identifies_the_configured_device_clears_the_model_issues(
+    monkeypatch, issues
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    entry = _entry()
+
+    assert await integration.async_setup_entry(hass, entry)
+
+    assert (
+        "clear_model_issues",
+        {"hass": hass, "entry": entry},
+    ) in issues.calls

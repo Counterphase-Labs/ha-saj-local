@@ -14,7 +14,17 @@ from custom_components.saj_local import const
     ],
 )
 @pytest.mark.parametrize(
-    "domain", ["sensor", "number", "select", "switch", "time", "text", "button"]
+    "domain",
+    [
+        "sensor",
+        "binary_sensor",
+        "number",
+        "select",
+        "switch",
+        "time",
+        "text",
+        "button",
+    ],
 )
 def test_the_entity_id_is_the_domain_then_the_fixed_root_prefix_and_key(
     domain, prefix, key, expected_object_id
@@ -29,6 +39,7 @@ def test_the_entity_id_is_the_domain_then_the_fixed_root_prefix_and_key(
 def test_every_entity_domain_is_a_platform():
     assert {str(platform) for platform in const.PLATFORMS} == {
         "sensor",
+        "binary_sensor",
         "number",
         "select",
         "switch",

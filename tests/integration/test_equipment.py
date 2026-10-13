@@ -18,9 +18,7 @@ from custom_components.saj_local.equipment import (
     PackReport,
     configured_settings,
     detected_equipment,
-    equipment_issue_id,
     pack_summary,
-    remove_equipment_issues,
     report_summary,
     resolved_equipment,
     settle_equipment,
@@ -58,21 +56,6 @@ class FakeRegistry:
         self.removed.append(entity_id)
 
 
-class FakeIssues:
-    def __init__(self) -> None:
-        self.created: dict[str, dict[str, object]] = {}
-        self.deleted: list[str] = []
-        self.IssueSeverity = SimpleNamespace(WARNING="warning")
-
-    def async_create_issue(self, hass, domain, issue_id, **details) -> None:
-        del hass
-        self.created[issue_id] = {"domain": domain, **details}
-
-    def async_delete_issue(self, hass, domain, issue_id) -> None:
-        del hass, domain
-        self.deleted.append(issue_id)
-
-
 @dataclass
 class FakeEntry:
     data: dict[str, object] = field(default_factory=dict)
@@ -85,7 +68,7 @@ class FakeEntry:
 class Harness:
     hass: SimpleNamespace
     registry: FakeRegistry
-    issues: FakeIssues
+    lapses: list[tuple[frozenset[Equipment], frozenset[Equipment]]]
     probed: list[frozenset[Equipment]] = field(default_factory=list)
     registered: dict[str, SimpleNamespace] = field(default_factory=dict)
     asked_also: list[tuple[str, ...]] = field(default_factory=list)
@@ -103,19 +86,16 @@ def _detection(item: Equipment, *, fitted: bool, **values: object) -> Detection:
 def harness(monkeypatch) -> Harness:
     registry = FakeRegistry()
     hass = SimpleNamespace(config_entries=FakeConfigEntries())
-    issues = FakeIssues()
-    harness = Harness(hass=hass, registry=registry, issues=issues)
+    harness = Harness(hass=hass, registry=registry, lapses=[])
     monkeypatch.setattr(
         equipment_module, "er", SimpleNamespace(async_get=lambda _hass: registry)
     )
-    monkeypatch.setattr(equipment_module, "ir", issues)
 
-    async def names(*, hass, selector_name):
-        del hass
-        assert selector_name == "equipment"
-        return {"battery": "Battery", "meter_b": "Meter B"}
+    async def sync_lapse_issues(*, hass, entry, equipment, lapsed):
+        del hass, entry
+        harness.lapses.append((frozenset(equipment), frozenset(lapsed)))
 
-    monkeypatch.setattr(equipment_module, "selector_options", names)
+    monkeypatch.setattr(equipment_module, "sync_lapse_issues", sync_lapse_issues)
 
     def absent_keys(*, fit):
         harness.fits.append(fit)
@@ -557,7 +537,6 @@ def test_settings_are_read_as_enumerations():
     }
 
 
-LAPSE_ISSUE = equipment_issue_id(entry_id="entry-1", equipment=METER)
 REMEMBERED_METER = {
     CONF_DETECTED_EQUIPMENT: ["battery", "meter_b"],
     CONF_FITTED_EQUIPMENT: ["battery", "meter_b"],
@@ -575,25 +554,14 @@ def _meter_reads(monkeypatch, harness, *, fitted: bool) -> None:
     )
 
 
-async def test_equipment_that_was_detected_and_now_is_not_raises_a_repair_issue(
+async def test_equipment_that_was_detected_and_now_is_not_is_handed_to_the_issues(
     monkeypatch, harness
 ):
     _meter_reads(monkeypatch, harness, fitted=False)
 
     await _settle(harness, FakeEntry(data=REMEMBERED_METER))
 
-    assert harness.issues.created == {
-        LAPSE_ISSUE: {
-            "domain": "saj_local",
-            "is_fixable": False,
-            "severity": "warning",
-            "translation_key": "equipment_not_detected",
-            "translation_placeholders": {
-                "installation": "Roof inverter",
-                "equipment": "Meter B",
-            },
-        }
-    }
+    assert harness.lapses == [(PROFILE.equipment, frozenset({METER}))]
 
 
 @pytest.mark.parametrize(
@@ -605,37 +573,14 @@ async def test_equipment_that_was_detected_and_now_is_not_raises_a_repair_issue(
         (REMEMBERED_METER, {CONF_EQUIPMENT: {"meter_b": "not_fitted"}}, False),
     ],
 )
-async def test_no_repair_issue_is_raised_unless_remembered_equipment_lapsed(
+async def test_nothing_lapsed_unless_remembered_equipment_stopped_being_detected(
     monkeypatch, harness, data, options, meter_fitted
 ):
     _meter_reads(monkeypatch, harness, fitted=meter_fitted)
 
     await _settle(harness, FakeEntry(data=data, options=options))
 
-    assert harness.issues.created == {}
-    assert LAPSE_ISSUE in harness.issues.deleted
-
-
-async def test_the_repair_issue_is_removed_at_the_setup_that_detects_it_again(
-    monkeypatch, harness
-):
-    entry = FakeEntry(data=REMEMBERED_METER)
-    _meter_reads(monkeypatch, harness, fitted=False)
-    await _settle(harness, entry)
-    assert harness.issues.deleted.count(LAPSE_ISSUE) == 0
-
-    _meter_reads(monkeypatch, harness, fitted=True)
-    await _settle(harness, entry)
-
-    assert harness.issues.deleted.count(LAPSE_ISSUE) == 1
-
-
-def test_removing_the_installation_removes_the_issue_of_every_equipment(harness):
-    remove_equipment_issues(hass=harness.hass, entry=FakeEntry())
-
-    assert harness.issues.deleted == [
-        equipment_issue_id(entry_id="entry-1", equipment=item) for item in Equipment
-    ]
+    assert harness.lapses == [(PROFILE.equipment, frozenset())]
 
 
 PACK_COUNT = "battery_pack_count"

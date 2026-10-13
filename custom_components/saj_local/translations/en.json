@@ -1729,6 +1729,425 @@
         "name": "Battery discharge cutoff voltage"
       }
     },
+    "binary_sensor": {
+      "inverter_fault": {
+        "name": "Inverter fault"
+      },
+      "inverter_fault_unrecognised": {
+        "name": "Inverter unrecognised fault"
+      },
+      "inverter_fault_internal_communication": {
+        "name": "Internal communication lost"
+      },
+      "inverter_fault_meter_communication": {
+        "name": "Meter communication lost"
+      },
+      "inverter_fault_display_memory": {
+        "name": "Display board memory fault"
+      },
+      "inverter_fault_display_clock": {
+        "name": "Display board clock fault"
+      },
+      "inverter_fault_bms_device": {
+        "name": "BMS device fault"
+      },
+      "inverter_fault_bms_communication": {
+        "name": "BMS communication lost"
+      },
+      "inverter_fault_ct_device": {
+        "name": "CT device fault"
+      },
+      "inverter_fault_afci_communication": {
+        "name": "Arc detection board communication lost"
+      },
+      "inverter_fault_slave_communication": {
+        "name": "Slave controller communication lost"
+      },
+      "inverter_fault_pv_meter_communication": {
+        "name": "PV meter communication lost"
+      },
+      "inverter_fault_ev_charger_communication": {
+        "name": "EV charger communication lost"
+      },
+      "inverter_fault_grid_phase_r_overvoltage": {
+        "name": "Grid phase R overvoltage"
+      },
+      "inverter_fault_grid_phase_r_undervoltage": {
+        "name": "Grid phase R undervoltage"
+      },
+      "inverter_fault_grid_phase_s_overvoltage": {
+        "name": "Grid phase S overvoltage"
+      },
+      "inverter_fault_grid_phase_s_undervoltage": {
+        "name": "Grid phase S undervoltage"
+      },
+      "inverter_fault_grid_phase_t_overvoltage": {
+        "name": "Grid phase T overvoltage"
+      },
+      "inverter_fault_grid_phase_t_undervoltage": {
+        "name": "Grid phase T undervoltage"
+      },
+      "inverter_fault_grid_overfrequency": {
+        "name": "Grid overfrequency"
+      },
+      "inverter_fault_grid_underfrequency": {
+        "name": "Grid underfrequency"
+      },
+      "inverter_fault_dcdc_communication": {
+        "name": "DC-DC unit communication lost"
+      },
+      "inverter_fault_dcdc_device": {
+        "name": "DC-DC unit fault"
+      },
+      "inverter_fault_parallel_communication": {
+        "name": "Parallel system communication lost"
+      },
+      "inverter_fault_grid_lost": {
+        "name": "Grid lost"
+      },
+      "inverter_fault_pv_input_mode": {
+        "name": "PV input mode fault"
+      },
+      "inverter_fault_pv_hardware_overcurrent": {
+        "name": "PV hardware overcurrent"
+      },
+      "inverter_fault_pv_overvoltage": {
+        "name": "PV overvoltage"
+      },
+      "inverter_fault_bus_hardware_overvoltage": {
+        "name": "DC bus hardware overvoltage"
+      },
+      "inverter_fault_bus_overvoltage": {
+        "name": "DC bus overvoltage"
+      },
+      "inverter_fault_bus_undervoltage": {
+        "name": "DC bus undervoltage"
+      },
+      "inverter_fault_grid_phase": {
+        "name": "Grid phase fault"
+      },
+      "inverter_fault_islanding": {
+        "name": "Islanding"
+      },
+      "inverter_fault_arc_device": {
+        "name": "Arc detection device fault"
+      },
+      "inverter_fault_pv_input": {
+        "name": "PV input fault"
+      },
+      "inverter_fault_hardware_overcurrent": {
+        "name": "Inverter hardware overcurrent"
+      },
+      "inverter_fault_neutral_earth_voltage": {
+        "name": "Neutral to earth voltage fault"
+      },
+      "inverter_fault_drm0": {
+        "name": "DRM0 fault"
+      },
+      "inverter_fault_fan_1": {
+        "name": "Fan 1 fault"
+      },
+      "inverter_fault_fan_2": {
+        "name": "Fan 2 fault"
+      },
+      "inverter_fault_fan_3": {
+        "name": "Fan 3 fault"
+      },
+      "inverter_fault_fan_4": {
+        "name": "Fan 4 fault"
+      },
+      "inverter_fault_arc": {
+        "name": "Arc fault"
+      },
+      "inverter_fault_pv_software_overcurrent": {
+        "name": "PV software overcurrent"
+      },
+      "inverter_fault_battery_overvoltage": {
+        "name": "Battery port overvoltage"
+      },
+      "inverter_fault_battery_overcurrent": {
+        "name": "Battery port overcurrent"
+      },
+      "inverter_fault_battery_charge_overvoltage": {
+        "name": "Battery charge voltage high"
+      },
+      "inverter_fault_battery_overload": {
+        "name": "Battery port overload"
+      },
+      "inverter_fault_battery_soft_start": {
+        "name": "Battery soft start timeout"
+      },
+      "inverter_fault_output_overload": {
+        "name": "Output overload"
+      },
+      "inverter_fault_battery_open_circuit": {
+        "name": "Battery open circuit"
+      },
+      "inverter_fault_battery_discharge_undervoltage": {
+        "name": "Battery discharge voltage low"
+      },
+      "inverter_fault_authorisation_expired": {
+        "name": "Authorisation expired"
+      },
+      "inverter_fault_display_communication": {
+        "name": "Display board communication lost"
+      },
+      "inverter_fault_relay": {
+        "name": "Relay fault"
+      },
+      "inverter_fault_controller_memory": {
+        "name": "Controller memory fault"
+      },
+      "inverter_fault_over_temperature": {
+        "name": "Over temperature"
+      },
+      "inverter_fault_under_temperature": {
+        "name": "Under temperature"
+      },
+      "inverter_fault_leakage_current_device": {
+        "name": "Leakage current sensor fault"
+      },
+      "inverter_fault_dc_injection_device": {
+        "name": "DC injection sensor fault"
+      },
+      "inverter_fault_current_sensor": {
+        "name": "Current sensor fault"
+      },
+      "inverter_fault_grid_average_overvoltage": {
+        "name": "Grid 10-minute average overvoltage"
+      },
+      "inverter_fault_off_grid_undervoltage": {
+        "name": "Off-grid output undervoltage"
+      },
+      "inverter_fault_grid_phase_r_dc_voltage": {
+        "name": "Grid phase R DC voltage high"
+      },
+      "inverter_fault_grid_phase_s_dc_voltage": {
+        "name": "Grid phase S DC voltage high"
+      },
+      "inverter_fault_grid_phase_t_dc_voltage": {
+        "name": "Grid phase T DC voltage high"
+      },
+      "inverter_fault_leakage_current": {
+        "name": "Leakage current fault"
+      },
+      "inverter_fault_grid_phase_r_dc_injection": {
+        "name": "Grid phase R DC injection high"
+      },
+      "inverter_fault_grid_phase_s_dc_injection": {
+        "name": "Grid phase S DC injection high"
+      },
+      "inverter_fault_grid_phase_t_dc_injection": {
+        "name": "Grid phase T DC injection high"
+      },
+      "inverter_fault_insulation": {
+        "name": "Insulation fault"
+      },
+      "inverter_fault_bus_imbalance": {
+        "name": "DC bus voltage imbalance"
+      },
+      "battery_fault": {
+        "name": "Battery fault"
+      },
+      "battery_fault_unrecognised": {
+        "name": "Battery unrecognised fault"
+      },
+      "battery_fault_internal_communication": {
+        "name": "Battery BMS internal communication lost"
+      },
+      "battery_fault_pack_sequence": {
+        "name": "Battery pack addressing fault"
+      },
+      "battery_fault_discharge_overcurrent": {
+        "name": "Battery discharge overcurrent"
+      },
+      "battery_fault_charge_overcurrent": {
+        "name": "Battery charge overcurrent"
+      },
+      "battery_fault_total_undervoltage": {
+        "name": "Battery total voltage low"
+      },
+      "battery_fault_total_overvoltage": {
+        "name": "Battery total voltage high"
+      },
+      "battery_fault_cell_undervoltage": {
+        "name": "Battery cell undervoltage"
+      },
+      "battery_fault_cell_overvoltage": {
+        "name": "Battery cell overvoltage"
+      },
+      "battery_fault_hardware": {
+        "name": "Battery BMS hardware fault"
+      },
+      "battery_fault_charge_cold": {
+        "name": "Battery too cold to charge"
+      },
+      "battery_fault_charge_hot": {
+        "name": "Battery too hot to charge"
+      },
+      "battery_fault_discharge_cold": {
+        "name": "Battery too cold to discharge"
+      },
+      "battery_fault_discharge_hot": {
+        "name": "Battery too hot to discharge"
+      },
+      "battery_fault_relay": {
+        "name": "Battery BMS relay fault"
+      },
+      "battery_fault_precharge": {
+        "name": "Battery pre-charge fault"
+      },
+      "battery_fault_insulation": {
+        "name": "Battery BMS insulation fault"
+      },
+      "battery_fault_bms_incompatible": {
+        "name": "Battery BMS manufacturer incompatible"
+      },
+      "battery_fault_cell_supplier_incompatible": {
+        "name": "Battery cell manufacturer mismatch"
+      },
+      "battery_fault_cell_incompatible": {
+        "name": "Battery cell mismatch"
+      },
+      "battery_fault_voltage_level_mismatch": {
+        "name": "Battery voltage level mismatch"
+      },
+      "battery_fault_breaker_open": {
+        "name": "Battery circuit breaker open"
+      },
+      "battery_fault_cell_temperature_difference": {
+        "name": "Battery cell temperature difference too large"
+      },
+      "battery_fault_cell_voltage_difference_2": {
+        "name": "Battery cell voltage difference too large, level 2"
+      },
+      "battery_fault_cell_voltage_difference_1": {
+        "name": "Battery cell voltage difference too large, level 1"
+      },
+      "battery_fault_cell_over_temperature": {
+        "name": "Battery cell over temperature"
+      },
+      "battery_fault_short_circuit": {
+        "name": "Battery short circuit"
+      },
+      "battery_fault_total_voltage_matching": {
+        "name": "Battery total voltage matching failure"
+      },
+      "battery_fault_system_locked": {
+        "name": "Battery system locked"
+      },
+      "battery_fault_fuse": {
+        "name": "Battery fuse fault"
+      },
+      "battery_fault_charging_port_overvoltage": {
+        "name": "Battery charging port overvoltage"
+      },
+      "battery_pack1_fault": {
+        "name": "Battery pack 1 fault"
+      },
+      "battery_pack1_warning": {
+        "name": "Battery pack 1 warning"
+      },
+      "battery_pack2_fault": {
+        "name": "Battery pack 2 fault"
+      },
+      "battery_pack2_warning": {
+        "name": "Battery pack 2 warning"
+      },
+      "battery_pack3_fault": {
+        "name": "Battery pack 3 fault"
+      },
+      "battery_pack3_warning": {
+        "name": "Battery pack 3 warning"
+      },
+      "battery_pack4_fault": {
+        "name": "Battery pack 4 fault"
+      },
+      "battery_pack4_warning": {
+        "name": "Battery pack 4 warning"
+      },
+      "ev_fault": {
+        "name": "EV charger fault"
+      },
+      "ev_fault_unrecognised": {
+        "name": "EV charger unrecognised fault"
+      },
+      "ev_fault_relay_over_temperature": {
+        "name": "EV charger relay over temperature"
+      },
+      "ev_fault_overload": {
+        "name": "EV charger overload"
+      },
+      "ev_fault_ac_overvoltage": {
+        "name": "EV charger AC overvoltage"
+      },
+      "ev_fault_ac_undervoltage": {
+        "name": "EV charger AC undervoltage"
+      },
+      "ev_fault_ac_overcurrent": {
+        "name": "EV charger AC overcurrent"
+      },
+      "ev_fault_ac_overfrequency": {
+        "name": "EV charger AC overfrequency"
+      },
+      "ev_fault_ac_underfrequency": {
+        "name": "EV charger AC underfrequency"
+      },
+      "ev_fault_dc_residual_current_a": {
+        "name": "EV charger DC residual current fault A"
+      },
+      "ev_fault_emergency_stop": {
+        "name": "EV charger emergency stop"
+      },
+      "ev_fault_under_temperature": {
+        "name": "EV charger under temperature"
+      },
+      "ev_fault_ac_residual_current": {
+        "name": "EV charger AC residual current"
+      },
+      "ev_fault_input_terminal_over_temperature": {
+        "name": "EV charger input terminal over temperature"
+      },
+      "ev_fault_bluetooth": {
+        "name": "EV charger Bluetooth fault"
+      },
+      "ev_fault_dc_residual_current_b": {
+        "name": "EV charger DC residual current fault B"
+      },
+      "ev_fault_relay": {
+        "name": "EV charger relay fault"
+      },
+      "ev_fault_grounding": {
+        "name": "EV charger grounding fault"
+      },
+      "ev_fault_phase_sequence": {
+        "name": "EV charger phase sequence fault"
+      },
+      "ev_fault_rcd_circuit": {
+        "name": "EV charger RCD circuit fault"
+      },
+      "ev_fault_rs485_timeout": {
+        "name": "EV charger RS485 communication timeout"
+      },
+      "ev_fault_supply": {
+        "name": "EV charger electricity supply fault"
+      },
+      "ev_fault_meter": {
+        "name": "EV charger meter fault"
+      },
+      "ev_fault_control_pilot": {
+        "name": "EV charger control pilot fault (below 2 V)"
+      },
+      "ev_fault_connector_lock": {
+        "name": "EV charger connector lock fault"
+      },
+      "ev_fault_connector_current": {
+        "name": "EV charger connector current fault"
+      },
+      "ev_fault_dc_residual_current_c": {
+        "name": "EV charger DC residual current fault C"
+      }
+    },
     "number": {
       "settings_sequence": {
         "name": "Settings sequence"
@@ -2442,6 +2861,78 @@
     "equipment_not_detected": {
       "title": "{equipment} is no longer detected",
       "description": "{installation} was set up with {equipment}, but the inverter now reports that it is not there. The {equipment} entities stay and show whatever the inverter answers. Check the {equipment}, or set it to Not fitted in Configure to remove its entities."
+    },
+    "model_mismatch": {
+      "title": "{installation} is set to the wrong model",
+      "description": "{installation} is set to {selected_model}, but the device at its address identifies as {detected_model}, so it was not loaded. Adopt the {detected_model} here to keep this installation's entities and history, or check the address in Configure.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Adopt the detected inverter",
+            "description": "{installation} is set to a different inverter than the one at its address. The device reports {model} with serial {serial}. Adopt it? Your entities, their IDs and their historical data stay with this installation, and the device details change. Allow control and every other setting stay as they are."
+          }
+        },
+        "error": {
+          "cannot_connect": "The inverter could not be reached. Check that it is on and that nothing else holds the connection, then try again.",
+          "timeout": "The inverter did not answer in time. Try again.",
+          "read_rejected": "The inverter refused a required reading. Try again.",
+          "invalid_device_data": "The inverter answered with data that could not be read. Try again.",
+          "unsupported_device": "The device at the address is not a recognised model, so there is nothing to adopt. Choose its model in Configure.",
+          "already_configured": "Another installation already uses this inverter, so it cannot be adopted here.",
+          "device_changed": "The device now reports {model} with serial {serial}, which is not what you were shown before. Confirm again to adopt what is shown now."
+        },
+        "abort": {
+          "entry_removed": "This installation no longer exists.",
+          "already_configured": "Another installation already uses this inverter, so it cannot be adopted here.",
+          "prefix_unavailable": "The entity ID prefix of this installation is no longer available."
+        }
+      }
+    },
+    "identity_mismatch": {
+      "title": "{installation} now reaches a different inverter",
+      "description": "{installation} was set up with the inverter with serial {approved_serial}, but the device at its address has serial {found_serial}. Adopt the new inverter here to keep this installation's entities and history, or check the address in Configure.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Adopt the detected inverter",
+            "description": "{installation} is set to a different inverter than the one at its address. The device reports {model} with serial {serial}. Adopt it? Your entities, their IDs and their historical data stay with this installation, and the device details change. Allow control and every other setting stay as they are."
+          }
+        },
+        "error": {
+          "cannot_connect": "The inverter at this address could not be reached, so its serial could not be checked. Make sure it is powered and not held by another Modbus client, then confirm again.",
+          "timeout": "The inverter took too long to give its serial. Confirm again in a moment.",
+          "read_rejected": "The inverter refused a reading needed to check its serial. Confirm again in a moment.",
+          "invalid_device_data": "The inverter gave a serial that could not be read. Confirm again in a moment.",
+          "unsupported_device": "The device now at this address is not a recognised model, so its serial cannot be adopted. Choose its model in Configure.",
+          "already_configured": "The inverter now at this address already belongs to another installation, so it cannot be adopted here.",
+          "device_changed": "The inverter at this address now has serial {serial} and reports {model}, which differs from what you were shown. Confirm again to adopt exactly what is listed now."
+        },
+        "abort": {
+          "entry_removed": "This installation has been removed, so there is nothing to adopt the inverter into.",
+          "already_configured": "The inverter now at this address already belongs to another installation, so it cannot be adopted here.",
+          "prefix_unavailable": "The entity ID prefix of this installation can no longer be used, so the inverter was not adopted."
+        }
+      }
+    },
+    "unsupported_device": {
+      "title": "{installation} reaches an unrecognised device",
+      "description": "The device at the address of {installation} reports type {device_type}, which is not a recognised model. It was not loaded. A model can be chosen in Configure, where it is used unverified."
+    },
+    "registers_refused": {
+      "title": "{installation} has readings the inverter refuses",
+      "description": "The inverter keeps refusing these readings of {installation}, so they are no longer read: {entities}. They are tried again once a day and whenever the integration loads, and this repair goes away by itself when they answer again. Disabling them stops them being read for good.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Disable the refused entities",
+            "description": "Disable these entities of {installation}? They stop being read: {entities}. You can enable them again from the entity settings."
+          }
+        }
+      }
+    },
+    "endpoint_unreachable": {
+      "title": "{installation} has stopped answering",
+      "description": "{installation} has not answered at {host}:{port} for 15 minutes. Check that the inverter and its communication module have power, that the network between Home Assistant and the inverter works, and that no other Modbus client holds the connection. This repair goes away at the first good reading."
     }
   },
   "exceptions": {

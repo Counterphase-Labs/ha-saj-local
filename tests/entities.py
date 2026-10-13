@@ -109,6 +109,7 @@ class FakeCoordinator:
 def register_of(*, kind: EntityKind, **changes: object) -> Register:
     forms: dict[EntityKind, dict[str, object]] = {
         EntityKind.SENSOR: {},
+        EntityKind.BINARY_SENSOR: {"quantity": Quantity.PROBLEM},
         EntityKind.NUMBER: {"range": Range(minimum=0, maximum=100)},
         EntityKind.SELECT: {"options": {0: "first", 1: "second"}},
         EntityKind.SWITCH: {"range": Range(minimum=0, maximum=1)},

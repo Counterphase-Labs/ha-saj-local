@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from custom_components.saj_local import diagnostics as diagnostics_module
 from custom_components.saj_local.const import PowerSchedule
 from custom_components.saj_local.coordinator import LastWrite, WriteStatistics
 from custom_components.saj_local.diagnostics import async_get_config_entry_diagnostics
@@ -51,6 +52,22 @@ HASS = SimpleNamespace(
 )
 
 
+class OpenIssues:
+    def __init__(self) -> None:
+        self.keys: list[str] = []
+        self.refused: frozenset[str] = frozenset()
+
+
+@pytest.fixture(autouse=True)
+def open_issues(monkeypatch) -> OpenIssues:
+    opened = OpenIssues()
+    monkeypatch.setattr(
+        diagnostics_module, "open_issue_keys", lambda **_: list(opened.keys)
+    )
+    monkeypatch.setattr(diagnostics_module, "open_refusals", lambda **_: opened.refused)
+    return opened
+
+
 class FakeClient:
     late_frames_discarded = 0
 
@@ -95,7 +112,10 @@ class FakeCoordinator:
         self.last_read = frozenset()
         self.device = DEVICE
         self.poller = FakePoller()
-        self.guard = SimpleNamespace(allowance=FakeAllowance())
+        self.guard = SimpleNamespace(
+            allowance=FakeAllowance(), failing_for=self.failing_for
+        )
+        self.failing = None
         self.writes = WriteStatistics()
         self.ems = EmsOwnership()
         self.heartbeat_interval = 60
@@ -104,6 +124,10 @@ class FakeCoordinator:
         self.power_state = {}
         self.schedules = ()
         self.outstanding = {}
+
+    def failing_for(self, *, now):
+        assert now == NOW
+        return self.failing
 
     def power_running(self, *, function):
         return self.power_state.get(function)
@@ -606,3 +630,89 @@ def _entry_for(coordinator):
             coordinator=coordinator,
         ),
     )
+
+
+HS3_DEVICE = Device("PRIVATE-SERIAL", 0x1610, 12000, HS3, detected=True)
+GRID_LOST_WORDS = {
+    "inverter_fault_word_1": 1 << 23,
+    "inverter_fault_word_3": (1 << 23) | (1 << 31),
+    "inverter_fault_word_2": 0b100,
+    "battery_fault_word_1": 0,
+}
+
+
+async def test_diagnostics_list_the_fault_words_active_faults_and_unrecognised_bits():
+    coordinator = FakeCoordinator(set(), Telemetry(values=GRID_LOST_WORDS))
+    coordinator.device = HS3_DEVICE
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry_of(coordinator))
+
+    assert result["faults"]["inverter"] == {
+        "words": {
+            "0x4005": "0x00800000",
+            "0x4007": "0x00000004",
+            "0x4009": "0x80800000",
+        },
+        "active": ["inverter_fault_bus_imbalance", "inverter_fault_grid_lost"],
+        "unrecognised": ["0x4007:2"],
+    }
+    assert result["faults"]["battery"] == {
+        "words": {"0x400b": "0x00000000"},
+        "active": [],
+        "unrecognised": [],
+    }
+    assert result["faults"]["ev_charger"]["words"] == {}
+
+
+async def test_diagnostics_show_the_codes_of_the_battery_pack_words():
+    coordinator = FakeCoordinator(
+        set(),
+        Telemetry(values={"battery_pack1_fault": 0, "battery_pack1_warning": 5}),
+    )
+    coordinator.device = HS3_DEVICE
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry_of(coordinator))
+
+    assert result["faults"]["pack_codes"] == {
+        "battery_pack1_fault": 0,
+        "battery_pack1_warning": 5,
+    }
+
+
+async def test_diagnostics_without_data_report_no_fault_words():
+    coordinator = FakeCoordinator(set(), None)
+    coordinator.device = HS3_DEVICE
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry_of(coordinator))
+
+    assert all(
+        equipment["words"] == {}
+        for name, equipment in result["faults"].items()
+        if name != "pack_codes"
+    )
+    assert result["faults"]["pack_codes"] == {}
+
+
+@pytest.mark.parametrize("failing", [None, 421.5])
+async def test_diagnostics_report_how_long_the_endpoint_has_been_failing(failing):
+    coordinator = FakeCoordinator(set(), Telemetry(values={}))
+    coordinator.failing = failing
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry_of(coordinator))
+
+    assert result["failing_for_seconds"] == failing
+
+
+async def test_diagnostics_list_the_open_issues_and_the_keys_of_the_refusal_issue(
+    open_issues,
+):
+    open_issues.keys = ["registers_refused"]
+    open_issues.refused = frozenset({"pv_power", "battery_soc"})
+    coordinator = FakeCoordinator(set(), Telemetry(values={}))
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry_of(coordinator))
+
+    assert result["repair_issues"] == {
+        "open": ["registers_refused"],
+        "refused_keys": ["battery_soc", "pv_power"],
+    }

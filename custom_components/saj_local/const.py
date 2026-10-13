@@ -33,6 +33,17 @@ CONF_FITTED_EQUIPMENT = "fitted_equipment"
 CONF_HIGHEST_PACK_COUNT = "highest_pack_count"
 EQUIPMENT_SELECTOR = "equipment"
 EQUIPMENT_ISSUE_TRANSLATION_KEY = "equipment_not_detected"
+ISSUE_MODEL_MISMATCH = "model_mismatch"
+ISSUE_IDENTITY_MISMATCH = "identity_mismatch"
+ISSUE_UNSUPPORTED_DEVICE = "unsupported_device"
+ISSUE_REGISTERS_REFUSED = "registers_refused"
+ISSUE_ENDPOINT_UNREACHABLE = "endpoint_unreachable"
+MODEL_ISSUES = (
+    ISSUE_MODEL_MISMATCH,
+    ISSUE_IDENTITY_MISMATCH,
+    ISSUE_UNSUPPORTED_DEVICE,
+)
+UNREACHABLE_AFTER = 15 * 60
 OBJECT_ID_ROOT = "saj"
 KEY_PLACEHOLDER = "<key>"
 DOMAIN_PLACEHOLDER = "<domain>"
@@ -57,6 +68,7 @@ REQUEST_TIMEOUT = 5
 EMS_RELEASE_TIMEOUT = 5
 PLATFORMS = (
     Platform.SENSOR,
+    Platform.BINARY_SENSOR,
     Platform.NUMBER,
     Platform.SELECT,
     Platform.SWITCH,

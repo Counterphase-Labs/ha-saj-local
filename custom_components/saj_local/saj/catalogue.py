@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 from itertools import pairwise
 from typing import TYPE_CHECKING
 
-from .codec import Encoding, Range
+from .codec import WORD_BITS, Encoding, Range
 from .definitions import (
     DEFINITIONS,
     FAMILY_BY_NAME,
@@ -16,6 +16,8 @@ from .definitions import (
     Operation,
     Quantity,
     Unit,
+    fault_summary_key,
+    fault_unrecognised_key,
 )
 from .models import (
     ENABLED_WITHOUT_EVIDENCE,
@@ -33,11 +35,13 @@ if TYPE_CHECKING:
 
     from .codec import BitRange, Format
     from .models import Equipment
+    from .models.faults import FaultMap, Source
 
 ASSUMED_CORE_PHASES = 1
 ASSUMED_CORE_STRINGS = 2
 REALTIME_SPAN = "realtime"
 ENERGY_BLOCK = "energy"
+TRIMMED_OPERATIONS = frozenset({Operation.SUM, Operation.ANY_BIT})
 
 
 class CatalogueError(ValueError):
@@ -148,6 +152,10 @@ class Register:
         return self.definition.packs
 
     @property
+    def exposed(self) -> bool:
+        return self.definition.exposed
+
+    @property
     def sources(self) -> tuple[str, ...]:
         if self.definition.combination is None:
             return ()
@@ -166,6 +174,11 @@ class Catalogue:
         by_key = _definitions_by_key(definitions=definitions)
         effective = _apply_replacements(profile=profile, definitions=by_key)
         placements = _placements(profile=profile, families=families)
+        fault_placements, fault_definitions = _fault_rows(
+            profile=profile, definitions=effective, placements=placements
+        )
+        placements = (*placements, *fault_placements)
+        effective = {**effective, **fault_definitions}
         _require_unique_keys(placements=placements)
         registers = tuple(
             _register(placement=placement, definitions=effective)
@@ -354,10 +367,172 @@ def _register(
 
 
 def _enabled_by_default(*, definition: Definition, evidence: Evidence) -> bool:
-    return evidence in ENABLING_EVIDENCE or (
-        definition.equipment is not None
-        and definition.equipment in ENABLED_WITHOUT_EVIDENCE
+    return (
+        evidence in ENABLING_EVIDENCE
+        or definition.quantity is Quantity.PROBLEM
+        or (
+            definition.equipment is not None
+            and definition.equipment in ENABLED_WITHOUT_EVIDENCE
+        )
     )
+
+
+@dataclass(frozen=True)
+class _Derived:
+    key: str
+    combination: Combination
+    evidence: Evidence
+
+
+def _defined(*, key: str, definitions: Mapping[str, Definition]) -> Definition:
+    definition = definitions.get(key)
+    if definition is None:
+        message = f"Fault key {key} has no definition"
+        raise CatalogueError(message)
+    return definition
+
+
+def _require_fault_words(
+    *,
+    fault_map: FaultMap,
+    definitions: Mapping[str, Definition],
+    placed: Mapping[str, Placement],
+) -> None:
+    for key, register in fault_map.words.items():
+        _defined(key=key, definitions=definitions)
+        placement = placed.get(key)
+        if placement is None or placement.address != register:
+            message = f"Fault word {key} is not a row at {register:#06x}"
+            raise CatalogueError(message)
+
+
+def _require_fault_sources(
+    *, fault_map: FaultMap, definitions: Mapping[str, Definition]
+) -> None:
+    word_of = {register: key for key, register in fault_map.words.items()}
+    claimed: dict[Source, str] = {}
+    for key in fault_map.named:
+        definition = _defined(key=key, definitions=definitions)
+        for source in fault_map.sources_of(key=key):
+            word_key = word_of.get(source.register)
+            if word_key is None:
+                message = f"Fault {key} reports {source}, which lies in no fault word"
+                raise CatalogueError(message)
+            word = definitions[word_key]
+            if not 0 <= source.bit < WORD_BITS * word.word_count:
+                message = f"Fault {key} reports {source}, which lies outside its word"
+                raise CatalogueError(message)
+            if word.equipment != definition.equipment:
+                message = f"Fault {key} reports {source} of another equipment"
+                raise CatalogueError(message)
+            if source in claimed:
+                message = f"{source} is reported by both {claimed[source]} and {key}"
+                raise CatalogueError(message)
+            claimed[source] = key
+
+
+def _fault_rows(
+    *,
+    profile: Profile,
+    definitions: Mapping[str, Definition],
+    placements: Sequence[Placement],
+) -> tuple[tuple[Placement, ...], dict[str, Definition]]:
+    fault_map = profile.faults
+    placed = {placement.key: placement for placement in placements}
+    _require_fault_words(fault_map=fault_map, definitions=definitions, placed=placed)
+    _require_fault_sources(fault_map=fault_map, definitions=definitions)
+    derived: list[_Derived] = []
+    for equipment in dict.fromkeys(
+        definitions[key].equipment for key in fault_map.words
+    ):
+        derived.extend(
+            _derived_for(
+                equipment=equipment,
+                fault_map=fault_map,
+                definitions=definitions,
+                placements=placements,
+            )
+        )
+    return (
+        tuple(
+            Placement(key=item.key, address=None, evidence=item.evidence)
+            for item in derived
+        ),
+        {
+            item.key: replace(
+                _defined(key=item.key, definitions=definitions),
+                combination=item.combination,
+            )
+            for item in derived
+        },
+    )
+
+
+def _derived_for(
+    *,
+    equipment: Equipment | None,
+    fault_map: FaultMap,
+    definitions: Mapping[str, Definition],
+    placements: Sequence[Placement],
+) -> list[_Derived]:
+    word_keys = tuple(
+        key for key in fault_map.words if definitions[key].equipment == equipment
+    )
+    evidence = next(
+        placement.evidence for placement in placements if placement.key == word_keys[0]
+    )
+    problems = tuple(
+        placement.key
+        for placement in placements
+        if (definition := definitions.get(placement.key)) is not None
+        and definition.quantity is Quantity.PROBLEM
+        and definition.equipment == equipment
+        and definition.combination is None
+    )
+    derived = [
+        _Derived(
+            key=fault_summary_key(equipment=equipment),
+            combination=Combination(
+                operation=Operation.ANY_BIT, sources=(*word_keys, *problems)
+            ),
+            evidence=evidence,
+        ),
+        _Derived(
+            key=fault_unrecognised_key(equipment=equipment),
+            combination=Combination(
+                operation=Operation.ANY_BIT,
+                sources=word_keys,
+                masks={
+                    key: fault_map.unmapped_mask(register=fault_map.words[key])
+                    for key in word_keys
+                },
+            ),
+            evidence=evidence,
+        ),
+    ]
+    for key in fault_map.named:
+        if definitions[key].equipment != equipment:
+            continue
+        involved = tuple(
+            word
+            for word in word_keys
+            if fault_map.mask_of(key=key, register=fault_map.words[word])
+        )
+        derived.append(
+            _Derived(
+                key=key,
+                combination=Combination(
+                    operation=Operation.ANY_BIT,
+                    sources=involved,
+                    masks={
+                        word: fault_map.mask_of(key=key, register=fault_map.words[word])
+                        for word in involved
+                    },
+                ),
+                evidence=evidence,
+            )
+        )
+    return derived
 
 
 def _require_writable_forms(*, registers: Iterable[Register]) -> None:
@@ -534,23 +709,29 @@ def _within_pack_limit(*, register: Register, pack_limit: int | None) -> bool:
 def _combination_available(*, register: Register, present: set[str]) -> bool:
     if register.combination is None:
         return True
-    if register.combination.operation is Operation.SUM:
+    if register.combination.operation in TRIMMED_OPERATIONS:
         return any(source in present for source in register.sources)
     return all(source in present for source in register.sources)
 
 
 def _for_shape(*, register: Register, present: set[str], shape: Shape) -> Register:
     updated = register
-    if (
-        register.combination is not None
-        and register.combination.operation is Operation.SUM
-    ):
+    combination = register.combination
+    if combination is not None and combination.operation in TRIMMED_OPERATIONS:
         sources = tuple(source for source in register.sources if source in present)
         updated = replace(
             updated,
             definition=replace(
                 register.definition,
-                combination=Combination(operation=Operation.SUM, sources=sources),
+                combination=Combination(
+                    operation=combination.operation,
+                    sources=sources,
+                    masks={
+                        source: mask
+                        for source, mask in combination.masks.items()
+                        if source in sources
+                    },
+                ),
             ),
         )
     if shape.assumed and (
@@ -594,6 +775,18 @@ def device_unread_registers(*, fit: Fit) -> tuple[Register, ...]:
         shape=fit.profile.shape_of(device_type=fit.device_type),
         equipment=fit.equipment,
         pack_limit=fit.pack_limit,
+    )
+
+
+def hidden_sources(*, fit: Fit, keys: Collection[str]) -> frozenset[str]:
+    registers = device_read_registers(fit=fit)
+    hidden = {register.key for register in registers if not register.exposed}
+    return frozenset(
+        source
+        for register in registers
+        if register.key in keys
+        for source in register.sources
+        if source in hidden
     )
 
 

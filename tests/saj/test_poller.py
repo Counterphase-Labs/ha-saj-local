@@ -385,6 +385,28 @@ async def test_a_suspension_is_warned_once_and_a_lifted_suspension_is_informed(c
     assert "a" in infos[0].getMessage()
 
 
+async def test_many_keys_suspended_or_lifted_together_make_one_line_each(caplog):
+    harness = Harness()
+    harness.schedule.due_keys = frozenset({"a", "b", "c", "d"})
+    harness.health.newly_suspended = frozenset({"c", "b"})
+    harness.health.lifted = frozenset({"d", "a"})
+    harness.outcomes = [
+        Readout(
+            values={"a": 1, "d": 1},
+            refusals={"b": 5, "c": 5},
+            outcomes=(RequestOutcome(rows=ROW_C, keys=frozenset({"b", "c"}), code=5),),
+        )
+    ]
+
+    with caplog.at_level(logging.INFO):
+        await harness.poller().run(enabled={"a", "b", "c", "d"})
+
+    assert [r.getMessage() for r in caplog.records] == [
+        "SAJ sensors a, d answer again and are no longer suspended",
+        "SAJ sensors b, c suspended after repeated refusals (code 5)",
+    ]
+
+
 async def test_refusals_that_do_not_change_suspension_are_silent(caplog):
     harness = Harness()
     harness.schedule.due_keys = frozenset({"a"})
@@ -410,7 +432,7 @@ LINK_FAILURES = [
     OSError("socket"),
     ValueError("bad serial"),
     UnsupportedDeviceError(0x7777),
-    IdentityChangedError(),
+    IdentityChangedError(serial="OTHER"),
 ]
 BUSY_FAILURES = [
     ModbusError(ModbusErrorMessage.EXCEPTION_RESPONSE, exception_code=4),
@@ -608,6 +630,7 @@ async def test_a_stale_reopen_that_finds_another_device_fails_the_cycle():
         await harness.poller().run(enabled={"a"})
 
     assert isinstance(caught.value.cause, IdentityChangedError)
+    assert caught.value.cause.serial == OTHER_DEVICE.serial
     assert len(harness.reads) == 1
 
 
@@ -676,8 +699,12 @@ async def test_poller_exposes_failure_and_refusal_state_for_diagnostics():
     assert poller.refusals == {"a": Refusal(count=1, code=2, retest_at=None)}
 
 
-def test_the_identity_error_carries_a_fixed_message():
-    assert "identity" in str(IdentityChangedError())
+def test_the_identity_error_carries_a_fixed_message_and_the_serial_found():
+    error = IdentityChangedError(serial="OTHER")
+
+    assert "identity" in str(error)
+    assert "OTHER" not in str(error)
+    assert error.serial == "OTHER"
 
 
 def test_a_failed_cycle_error_reads_like_its_cause():

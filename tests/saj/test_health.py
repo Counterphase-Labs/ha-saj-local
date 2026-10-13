@@ -1,7 +1,14 @@
 import pytest
 
 from saj.catalogue import Row
-from saj.health import REFUSAL_THRESHOLD, RETEST_PERIOD, Break, ReadHealth, Region
+from saj.health import (
+    REFUSAL_THRESHOLD,
+    RETEST_PERIOD,
+    Break,
+    ReadHealth,
+    Region,
+    tracked_refusals,
+)
 
 
 def _refuse(
@@ -328,3 +335,24 @@ def test_a_refused_part_of_a_narrowed_half_leaves_the_other_rows_narrowed():
 
     assert health.narrowing == _regions((12, 13), (10,))
     assert health.breaks == frozenset()
+
+
+@pytest.mark.parametrize(
+    ("tracked", "suspended", "enabled", "answered", "expected"),
+    [
+        (set(), set(), {"a"}, set(), set()),
+        (set(), {"a"}, {"a"}, set(), {"a"}),
+        ({"a"}, set(), {"a"}, set(), {"a"}),
+        ({"a"}, {"a"}, {"a"}, set(), {"a"}),
+        ({"a"}, set(), {"a"}, {"a"}, set()),
+        ({"a", "b"}, set(), {"a"}, set(), {"a"}),
+        ({"a"}, {"b"}, {"a", "b"}, {"a"}, {"b"}),
+        (set(), {"a"}, set(), set(), set()),
+    ],
+)
+def test_a_key_stays_tracked_until_it_answers_or_stops_being_read(
+    tracked, suspended, enabled, answered, expected
+):
+    assert tracked_refusals(
+        tracked=tracked, suspended=suspended, enabled=enabled, answered=answered
+    ) == frozenset(expected)

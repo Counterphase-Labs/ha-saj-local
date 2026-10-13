@@ -23,10 +23,17 @@ from .coordinator import Installation, SajCoordinator, power_control_store
 from .equipment import (
     EquipmentReport,
     PackReport,
-    remove_equipment_issues,
     settle_equipment,
 )
 from .errors import HANDLED_ERRORS, translate_error
+from .issues import (
+    check_unreachable,
+    clear_model_issues,
+    model_finding,
+    raise_identity_issue,
+    raise_model_issue,
+    remove_issues,
+)
 from .saj.client import ClientEnvironment, ModbusError, ModbusTcpClient
 from .saj.control import Control
 from .saj.device import Device, identify
@@ -56,6 +63,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         host=entry.data[CONF_HOST],
         port=entry.data.get(CONF_PORT, DEFAULT_PORT),
     )
+    check_unreachable(hass=hass, entry=entry, guard=guard, now=hass.loop.time())
     if guard.retry_in(now=hass.loop.time()) > 0:
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN, translation_key="backing_off"
@@ -69,7 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     try:
         device = await identify(client=client, selection=model_selection)
-        _validate_identity(device=device, serial=entry.unique_id)
+        _validate_identity(hass=hass, entry=entry, device=device)
         device, equipment, packs = await settle_equipment(
             hass=hass, entry=entry, client=client, device=device
         )
@@ -93,10 +101,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_config_entry_first_refresh()
     except HANDLED_ERRORS as err:
         await client.close()
+        finding = model_finding(error=err)
+        if finding is not None:
+            raise_model_issue(hass=hass, entry=entry, finding=finding)
         if isinstance(err, ModbusError):
             guard.failed(
                 now=hass.loop.time(), base_delay=_shortest_interval(entry=entry)
             )
+            check_unreachable(hass=hass, entry=entry, guard=guard, now=hass.loop.time())
         translation = translate_error(error=err)
         failure = (
             ConfigEntryNotReady if isinstance(err, ModbusError) else ConfigEntryError
@@ -150,7 +162,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    remove_equipment_issues(hass=hass, entry=entry)
+    remove_issues(hass=hass, entry=entry)
     await power_control_store(hass=hass, entry_id=entry.entry_id).async_remove()
 
 
@@ -181,8 +193,12 @@ def _shortest_interval(*, entry: ConfigEntry) -> int:
     )
 
 
-def _validate_identity(*, device: Device, serial: str | None) -> None:
-    if device.serial != serial:
+def _validate_identity(
+    *, hass: HomeAssistant, entry: ConfigEntry, device: Device
+) -> None:
+    if device.serial != entry.unique_id:
+        raise_identity_issue(hass=hass, entry=entry, serial=device.serial)
         raise ConfigEntryError(
             translation_domain=DOMAIN, translation_key="identity_mismatch"
         )
+    clear_model_issues(hass=hass, entry=entry)

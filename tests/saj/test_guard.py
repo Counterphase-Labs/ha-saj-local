@@ -102,3 +102,18 @@ def test_writes_are_counted_apart_from_the_request_budget():
         guard.allowance.record(now=0)
 
     assert guard.budget.delay(now=1) == 0
+
+
+def test_the_failing_time_runs_from_the_first_failure_of_a_run_to_a_success():
+    guard = EndpointGuard()
+    assert guard.failing_for(now=50) is None
+
+    guard.failed(now=100, base_delay=10)
+    guard.failed(now=130, base_delay=10)
+    assert guard.failing_for(now=400) == 300
+
+    guard.succeeded()
+    assert guard.failing_for(now=400) is None
+
+    guard.failed(now=500, base_delay=10)
+    assert guard.failing_for(now=520) == 20

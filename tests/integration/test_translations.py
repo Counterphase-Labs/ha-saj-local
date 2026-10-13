@@ -1,9 +1,12 @@
 import json
+import string
 from pathlib import Path
 
 import pytest
 
 from custom_components.saj_local.config_flow import (
+    ABORT_ALREADY_CONFIGURED,
+    ABORT_PREFIX_UNAVAILABLE,
     ERROR_CONTROL_NOT_ALLOWED,
     ERROR_FUNCTION_SCHEDULED,
     ERROR_INVALID_EQUIPMENT,
@@ -14,6 +17,15 @@ from custom_components.saj_local.const import (
     CONF_FUNCTION,
     CONF_SCHEDULE,
     EQUIPMENT_ISSUE_TRANSLATION_KEY,
+    ISSUE_ENDPOINT_UNREACHABLE,
+    ISSUE_IDENTITY_MISMATCH,
+    ISSUE_MODEL_MISMATCH,
+    ISSUE_REGISTERS_REFUSED,
+    ISSUE_UNSUPPORTED_DEVICE,
+)
+from custom_components.saj_local.repairs import (
+    ABORT_ENTRY_REMOVED,
+    ERROR_DEVICE_CHANGED,
 )
 from custom_components.saj_local.saj.catalogue import (
     CATALOGUES,
@@ -59,7 +71,7 @@ POWER_ENTITIES = {
 
 
 def _shipped_registers(*, profile_key: str):
-    return CATALOGUES[profile_key].registers
+    return [row for row in CATALOGUES[profile_key].registers if row.exposed]
 
 
 @pytest.mark.parametrize("profile_key", PROFILE_KEYS)
@@ -121,8 +133,8 @@ def test_there_are_no_option_labels_for_options_a_row_does_not_have():
     assert labelled == options_of
 
 
-def test_only_the_seven_entity_platforms_are_translated():
-    assert set(ENTITY_TRANSLATIONS) <= {kind.value for kind in EntityKind}
+def test_the_entity_platforms_are_the_entity_kinds():
+    assert set(ENTITY_TRANSLATIONS) == {kind.value for kind in EntityKind}
 
 
 def test_the_not_enabled_error_names_where_to_switch_control_on():
@@ -234,6 +246,7 @@ def test_an_invalid_equipment_choice_has_an_error_text():
 
 
 ISSUES = TRANSLATIONS["issues"]
+ERROR_ALREADY_CONFIGURED = ABORT_ALREADY_CONFIGURED
 
 
 def test_the_equipment_issue_names_the_installation_and_the_equipment_and_what_to_do():
@@ -247,7 +260,75 @@ def test_the_equipment_issue_names_the_installation_and_the_equipment_and_what_t
 
 
 def test_there_is_a_translation_for_every_issue_the_integration_raises():
-    assert set(ISSUES) == {EQUIPMENT_ISSUE_TRANSLATION_KEY}
+    assert set(ISSUES) == {
+        EQUIPMENT_ISSUE_TRANSLATION_KEY,
+        ISSUE_MODEL_MISMATCH,
+        ISSUE_IDENTITY_MISMATCH,
+        ISSUE_UNSUPPORTED_DEVICE,
+        ISSUE_REGISTERS_REFUSED,
+        ISSUE_ENDPOINT_UNREACHABLE,
+    }
+
+
+@pytest.mark.parametrize(
+    ("key", "placeholders"),
+    [
+        (ISSUE_MODEL_MISMATCH, {"installation", "selected_model", "detected_model"}),
+        (ISSUE_IDENTITY_MISMATCH, {"installation", "approved_serial", "found_serial"}),
+        (ISSUE_UNSUPPORTED_DEVICE, {"installation", "device_type"}),
+        (ISSUE_REGISTERS_REFUSED, {"installation", "entities"}),
+        (ISSUE_ENDPOINT_UNREACHABLE, {"installation", "host", "port"}),
+    ],
+)
+def test_each_issue_says_what_happened_with_the_values_it_is_raised_with(
+    key, placeholders
+):
+    issue = ISSUES[key]
+    text = issue["title"] + issue["description"]
+
+    assert placeholders <= {
+        name for _, name, _, _ in string.Formatter().parse(text) if name
+    }
+    assert {
+        name for _, name, _, _ in string.Formatter().parse(text) if name
+    } <= placeholders
+
+
+@pytest.mark.parametrize(
+    "key", [ISSUE_MODEL_MISMATCH, ISSUE_IDENTITY_MISMATCH, ISSUE_REGISTERS_REFUSED]
+)
+def test_a_fixable_issue_has_a_confirm_step_with_a_title_and_description(key):
+    confirm = ISSUES[key]["fix_flow"]["step"]["confirm"]
+
+    assert confirm["title"]
+    assert "{installation}" in confirm["description"]
+
+
+@pytest.mark.parametrize("key", [ISSUE_MODEL_MISMATCH, ISSUE_IDENTITY_MISMATCH])
+def test_a_model_fix_shows_what_was_detected_and_every_way_it_can_fail(key):
+    flow = ISSUES[key]["fix_flow"]
+
+    assert "{model}" in flow["step"]["confirm"]["description"]
+    assert "{serial}" in flow["step"]["confirm"]["description"]
+    assert set(flow["error"]) == {
+        "cannot_connect",
+        "timeout",
+        "read_rejected",
+        "invalid_device_data",
+        "unsupported_device",
+        ERROR_ALREADY_CONFIGURED,
+        ERROR_DEVICE_CHANGED,
+    }
+    assert set(flow["abort"]) == {
+        ABORT_ENTRY_REMOVED,
+        ABORT_ALREADY_CONFIGURED,
+        ABORT_PREFIX_UNAVAILABLE,
+    }
+
+
+@pytest.mark.parametrize("key", [ISSUE_UNSUPPORTED_DEVICE, ISSUE_ENDPOINT_UNREACHABLE])
+def test_an_issue_that_cannot_be_fixed_here_has_no_fix_flow(key):
+    assert "fix_flow" not in ISSUES[key]
 
 
 def test_every_power_control_switch_and_target_has_a_display_name():
@@ -294,3 +375,13 @@ def test_the_power_schedule_names_its_type_and_its_saved_result():
     assert POWER_SCHEDULE["entry_type"]
     assert POWER_SCHEDULE["initiate_flow"]["user"]
     assert POWER_SCHEDULE["abort"]["reconfigure_successful"]
+
+
+def test_no_two_entities_share_a_display_name():
+    names = [
+        entry["name"]
+        for entries in ENTITY_TRANSLATIONS.values()
+        for entry in entries.values()
+    ]
+
+    assert sorted(name for name in set(names) if names.count(name) > 1) == []

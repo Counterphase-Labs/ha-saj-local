@@ -16,6 +16,7 @@ from saj.catalogue import (
     device_read_registers,
     device_registers,
     device_unread_registers,
+    hidden_sources,
     known_keys,
     pack_maximum,
 )
@@ -46,6 +47,7 @@ from saj.models import (
     Shape,
     Span,
 )
+from saj.models.faults import FaultMap
 from saj.models.h2 import PROFILE as H2
 from saj.models.hs3 import PROFILE as HS3
 from tests.profiles import profile
@@ -669,10 +671,10 @@ def test_a_device_gets_the_registers_of_its_types_shape():
 
 
 SHIPPED_SHAPES = [
-    ("hs3", Shape(phases=3, strings=2), 539, 611, 50),
-    ("h2", Shape(phases=1, strings=2), 287, 319, 43),
-    ("h2", Shape(phases=1, strings=3), 295, 327, 46),
-    ("h2", Shape(phases=3, strings=4, assumed=True), 379, 411, 43),
+    ("hs3", Shape(phases=3, strings=2), 547, 746, 179),
+    ("h2", Shape(phases=1, strings=2), 299, 396, 116),
+    ("h2", Shape(phases=1, strings=3), 307, 404, 119),
+    ("h2", Shape(phases=3, strings=4, assumed=True), 391, 488, 116),
 ]
 
 
@@ -689,7 +691,7 @@ def test_shipped_profiles_have_the_catalogued_totals(
     assert sum(register.core for register in registers) == core
 
 
-def test_the_two_shipped_models_share_326_catalogued_rows():
+def test_the_two_shipped_models_share_332_catalogued_rows():
     hs3 = {
         register.row
         for register in CATALOGUES["hs3"].read_registers_for(
@@ -707,8 +709,8 @@ def test_the_two_shipped_models_share_326_catalogued_rows():
     hs3_keys = {r.key for r in CATALOGUES["hs3"].registers if r.readable}
     h2_keys = {r.key for r in CATALOGUES["h2"].registers if r.readable}
 
-    assert len(hs3 & h2) == 326
-    assert len(hs3_keys & h2_keys) == 354
+    assert len(hs3 & h2) == 332
+    assert len(hs3_keys & h2_keys) == 421
 
 
 def test_the_grid_counters_have_a_different_address_in_each_model():
@@ -733,7 +735,9 @@ def test_the_shipped_catalogue_serves_a_shipped_profile():
 
 
 def test_a_profile_that_is_not_shipped_gets_a_catalogue_of_its_own():
-    other = replace(HS3, placements=(), families=(), replacements=(), probes=())
+    other = replace(
+        HS3, placements=(), families=(), replacements=(), probes=(), faults=FaultMap()
+    )
 
     catalogue = catalogue_of(profile=other)
 
@@ -1575,3 +1579,248 @@ def test_the_parallel_rows_of_an_h2_exist_only_when_the_equipment_is_fitted():
 def test_the_parallel_entities_of_both_models_keep_the_same_keys_for_the_six_powers():
     assert set(POWER_ADDRESSES) <= set(_parallel_rows("h2"))
     assert set(POWER_ADDRESSES) <= set(_parallel_rows("hs3"))
+
+
+WORD_A = 0x1010
+WORD_B = 0x1012
+PACK_ONE = 0x1020
+PACK_TWO = 0x1021
+
+
+def _fault_definitions() -> list[Definition]:
+    def problem(key: str, **changes: object) -> Definition:
+        return _definition(
+            key,
+            quantity=Quantity.PROBLEM,
+            kind=EntityKind.BINARY_SENSOR,
+            core=True,
+            **changes,
+        )
+
+    def word(key: str, **changes: object) -> Definition:
+        return _definition(
+            key,
+            quantity=Quantity.CODE,
+            encoding=Encoding.U32,
+            exposed=False,
+            **changes,
+        )
+
+    return [
+        word("word_a"),
+        word("word_b"),
+        word("unplaced"),
+        word("battery_word", equipment=Equipment.BATTERY),
+        problem("alpha"),
+        problem("beta"),
+        problem("cell", equipment=Equipment.BATTERY),
+        problem("pack1", equipment=Equipment.BATTERY, packs=1),
+        problem("pack2", equipment=Equipment.BATTERY, packs=2),
+        problem("inverter_fault", summary=True),
+        problem("inverter_fault_unrecognised"),
+        problem("battery_fault", equipment=Equipment.BATTERY, summary=True),
+        problem("battery_fault_unrecognised", equipment=Equipment.BATTERY),
+    ]
+
+
+def _fault_catalogue(
+    *, faults: FaultMap, extra: tuple[Placement, ...] = (), **changes: object
+) -> Catalogue:
+    placements = (
+        _at("word_a", WORD_A, Evidence.IMPLEMENTED),
+        _at("word_b", WORD_B, Evidence.DOCUMENTED),
+        _at("battery_word", 0x1014, Evidence.DOCUMENTED),
+        _at("pack1", PACK_ONE, Evidence.RESPONDS_UNDOCUMENTED),
+        _at("pack2", PACK_TWO, Evidence.RESPONDS_UNDOCUMENTED),
+        *extra,
+    )
+    return Catalogue(
+        profile=_profile(*placements, faults=faults, **changes),
+        definitions=_fault_definitions(),
+        families={},
+    )
+
+
+FAULT_MAP = FaultMap(
+    words={"word_a": WORD_A, "word_b": WORD_B, "battery_word": 0x1014},
+    named={
+        "alpha": {WORD_A: (0, 1), WORD_B: (3,)},
+        "beta": {WORD_B: (4,)},
+        "cell": {0x1014: (2,)},
+    },
+)
+
+
+def _by_key(catalogue: Catalogue) -> dict[str, Register]:
+    return {register.key: register for register in catalogue.registers}
+
+
+def test_fault_rows_exist_only_where_the_model_maps_a_source_to_them():
+    catalogue = _fault_catalogue(
+        faults=replace(FAULT_MAP, named={"alpha": {WORD_A: (0,)}})
+    )
+
+    keys = set(_by_key(catalogue))
+
+    assert "alpha" in keys
+    assert "beta" not in keys
+    assert "cell" not in keys
+
+
+def test_a_fault_row_combines_the_words_it_reads_with_the_bits_it_maps():
+    rows = _by_key(_fault_catalogue(faults=FAULT_MAP))
+
+    alpha = rows["alpha"]
+
+    assert alpha.address is None
+    assert alpha.combination.operation is Operation.ANY_BIT
+    assert alpha.sources == ("word_a", "word_b")
+    assert alpha.combination.masks == {"word_a": 0b11, "word_b": 0b1000}
+    assert rows["beta"].sources == ("word_b",)
+    assert rows["beta"].combination.masks == {"word_b": 0b10000}
+
+
+def test_the_unrecognised_row_masks_every_bit_that_no_fault_names():
+    rows = _by_key(_fault_catalogue(faults=FAULT_MAP))
+
+    unrecognised = rows["inverter_fault_unrecognised"]
+
+    assert unrecognised.sources == ("word_a", "word_b")
+    assert unrecognised.combination.masks == {
+        "word_a": 0xFFFF_FFFF & ~0b11,
+        "word_b": 0xFFFF_FFFF & ~0b11000,
+    }
+
+
+def test_the_summary_row_reads_every_word_and_every_problem_row_of_its_equipment():
+    rows = _by_key(_fault_catalogue(faults=FAULT_MAP))
+
+    assert rows["inverter_fault"].sources == ("word_a", "word_b")
+    assert rows["inverter_fault"].combination.masks == {}
+    assert rows["battery_fault"].sources == ("battery_word", "pack1", "pack2")
+
+
+def test_every_derived_fault_row_is_enabled_whatever_the_evidence_of_its_words():
+    rows = _by_key(_fault_catalogue(faults=FAULT_MAP))
+
+    assert rows["alpha"].evidence is Evidence.IMPLEMENTED
+    assert rows["beta"].evidence is Evidence.IMPLEMENTED
+    assert rows["cell"].evidence is Evidence.DOCUMENTED
+    assert all(
+        rows[key].core
+        for key in (
+            "alpha",
+            "beta",
+            "cell",
+            "inverter_fault",
+            "inverter_fault_unrecognised",
+            "pack1",
+        )
+    )
+    assert not rows["word_a"].core
+    assert not rows["word_a"].exposed
+    assert rows["alpha"].exposed
+
+
+def test_a_model_without_fault_words_has_no_fault_rows():
+    catalogue = _fault_catalogue(faults=FaultMap())
+
+    assert "inverter_fault" not in _by_key(catalogue)
+
+
+def test_fault_rows_of_equipment_that_is_not_fitted_are_absent():
+    catalogue = _fault_catalogue(faults=FAULT_MAP)
+
+    fitted = {
+        r.key
+        for r in catalogue.registers_for(shape=SHAPE, equipment={Equipment.BATTERY})
+    }
+    unfitted = {r.key for r in catalogue.registers_for(shape=SHAPE, equipment=set())}
+
+    assert {"cell", "battery_fault", "battery_word", "pack1"} <= fitted
+    assert not {"cell", "battery_fault", "battery_word", "pack1"} & unfitted
+    assert {"alpha", "inverter_fault"} <= unfitted
+
+
+def test_the_pack_limit_trims_the_packs_a_summary_depends_on():
+    catalogue = _fault_catalogue(faults=FAULT_MAP)
+
+    rows = {
+        r.key: r
+        for r in catalogue.registers_for(
+            shape=SHAPE, equipment={Equipment.BATTERY}, pack_limit=1
+        )
+    }
+
+    assert "pack2" not in rows
+    assert rows["battery_fault"].sources == ("battery_word", "pack1")
+    assert rows["battery_fault"].combination.masks == {}
+
+
+def test_a_trimmed_mask_keeps_only_the_sources_that_are_present():
+    catalogue = _fault_catalogue(faults=FAULT_MAP)
+
+    rows = {r.key: r for r in catalogue.registers_for(shape=SHAPE, equipment=set())}
+
+    assert rows["alpha"].combination.masks == {"word_a": 0b11, "word_b": 0b1000}
+
+
+@pytest.mark.parametrize(
+    ("faults", "message"),
+    [
+        (
+            FaultMap(words={"missing": WORD_A}, named={}),
+            "Fault key missing has no definition",
+        ),
+        (
+            FaultMap(words={"word_a": 0x1FFF}, named={}),
+            "Fault word word_a is not a row at 0x1fff",
+        ),
+        (
+            FaultMap(words={"unplaced": WORD_A}, named={}),
+            "Fault word unplaced is not a row at",
+        ),
+        (
+            FaultMap(words={"word_a": WORD_A}, named={"nothing": {WORD_A: (0,)}}),
+            "Fault key nothing has no definition",
+        ),
+        (
+            FaultMap(words={"word_a": WORD_A}, named={"alpha": {0x2000: (0,)}}),
+            "lies in no fault word",
+        ),
+        (
+            FaultMap(words={"word_a": WORD_A}, named={"alpha": {WORD_A: (32,)}}),
+            "lies outside its word",
+        ),
+        (
+            FaultMap(words={"word_a": WORD_A}, named={"cell": {WORD_A: (1,)}}),
+            "of another equipment",
+        ),
+        (
+            FaultMap(
+                words={"word_a": WORD_A},
+                named={"alpha": {WORD_A: (1,)}, "beta": {WORD_A: (1,)}},
+            ),
+            "is reported by both alpha and beta",
+        ),
+    ],
+)
+def test_a_fault_map_that_does_not_fit_its_rows_is_rejected(
+    faults: FaultMap, message: str
+):
+    with pytest.raises(CatalogueError, match=message):
+        _fault_catalogue(faults=faults)
+
+
+def test_the_hidden_sources_of_enabled_keys_are_the_words_nobody_shows():
+    fit = Fit(profile=HS3, device_type=0x1610, equipment=ALL_EQUIPMENT)
+
+    assert hidden_sources(fit=fit, keys={"inverter_fault_grid_lost"}) == {
+        "inverter_fault_word_1",
+        "inverter_fault_word_3",
+    }
+    assert hidden_sources(fit=fit, keys={"battery_fault"}) == {"battery_fault_word_1"}
+    assert hidden_sources(fit=fit, keys={"inverter_fault_word_1", "pv_power"}) == (
+        frozenset()
+    )
+    assert hidden_sources(fit=fit, keys=set()) == frozenset()

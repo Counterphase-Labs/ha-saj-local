@@ -16,6 +16,8 @@ from . import (
     Span,
     placements_by_evidence,
 )
+from .faults import FaultMap
+from .shared_faults import INVERTER_FAULT_WORDS, SHARED_INVERTER_FAULTS
 
 PARALLEL_ENERGY_FAMILIES = (
     "parallel_pv_energy",
@@ -37,6 +39,20 @@ PARALLEL_POWER_ENCODINGS = {
     "parallel_backup_load_power": "u16",
     "parallel_grid_load_power": "u16",
 }
+
+FAULTS = FaultMap(
+    words=INVERTER_FAULT_WORDS,
+    named={
+        **SHARED_INVERTER_FAULTS,
+        "inverter_fault_grid_phase_s_overvoltage": {0x4005: (13,), 0x4009: (10,)},
+        "inverter_fault_grid_phase_s_undervoltage": {0x4005: (14,), 0x4009: (11,)},
+        "inverter_fault_pv_overvoltage": {0x4005: (26,), 0x4007: (3,)},
+        "inverter_fault_bus_overvoltage": {0x4007: (0,)},
+        "inverter_fault_bus_undervoltage": {0x4007: (1,)},
+        "inverter_fault_grid_phase": {0x4007: (2,)},
+        "inverter_fault_islanding": {0x4007: (4,)},
+    },
+)
 
 PROFILE = Profile(
     key="h2",
@@ -78,6 +94,9 @@ PROFILE = Profile(
                 "time_of_use_idle_mode": 0x365F,
                 "time_of_use_grid_discharge": 0x3660,
                 "operating_mode": 0x4004,
+                "inverter_fault_word_1": 0x4005,
+                "inverter_fault_word_2": 0x4007,
+                "inverter_fault_word_3": 0x4009,
                 "inverter_temperature": 0x4010,
                 "ambient_temperature": 0x4011,
                 "leakage_current": 0x4012,
@@ -131,6 +150,7 @@ PROFILE = Profile(
                 "battery_charge_current_limit": 0xA037,
             },
             Evidence.DOCUMENTED: {
+                "battery_fault_word_1": 0x400B,
                 "clear_fault_history": 0x8015,
                 "clear_current_fault": 0x8015,
                 "restart_inverter": 0x801A,
@@ -206,6 +226,7 @@ PROFILE = Profile(
         FamilyPlacement(
             family="battery_pack_discharged_energy", evidence=Evidence.IMPLEMENTED
         ),
+        FamilyPlacement(family="battery_pack_faults", evidence=Evidence.IMPLEMENTED),
         FamilyPlacement(family="meter_a_phase", evidence=Evidence.IMPLEMENTED),
         FamilyPlacement(family="meter_b_phase", evidence=Evidence.DOCUMENTED),
         *(
@@ -262,6 +283,7 @@ PROFILE = Profile(
         METER_B_PROBE,
         PARALLEL_PROBE,
     ),
+    faults=FAULTS,
     power_control={
         PowerFunction.BATTERY: OperatingModeMethod(
             mode_key="application_mode",

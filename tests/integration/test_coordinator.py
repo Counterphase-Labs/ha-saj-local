@@ -25,6 +25,7 @@ from custom_components.saj_local.saj.errors import (
     UnknownModelError,
     UnsupportedDeviceError,
 )
+from custom_components.saj_local.saj.faults import FaultWatch
 from custom_components.saj_local.saj.models import ems_rows
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from custom_components.saj_local.saj.poller import (
@@ -36,6 +37,7 @@ from custom_components.saj_local.saj.poller import (
 from custom_components.saj_local.saj.schedule import Cadence
 from custom_components.saj_local.saj.telemetry import Telemetry
 from tests.coordinators import FakeStore, statements
+from tests.issues import IssueRecorder
 from tests.profiles import profile
 
 SUPPORTED_KEYS = frozenset(
@@ -126,6 +128,36 @@ def every_supported_entity_is_enabled(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def issues(monkeypatch) -> IssueRecorder:
+    recorder = IssueRecorder()
+    recorder.opened = frozenset()
+    recorder.install(
+        monkeypatch,
+        module=coordinator_module,
+        names=(
+            "check_unreachable",
+            "clear_model_issues",
+            "clear_unreachable",
+            "raise_model_issue",
+            "sync_refusals",
+        ),
+    )
+    monkeypatch.setattr(
+        coordinator_module, "open_refusals", lambda **_: recorder.opened
+    )
+    return recorder
+
+
+def _run_task(coro, *, name):
+    assert name
+    return asyncio.create_task(coro)
+
+
+async def _no_refresh() -> None:
+    return None
+
+
 def _coordinator(
     *, contexts: set[str] | None = None
 ) -> tuple[SajCoordinator, FakeClient, FakePoller]:
@@ -136,11 +168,19 @@ def _coordinator(
     coordinator.device = DEVICE
     coordinator.model_selection = SELECTION
     coordinator.entry_id = "logical-installation"
+    coordinator._entry = SimpleNamespace(title="Roof inverter")
+    coordinator.guard = object()
+    coordinator._faults = FaultWatch(fault_map=DEVICE.profile.faults)
+    coordinator._packs_on = frozenset()
     coordinator.last_error = None
     coordinator.last_read = frozenset()
     coordinator.unavailable_keys = frozenset()
     coordinator.poller = poller
-    coordinator.hass = SimpleNamespace(loop=SimpleNamespace(time=lambda: NOW))
+    coordinator.hass = SimpleNamespace(
+        loop=SimpleNamespace(time=lambda: NOW),
+        async_create_task=_run_task,
+    )
+    coordinator.async_request_refresh = _no_refresh
     coordinator._values = {}
     coordinator._cycle_lock = asyncio.Lock()
     coordinator._initial_refresh = True
@@ -214,6 +254,7 @@ class RecordingPoller(FakePoller):
 def _entry(*, options=None, subentries=()) -> SimpleNamespace:
     return SimpleNamespace(
         entry_id="logical-installation",
+        title="Roof inverter",
         options={"scan_interval": 47} if options is None else options,
         data={"model": "alpha"},
         subentries={
@@ -582,7 +623,7 @@ async def test_modbus_failure_records_exception_code():
 
 async def test_identity_change_has_specific_translation_and_no_serial_in_last_error():
     coordinator, _client, poller = _coordinator()
-    poller.outcomes = [_failure(IdentityChangedError())]
+    poller.outcomes = [_failure(IdentityChangedError(serial="OTHER"))]
 
     with pytest.raises(UpdateFailed) as caught:
         await coordinator._async_update_data()
@@ -658,6 +699,45 @@ async def test_validation_session_hands_out_the_installation_client_under_lock()
         assert coordinator._cycle_lock.locked()
 
     assert not coordinator._cycle_lock.locked()
+
+
+@pytest.mark.parametrize("fails", [False, True])
+async def test_validation_session_closes_the_client_when_it_ends(fails):
+    coordinator, client, _poller = _coordinator()
+    lock_held_at_close = None
+
+    async def close() -> None:
+        nonlocal lock_held_at_close
+        lock_held_at_close = coordinator._cycle_lock.locked()
+        client.closed = True
+
+    client.close = close
+    lock_held_at_refresh = []
+
+    async def request_refresh() -> None:
+        lock_held_at_refresh.append(coordinator._cycle_lock.locked())
+
+    coordinator.async_request_refresh = request_refresh
+
+    async def validate() -> None:
+        async with coordinator.async_validation_session():
+            assert not client.closed
+            assert not lock_held_at_refresh
+            if fails:
+                failure_message = "validation failed"
+                raise ValueError(failure_message)
+
+    if fails:
+        with pytest.raises(ValueError, match="validation failed"):
+            await validate()
+    else:
+        await validate()
+
+    await asyncio.sleep(0)
+
+    assert client.closed
+    assert lock_held_at_close is True
+    assert lock_held_at_refresh == [False]
 
 
 async def test_validation_session_waits_for_poll_and_serializes_next_poll():
@@ -803,3 +883,225 @@ def test_the_stored_power_state_of_an_installation_has_its_own_versioned_file(
             "saj_local.power_control.entry-1",
         )
     ]
+
+
+HS3_DEVICE = Device("TEST-001", 0x1610, 12000, HS3, detected=True)
+GRID_LOST = {"inverter_fault_word_1": 1 << 23, "inverter_fault_word_3": 1 << 23}
+
+
+def _hs3_coordinator(*, contexts=None):
+    coordinator, client, poller = _coordinator(contexts=contexts)
+    coordinator.device = HS3_DEVICE
+    coordinator._faults = FaultWatch(fault_map=HS3.faults)
+    return coordinator, client, poller
+
+
+def test_the_words_behind_an_enabled_fault_entity_are_read_with_it():
+    coordinator, _, _ = _hs3_coordinator(contexts={"inverter_fault_grid_lost"})
+    coordinator._initial_refresh = False
+
+    assert coordinator.enabled_keys == {
+        "inverter_fault_grid_lost",
+        "inverter_fault_word_1",
+        "inverter_fault_word_3",
+    }
+
+
+async def test_a_good_cycle_clears_the_unreachable_and_model_issues(issues):
+    coordinator, _, _ = _coordinator()
+
+    await coordinator._async_update_data()
+
+    assert issues.called("clear_unreachable") == [
+        {"hass": coordinator.hass, "entry": coordinator._entry}
+    ]
+    assert issues.called("clear_model_issues") == [
+        {"hass": coordinator.hass, "entry": coordinator._entry}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("tracked", "suspended", "read", "synced"),
+    [
+        (set(), set(), {"pv_power"}, None),
+        (set(), {"pv_power"}, set(), {"pv_power"}),
+        ({"pv_power"}, set(), set(), None),
+        ({"pv_power"}, set(), {"pv_power"}, set()),
+        ({"pv_power", "gone"}, {"grid_power"}, set(), {"pv_power", "grid_power"}),
+    ],
+)
+async def test_the_refusal_issue_follows_what_is_suspended_answered_and_still_read(
+    issues, tracked, suspended, read, synced
+):
+    coordinator, _, poller = _coordinator(contexts={"pv_power", "grid_power"})
+    issues.opened = frozenset(tracked)
+    poller.outcomes = [
+        _result(dict.fromkeys(read, 1), suspended=suspended),
+    ]
+
+    await coordinator._async_update_data()
+
+    calls = issues.called("sync_refusals")
+    assert [call["keys"] for call in calls] == ([] if synced is None else [synced])
+    assert all(
+        call["hass"] is coordinator.hass and call["entry"] is coordinator._entry
+        for call in calls
+    )
+
+
+async def test_a_failed_cycle_raises_the_model_issue_it_is_found_to_be(issues):
+    coordinator, _, poller = _coordinator()
+    issues.finding = "finding"
+    cause = UnsupportedDeviceError(0x1234)
+    poller.outcomes = [_failure(cause)]
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+    assert issues.errors == [cause]
+    assert issues.called("raise_model_issue") == [
+        {
+            "hass": coordinator.hass,
+            "entry": coordinator._entry,
+            "finding": "finding",
+        }
+    ]
+
+
+async def test_a_failed_cycle_that_is_no_model_finding_raises_no_model_issue(issues):
+    coordinator, _, poller = _coordinator()
+    poller.outcomes = [_failure(TimeoutError())]
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+    assert issues.called("raise_model_issue") == []
+
+
+async def test_every_failed_cycle_checks_how_long_the_endpoint_has_been_down(issues):
+    coordinator, _, poller = _coordinator()
+    poller.outcomes = [_failure(TimeoutError())]
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+    assert issues.called("check_unreachable") == [
+        {
+            "hass": coordinator.hass,
+            "entry": coordinator._entry,
+            "guard": coordinator.guard,
+            "now": NOW,
+        }
+    ]
+
+
+def _logged(caplog, level):
+    return [r.getMessage() for r in caplog.records if r.levelno == level]
+
+
+async def test_a_fault_turning_on_and_off_is_logged_once_each(caplog):
+    coordinator, _, poller = _hs3_coordinator(contexts=set(GRID_LOST))
+    poller.outcomes = [
+        _result(GRID_LOST),
+        _result(GRID_LOST),
+        _result({"inverter_fault_word_1": 0, "inverter_fault_word_3": 0}),
+    ]
+
+    with caplog.at_level(logging.INFO):
+        for _ in range(3):
+            await coordinator._async_update_data()
+
+    assert _logged(caplog, logging.WARNING) == [
+        "Roof inverter: fault inverter_fault_grid_lost is on"
+    ]
+    assert _logged(caplog, logging.INFO) == [
+        "Roof inverter: fault inverter_fault_grid_lost cleared"
+    ]
+
+
+async def test_an_unrecognised_bit_turning_on_and_off_is_logged_with_its_place(caplog):
+    coordinator, _, poller = _hs3_coordinator(contexts={"inverter_fault_word_2"})
+    poller.outcomes = [
+        _result({"inverter_fault_word_2": 0b100}),
+        _result({"inverter_fault_word_2": 0}),
+    ]
+
+    with caplog.at_level(logging.INFO):
+        await coordinator._async_update_data()
+        await coordinator._async_update_data()
+
+    assert _logged(caplog, logging.WARNING) == [
+        "Roof inverter: unrecognised fault bit 0x4007:2 is set"
+    ]
+    assert _logged(caplog, logging.INFO) == [
+        "Roof inverter: unrecognised fault bit 0x4007:2 cleared"
+    ]
+
+
+async def test_a_battery_pack_fault_is_logged_when_it_turns_on_and_off(caplog):
+    coordinator, _, poller = _hs3_coordinator(
+        contexts={"battery_pack1_fault", "battery_pack1_warning"}
+    )
+    poller.outcomes = [
+        _result({"battery_pack1_fault": 0, "battery_pack1_warning": 5}),
+        _result({"battery_pack1_fault": 0, "battery_pack1_warning": 5}),
+        _result({"battery_pack1_fault": 0, "battery_pack1_warning": 0}),
+    ]
+
+    with caplog.at_level(logging.INFO):
+        for _ in range(3):
+            await coordinator._async_update_data()
+
+    assert _logged(caplog, logging.WARNING) == [
+        "Roof inverter: fault battery_pack1_warning is on"
+    ]
+    assert _logged(caplog, logging.INFO) == [
+        "Roof inverter: fault battery_pack1_warning cleared"
+    ]
+
+
+async def test_a_pack_word_that_is_not_read_is_not_taken_for_a_cleared_fault(caplog):
+    coordinator, _, poller = _hs3_coordinator(contexts={"battery_pack1_warning"})
+    poller.outcomes = [
+        _result({"battery_pack1_warning": 5}),
+        _result({}, unavailable={"battery_pack1_warning"}),
+    ]
+
+    with caplog.at_level(logging.INFO):
+        await coordinator._async_update_data()
+        await coordinator._async_update_data()
+
+    assert _logged(caplog, logging.INFO) == []
+
+
+HIDDEN_EV = {"ev_fault_word_1", "ev_fault_word_2"}
+
+
+async def test_hidden_words_are_never_listed_in_the_refusal_issue(issues):
+    coordinator, _, poller = _hs3_coordinator(contexts={"ev_fault", "pv_power"})
+    poller.outcomes = [_result(suspended={"ev_fault", *HIDDEN_EV})]
+
+    await coordinator._async_update_data()
+
+    assert [call["keys"] for call in issues.called("sync_refusals")] == [{"ev_fault"}]
+
+
+async def test_a_suspended_hidden_word_alone_does_not_open_the_refusal_issue(issues):
+    coordinator, _, poller = _hs3_coordinator(contexts={"ev_fault"})
+    coordinator._initial_refresh = False
+    poller.outcomes = [_result(suspended=HIDDEN_EV)]
+
+    await coordinator._async_update_data()
+
+    assert issues.called("sync_refusals") == []
+
+
+async def test_a_hidden_word_left_in_the_issue_is_dropped_with_its_dependents(issues):
+    coordinator, _, poller = _hs3_coordinator(contexts={"pv_power"})
+    coordinator._initial_refresh = False
+    issues.opened = frozenset({"ev_fault", *HIDDEN_EV})
+    poller.outcomes = [_result({"pv_power": 1})]
+
+    await coordinator._async_update_data()
+
+    assert [call["keys"] for call in issues.called("sync_refusals")] == [set()]

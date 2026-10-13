@@ -28,9 +28,10 @@ RECONNECT_REQUESTS = 3
 
 
 class IdentityChangedError(Exception):
-    def __init__(self) -> None:
+    def __init__(self, *, serial: str) -> None:
         message = "Device identity changed at configured endpoint"
         super().__init__(message)
+        self.serial = serial
 
 
 CYCLE_ERRORS: tuple[type[Exception], ...] = (
@@ -303,7 +304,7 @@ class Poller:
             client=self._client, selection=self._selection
         )
         if current.serial != self._device.serial:
-            raise IdentityChangedError
+            raise IdentityChangedError(serial=current.serial)
 
     async def _fail(self, *, error: Exception) -> NoReturn:
         if isinstance(error, ModbusError) and error.device_unavailable:
@@ -323,11 +324,14 @@ class Poller:
         return now + delay
 
     def _record(self, *, readout: Readout, now: float) -> None:
-        for key in readout.values:
-            if self._health.record_success(key=key):
-                _LOGGER.info(
-                    "SAJ sensor %s answers again and is no longer suspended", key
-                )
+        recovered = sorted(
+            key for key in readout.values if self._health.record_success(key=key)
+        )
+        if recovered:
+            _LOGGER.info(
+                "SAJ sensors %s answer again and are no longer suspended",
+                ", ".join(recovered),
+            )
         for outcome in readout.outcomes:
             if outcome.code is None:
                 self._health.record_request_read(rows=outcome.rows)
@@ -335,10 +339,10 @@ class Poller:
             suspended = self._health.record_request_refused(
                 rows=outcome.rows, keys=outcome.keys, code=outcome.code, now=now
             )
-            for key in sorted(suspended):
+            if suspended:
                 _LOGGER.warning(
-                    "SAJ sensor %s suspended after repeated refusals (code %s)",
-                    key,
+                    "SAJ sensors %s suspended after repeated refusals (code %s)",
+                    ", ".join(sorted(suspended)),
                     outcome.code,
                 )
 

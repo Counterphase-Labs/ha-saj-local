@@ -4,6 +4,8 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from .faults import FaultMap
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -265,6 +267,7 @@ class Profile:
     replacements: tuple[Replacement, ...] = field(default_factory=tuple)
     probes: tuple[Probe, ...] = field(default_factory=tuple)
     power_control: Mapping[PowerFunction, PowerMethod] = field(default_factory=dict)
+    faults: FaultMap = field(default_factory=FaultMap)
 
     @property
     def equipment(self) -> frozenset[Equipment]:

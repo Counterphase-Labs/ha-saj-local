@@ -118,6 +118,7 @@ DISABLED_STATE = "disabled"
 LOAD_DECIMALS = 1
 ABORT_NOT_PENDING = "confirmation_not_pending"
 ABORT_ALREADY_CONFIGURED = "already_configured"
+ABORT_CHANGES_SAVED = "changes_saved"
 ABORT_NO_SENSORS = "no_sensors"
 ABORT_ALL_SENSORS_ASSIGNED = "all_sensors_assigned"
 ABORT_PREFIX_UNAVAILABLE = "prefix_unavailable"
@@ -395,23 +396,21 @@ class SajLocalConfigFlow(ConfigFlow, domain=DOMAIN):
 class SajOptionsFlow(OptionsFlow):
     _pending: PendingChange | None = None
 
+    @property
+    def _changes(self) -> EntryChanges:
+        return EntryChanges(hass=self.hass, entry=self.config_entry)
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         user_input = self._with_saved_equipment(user_input=user_input)
-        validation = await validate_submission(
-            user_input=user_input,
-            endpoint_taken=self._endpoint_exists_for_other,
-            validation_session=self._validation_session,
-            guard_for=self._guard_for,
-            prefix_context=self._prefix_context(),
-        )
+        validation = await self._changes.validate(user_input=user_input)
         change = validation.change
         if change is not None:
-            if self._serial_exists_for_other(serial=change.device.serial):
+            if self._changes.serial_exists_for_other(serial=change.device.serial):
                 validation = Validation(errors={"base": ABORT_ALREADY_CONFIGURED})
             else:
-                conflict = await self._prefix_conflict(change=change)
+                conflict = await self._changes.prefix_conflict(change=change)
                 if conflict is None:
                     self._pending = change
                     return await self._async_advance(change=change)
@@ -523,10 +522,10 @@ class SajOptionsFlow(OptionsFlow):
                     "serial": device.serial,
                 },
             )
-        if self._prefix_changed(change=change) and not change.prefix_confirmed:
+        if self._changes.prefix_changed(change=change) and not change.prefix_confirmed:
             return self.async_show_form(
                 **_prefix_confirmation_form(
-                    old_prefix=self._current_prefix,
+                    old_prefix=self._changes.current_prefix,
                     new_prefix=change.submission.prefix,
                 )
             )
@@ -546,7 +545,8 @@ class SajOptionsFlow(OptionsFlow):
                 errors={},
                 description_placeholders={},
             )
-        return await self._save_changes(change=change)
+        reason = await self._changes.save(change=change)
+        return self.async_abort(reason=reason)
 
     def _control_switched_on(self, *, change: PendingChange) -> bool:
         return change.submission.allow_control and not self.config_entry.options.get(
@@ -569,10 +569,11 @@ class SajOptionsFlow(OptionsFlow):
                 equipment=stored_fitted_equipment(
                     entry=entry,
                     settings=settings_of(stored=change.submission.equipment),
-                    inherited=not self._replaces_unit(change=change),
+                    inherited=not self._changes.replaces_unit(change=change),
                 ),
                 pack_limit=stored_pack_limit(
-                    entry=entry, inherited=not self._replaces_unit(change=change)
+                    entry=entry,
+                    inherited=not self._changes.replaces_unit(change=change),
                 ),
             ),
             default_interval=submitted_interval,
@@ -584,51 +585,64 @@ class SajOptionsFlow(OptionsFlow):
             after=after,
         )
 
+
+class EntryChanges:
+    def __init__(self, *, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        self.hass = hass
+        self.entry = entry
+
+    async def validate(self, *, user_input: dict[str, Any] | None) -> Validation:
+        return await validate_submission(
+            user_input=user_input,
+            endpoint_taken=self.endpoint_exists_for_other,
+            validation_session=self.validation_session,
+            guard_for=self.guard_for,
+            prefix_context=self.prefix_context(),
+        )
+
     @property
-    def _current_prefix(self) -> str:
-        return self.config_entry.options.get(CONF_PREFIX, "")
+    def current_prefix(self) -> str:
+        return self.entry.options.get(CONF_PREFIX, "")
 
-    def _prefix_changed(self, *, change: PendingChange) -> bool:
-        return change.submission.prefix != self._current_prefix
+    def prefix_changed(self, *, change: PendingChange) -> bool:
+        return change.submission.prefix != self.current_prefix
 
-    def _other_entries(self) -> list[ConfigEntry]:
+    def other_entries(self) -> list[ConfigEntry]:
         return [
             entry
             for entry in self.hass.config_entries.async_entries(DOMAIN)
-            if entry.entry_id != self.config_entry.entry_id
+            if entry.entry_id != self.entry.entry_id
         ]
 
-    def _prefix_context(self) -> PrefixContext:
+    def prefix_context(self) -> PrefixContext:
         return prefix_context(
-            entries=self._other_entries(), saved_prefix=self._current_prefix
+            entries=self.other_entries(), saved_prefix=self.current_prefix
         )
 
-    async def _prefix_conflict(self, *, change: PendingChange) -> Validation | None:
-        if not self._prefix_changed(change=change):
+    async def prefix_conflict(self, *, change: PendingChange) -> Validation | None:
+        if not self.prefix_changed(change=change):
             return None
-        registered = installation_entities(
-            hass=self.hass, entry_id=self.config_entry.entry_id
-        )
+        registered = installation_entities(hass=self.hass, entry_id=self.entry.entry_id)
         domains = {
             **_device_domains(device=change.device),
             **{key: entity.domain for key, entity in registered.items()},
         }
         return await find_prefix_conflict(
             hass=self.hass,
-            context=self._prefix_context(),
+            context=self.prefix_context(),
             prefix=change.submission.prefix,
             domains=domains,
             check_statistics=True,
         )
 
-    def _rename_entities(self, *, new_prefix: str) -> None:
+    def rename_entities(self, *, new_prefix: str) -> None:
         registry = er.async_get(self.hass)
         renames: dict[str, str] = {}
         for key, registered in installation_entities(
-            hass=self.hass, entry_id=self.config_entry.entry_id
+            hass=self.hass, entry_id=self.entry.entry_id
         ).items():
             if registered.entity_id == fixed_entity_id(
-                domain=registered.domain, prefix=self._current_prefix, key=key
+                domain=registered.domain, prefix=self.current_prefix, key=key
             ):
                 renames[registered.entity_id] = fixed_entity_id(
                     domain=registered.domain, prefix=new_prefix, key=key
@@ -636,13 +650,13 @@ class SajOptionsFlow(OptionsFlow):
         for entity_id, new_entity_id in renames.items():
             registry.async_update_entity(entity_id, new_entity_id=new_entity_id)
 
-    def _guard_for(self, *, host: str, port: int) -> EndpointGuard:
+    def guard_for(self, *, host: str, port: int) -> EndpointGuard:
         return endpoint_guard(hass=self.hass, host=host, port=port)
 
-    def _validation_session(
+    def validation_session(
         self, *, host: str, port: int, unit_id: int
     ) -> AbstractAsyncContextManager[ModbusTcpClient | None]:
-        entry = self.config_entry
+        entry = self.entry
         if not _entry_owns_endpoint(entry=entry, host=host, port=port, unit_id=unit_id):
             return nullcontext(None)
         runtime_data = getattr(entry, "runtime_data", None)
@@ -651,47 +665,47 @@ class SajOptionsFlow(OptionsFlow):
             return nullcontext(None)
         return coordinator.async_validation_session()
 
-    def _endpoint_exists_for_other(self, *, host: str, port: int, unit_id: int) -> bool:
+    def endpoint_exists_for_other(self, *, host: str, port: int, unit_id: int) -> bool:
         return any(
-            entry.entry_id != self.config_entry.entry_id
+            entry.entry_id != self.entry.entry_id
             and _entry_owns_endpoint(entry=entry, host=host, port=port, unit_id=unit_id)
             for entry in self.hass.config_entries.async_entries(DOMAIN)
         )
 
-    def _serial_exists_for_other(self, *, serial: str) -> bool:
+    def serial_exists_for_other(self, *, serial: str) -> bool:
         return any(
-            entry.entry_id != self.config_entry.entry_id and entry.unique_id == serial
+            entry.entry_id != self.entry.entry_id and entry.unique_id == serial
             for entry in self.hass.config_entries.async_entries(DOMAIN)
         )
 
-    def _replaces_unit(self, *, change: PendingChange) -> bool:
-        return change.device.serial != self.config_entry.unique_id
+    def replaces_unit(self, *, change: PendingChange) -> bool:
+        return change.device.serial != self.entry.unique_id
 
-    def _saved_data(self, *, change: PendingChange) -> dict[str, Any]:
-        data = {**self.config_entry.data, **change.entry_data}
-        if self._replaces_unit(change=change):
+    def saved_data(self, *, change: PendingChange) -> dict[str, Any]:
+        data = {**self.entry.data, **change.entry_data}
+        if self.replaces_unit(change=change):
             data.pop(CONF_DETECTED_EQUIPMENT, None)
             data.pop(CONF_FITTED_EQUIPMENT, None)
             data.pop(CONF_HIGHEST_PACK_COUNT, None)
         return data
 
-    async def _save_changes(self, *, change: PendingChange) -> ConfigFlowResult:
+    async def save(self, *, change: PendingChange) -> str:
         submission = change.submission
-        if self._endpoint_exists_for_other(
+        if self.endpoint_exists_for_other(
             host=submission.host, port=submission.port, unit_id=submission.unit_id
-        ) or self._serial_exists_for_other(serial=change.device.serial):
-            return self.async_abort(reason=ABORT_ALREADY_CONFIGURED)
-        if await self._prefix_conflict(change=change) is not None:
-            return self.async_abort(reason=ABORT_PREFIX_UNAVAILABLE)
-        if self._prefix_changed(change=change):
-            self._rename_entities(new_prefix=submission.prefix)
+        ) or self.serial_exists_for_other(serial=change.device.serial):
+            return ABORT_ALREADY_CONFIGURED
+        if await self.prefix_conflict(change=change) is not None:
+            return ABORT_PREFIX_UNAVAILABLE
+        if self.prefix_changed(change=change):
+            self.rename_entities(new_prefix=submission.prefix)
         self.hass.config_entries.async_update_entry(
-            self.config_entry,
-            data=self._saved_data(change=change),
+            self.entry,
+            data=self.saved_data(change=change),
             options=submission.entry_options,
             unique_id=change.device.serial,
         )
-        return self.async_abort(reason="changes_saved")
+        return ABORT_CHANGES_SAVED
 
 
 @dataclass(frozen=True)
@@ -1440,6 +1454,7 @@ def _device_domains(*, device: Device) -> dict[str, str]:
     return {
         register.key: register.kind.value
         for register in device_registers(fit=device.fit)
+        if register.exposed
     }
 
 

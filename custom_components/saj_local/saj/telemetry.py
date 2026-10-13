@@ -211,7 +211,16 @@ def _combined_value(
         return decode(words=words, encoding_format=register.format)
     parts = [decoded[source] for source in combination.sources]
     numbers = [part for part in parts if isinstance(part, int | float)]
-    return sum(numbers) if len(numbers) == len(parts) else None
+    if len(numbers) != len(parts):
+        return None
+    if combination.operation is Operation.ANY_BIT:
+        return int(
+            any(
+                int(number) & combination.mask_of(source=source)
+                for source, number in zip(combination.sources, numbers, strict=True)
+            )
+        )
+    return sum(numbers)
 
 
 def decode_values(

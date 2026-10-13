@@ -340,10 +340,10 @@ def _shipped_selection(
 @pytest.mark.parametrize(
     ("profile_key", "selection", "requests"),
     [
-        (HS3.key, "core", 13),
+        (HS3.key, "core", 14),
         (HS3.key, "every", 36),
         (HS3.key, "fast", 1),
-        (H2.key, "core", 7),
+        (H2.key, "core", 8),
         (H2.key, "every", 13),
         (H2.key, "fast", 1),
     ],
@@ -360,8 +360,8 @@ def test_the_shipped_catalogues_read_in_few_requests_within_the_largest(
 BATTERY_AND_METER_A = frozenset({Equipment.BATTERY, Equipment.METER_A})
 
 
-@pytest.mark.parametrize(("profile_key", "requests"), [(HS3.key, 9), (H2.key, 6)])
-def test_the_default_read_of_a_battery_and_meter_a_installation_is_unchanged(
+@pytest.mark.parametrize(("profile_key", "requests"), [(HS3.key, 10), (H2.key, 7)])
+def test_the_default_read_of_a_battery_and_meter_a_installation_includes_the_pack_words(
     profile_key: str, requests: int
 ):
     ranges, _ = _shipped_selection(
@@ -477,8 +477,8 @@ def test_a_sum_adds_the_decoded_sources(raw: dict[str, list[int]], expected: int
     assert values["total"] == expected
 
 
-def test_a_sum_is_unknown_when_a_source_is_invalid():
-    sources = [
+def _sources_with_an_invalid_value() -> list[Register]:
+    return [
         replace(
             _register(key, address),
             definition=Definition(
@@ -490,11 +490,71 @@ def test_a_sum_is_unknown_when_a_source_is_invalid():
         )
         for key, address in (("a", 1), ("b", 2))
     ]
+
+
+def test_a_sum_is_unknown_when_a_source_is_invalid():
+    sources = _sources_with_an_invalid_value()
     total = _combined("total", Operation.SUM, "a", "b")
 
     values = decode_values(registers=[*sources, total], raw={"a": [1], "b": [0xFFFF]})
 
     assert values["total"] is None
+
+
+def _any_bit(masks: dict[str, int] | None = None) -> Register:
+    return replace(
+        _register("fault", 0),
+        address=None,
+        definition=Definition(
+            key="fault",
+            quantity=Quantity.PROBLEM,
+            encoding=Encoding.U16,
+            combination=Combination(
+                operation=Operation.ANY_BIT,
+                sources=("a", "b"),
+                masks=masks or {},
+            ),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("raw", "masks", "expected"),
+    [
+        ({"a": [0], "b": [0]}, {}, 0),
+        ({"a": [0], "b": [8]}, {}, 1),
+        ({"a": [0], "b": [8]}, {"b": 0b0111}, 0),
+        ({"a": [0], "b": [8]}, {"b": 0b1000}, 1),
+        ({"a": [1], "b": [0]}, {"b": 0b1000}, 1),
+        ({"a": [1], "b": [0]}, {"a": 0b10}, 0),
+    ],
+)
+def test_any_bit_is_on_when_a_source_has_a_bit_inside_its_mask(
+    raw: dict[str, list[int]], masks: dict[str, int], expected: int
+):
+    sources = [_register(key, address) for key, address in (("a", 1), ("b", 2))]
+
+    values = decode_values(registers=[*sources, _any_bit(masks)], raw=raw)
+
+    assert values["fault"] == expected
+
+
+def test_any_bit_is_unknown_when_a_source_is_invalid():
+    sources = _sources_with_an_invalid_value()
+
+    values = decode_values(
+        registers=[*sources, _any_bit()], raw={"a": [0], "b": [0xFFFF]}
+    )
+
+    assert values["fault"] is None
+
+
+def test_any_bit_is_absent_when_a_source_was_not_read():
+    sources = [_register(key, address) for key, address in (("a", 1), ("b", 2))]
+
+    values = decode_values(registers=[*sources, _any_bit()], raw={"a": [1]})
+
+    assert "fault" not in values
 
 
 def test_telemetry_lookup_returns_none_for_absent_key():

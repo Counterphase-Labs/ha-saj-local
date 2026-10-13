@@ -45,9 +45,19 @@ from .errors import (
     translate_error,
     write_outcome,
 )
+from .issues import (
+    check_unreachable,
+    clear_model_issues,
+    clear_unreachable,
+    model_finding,
+    open_refusals,
+    raise_model_issue,
+    sync_refusals,
+)
 from .saj.budget import BUDGET_PER_MINUTE
-from .saj.catalogue import device_keys, device_registers
+from .saj.catalogue import device_keys, device_registers, hidden_sources
 from .saj.client import ModbusError, ModbusTcpClient
+from .saj.definitions import Quantity
 from .saj.ems import (
     DEFAULT_HEARTBEAT_INTERVAL,
     EmsOwnership,
@@ -55,7 +65,8 @@ from .saj.ems import (
     timeout_check,
     timeout_inspection,
 )
-from .saj.health import ReadHealth
+from .saj.faults import FaultWatch
+from .saj.health import ReadHealth, tracked_refusals
 from .saj.models import PowerFunction, ems_rows
 from .saj.poller import (
     CycleFailedError,
@@ -189,6 +200,9 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         self._stop_heartbeat: Callable[[], None] | None = None
         self.model_selection = entry.data[CONF_MODEL]
         self.entry_id = entry.entry_id
+        self._entry = entry
+        self._faults = FaultWatch(fault_map=device.profile.faults)
+        self._packs_on: frozenset[str] = frozenset()
         self.last_error: dict[str, int | str | None] | None = None
         self.last_read: frozenset[str] = frozenset()
         self.unavailable_keys: frozenset[str] = frozenset()
@@ -238,8 +252,16 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
 
     @asynccontextmanager
     async def async_validation_session(self) -> AsyncIterator[ModbusTcpClient]:
-        async with self._cycle_lock:
-            yield self.client
+        try:
+            async with self._cycle_lock:
+                try:
+                    yield self.client
+                finally:
+                    await self.client.close()
+        finally:
+            self.hass.async_create_task(
+                self.async_request_refresh(), name="SAJ refresh after validation"
+            )
 
     async def _async_update_data(self) -> Telemetry:
         async with self._cycle_lock:
@@ -272,6 +294,15 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         if self.last_error != error:
             _LOGGER.warning("SAJ update failed (%s)", error["type"])
         self.last_error = error
+        finding = model_finding(error=err)
+        if finding is not None:
+            raise_model_issue(hass=self.hass, entry=self._entry, finding=finding)
+        check_unreachable(
+            hass=self.hass,
+            entry=self._entry,
+            guard=self.guard,
+            now=self.hass.loop.time(),
+        )
         self._schedule_wakeup(target=failure.next_wakeup)
         _raise_update_failed(err)
 
@@ -288,8 +319,62 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         }
         self.last_read = result.read
         self.unavailable_keys = result.unavailable
+        self._sync_issues(result=result, enabled=enabled)
+        self._log_faults()
         self._schedule_wakeup(target=result.next_wakeup)
         return Telemetry(values=dict(self._values))
+
+    def _sync_issues(self, *, result: CycleResult, enabled: Collection[str]) -> None:
+        clear_unreachable(hass=self.hass, entry=self._entry)
+        clear_model_issues(hass=self.hass, entry=self._entry)
+        tracked = open_refusals(hass=self.hass, entry=self._entry)
+        hidden = {
+            register.key
+            for register in device_registers(fit=self.device.fit)
+            if not register.exposed
+        }
+        updated = (
+            tracked_refusals(
+                tracked=tracked,
+                suspended=result.suspended - hidden,
+                enabled=enabled,
+                answered=result.read,
+            )
+            - hidden
+        )
+        if updated != tracked:
+            sync_refusals(hass=self.hass, entry=self._entry, keys=updated)
+
+    def _log_faults(self) -> None:
+        name = self._entry.title
+        words = self.device.profile.faults.registers_of(values=self._values)
+        transition = self._faults.observe(words=words)
+        for fault in sorted(transition.raised):
+            _LOGGER.warning("%s: fault %s is on", name, fault)
+        for fault in sorted(transition.cleared):
+            _LOGGER.info("%s: fault %s cleared", name, fault)
+        for source in transition.unrecognised_raised:
+            _LOGGER.warning("%s: unrecognised fault bit %s is set", name, source)
+        for source in transition.unrecognised_cleared:
+            _LOGGER.info("%s: unrecognised fault bit %s cleared", name, source)
+        self._log_pack_faults(name=name)
+
+    def _log_pack_faults(self, *, name: str) -> None:
+        seen = {
+            register.key: bool(self._values[register.key])
+            for register in device_registers(fit=self.device.fit)
+            if register.quantity is Quantity.PROBLEM
+            and register.combination is None
+            and isinstance(self._values.get(register.key), int | float)
+        }
+        on = frozenset(key for key, value in seen.items() if value) | (
+            self._packs_on - seen.keys()
+        )
+        for key in sorted(on - self._packs_on):
+            _LOGGER.warning("%s: fault %s is on", name, key)
+        for key in sorted(self._packs_on - on):
+            _LOGGER.info("%s: fault %s cleared", name, key)
+        self._packs_on = on
 
     def _schedule_wakeup(self, *, target: float | None) -> None:
         self.update_interval = (
@@ -965,7 +1050,11 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             )
         else:
             wanted = {str(context) for context in self.async_contexts()}
-        return (wanted - entity_keys) | self._power_state_keys(wanted=wanted)
+        return (
+            (wanted - entity_keys)
+            | self._power_state_keys(wanted=wanted)
+            | hidden_sources(fit=self.device.fit, keys=wanted)
+        )
 
     def _power_entity_keys(self) -> frozenset[str]:
         return frozenset(

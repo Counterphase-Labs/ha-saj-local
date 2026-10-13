@@ -243,7 +243,7 @@ def add_entities(
     registers = [
         register
         for register in device_registers(fit=coordinator.device.fit)
-        if register.kind is kind
+        if register.kind is kind and register.exposed
     ]
     _warn_about_displaced_entities(
         hass=hass,

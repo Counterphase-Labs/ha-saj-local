@@ -12,11 +12,13 @@ from custom_components.saj_local.coordinator import (
 from custom_components.saj_local.saj.codec import Range
 from custom_components.saj_local.saj.control import Write, WriteResult
 from custom_components.saj_local.saj.ems import EmsOwnership
+from custom_components.saj_local.saj.faults import FaultWatch
 from custom_components.saj_local.saj.models import (
     EnableBitMethod,
     PowerFunction,
     ems_rows,
 )
+from custom_components.saj_local.saj.models.faults import FaultMap
 from custom_components.saj_local.saj.poller import CycleFailedError, CycleResult
 from custom_components.saj_local.saj.power_control import Start
 from custom_components.saj_local.saj.telemetry import Telemetry
@@ -325,6 +327,13 @@ def build(recorder, *, contexts=READ_KEYS, functions=None, rows=None):
     coordinator.unavailable_keys = frozenset()
     coordinator.last_error = None
     coordinator.entry_id = "entry"
+    coordinator._entry = SimpleNamespace(title="Roof inverter")
+    coordinator.guard = object()
+    coordinator.device = SimpleNamespace(
+        fit=None, profile=SimpleNamespace(faults=FaultMap())
+    )
+    coordinator._faults = FaultWatch(fault_map=FaultMap())
+    coordinator._packs_on = frozenset()
     coordinator._values = {}
     coordinator._cycle_lock = asyncio.Lock()
     coordinator._initial_refresh = False
@@ -366,7 +375,11 @@ def hold_cycle(coordinator):
         started.set()
         await release.wait()
         return SimpleNamespace(
-            values={}, read=frozenset(), unavailable=frozenset(), next_wakeup=None
+            values={},
+            read=frozenset(),
+            suspended=frozenset(),
+            unavailable=frozenset(),
+            next_wakeup=None,
         )
 
     coordinator.poller.behaviour = behaviour

@@ -3,19 +3,15 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers import issue_registry as ir
 
 from .const import (
     CONF_DETECTED_EQUIPMENT,
     CONF_EQUIPMENT,
     CONF_FITTED_EQUIPMENT,
     CONF_HIGHEST_PACK_COUNT,
-    DOMAIN,
-    EQUIPMENT_ISSUE_TRANSLATION_KEY,
-    EQUIPMENT_SELECTOR,
     installation_entities,
-    selector_options,
 )
+from .issues import sync_lapse_issues
 from .saj.catalogue import absent_keys, pack_maximum
 from .saj.detection import detect
 from .saj.equipment import (
@@ -132,7 +128,7 @@ async def settle_equipment(
             lapsed,
             dict(detection.detections[lapsed].values),
         )
-    await _sync_lapse_issues(
+    await sync_lapse_issues(
         hass=hass, entry=entry, equipment=equipment, lapsed=outcome.lapsed
     )
     if outcome.fitted != resolved:
@@ -189,50 +185,6 @@ def _settled_data(
     else:
         settled[CONF_HIGHEST_PACK_COUNT] = limit
     return settled
-
-
-def equipment_issue_id(*, entry_id: str, equipment: Equipment) -> str:
-    return f"{entry_id}_{equipment.value}_not_detected"
-
-
-async def _sync_lapse_issues(
-    *,
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    equipment: Collection[Equipment],
-    lapsed: Collection[Equipment],
-) -> None:
-    names = (
-        await selector_options(hass=hass, selector_name=EQUIPMENT_SELECTOR)
-        if lapsed
-        else {}
-    )
-    for item in sorted(equipment):
-        issue_id = equipment_issue_id(entry_id=entry.entry_id, equipment=item)
-        if item in lapsed:
-            ir.async_create_issue(
-                hass,
-                DOMAIN,
-                issue_id,
-                is_fixable=False,
-                severity=ir.IssueSeverity.WARNING,
-                translation_key=EQUIPMENT_ISSUE_TRANSLATION_KEY,
-                translation_placeholders={
-                    "installation": entry.title,
-                    "equipment": names[item.value],
-                },
-            )
-        else:
-            ir.async_delete_issue(hass, DOMAIN, issue_id)
-
-
-def remove_equipment_issues(*, hass: HomeAssistant, entry: ConfigEntry) -> None:
-    for item in Equipment:
-        ir.async_delete_issue(
-            hass,
-            DOMAIN,
-            equipment_issue_id(entry_id=entry.entry_id, equipment=item),
-        )
 
 
 def _remove_absent_entities(

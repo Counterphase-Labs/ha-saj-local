@@ -12,8 +12,11 @@ from .const import (
     fixed_entity_id,
 )
 from .equipment import pack_summary, report_summary
+from .issues import open_issue_keys, open_refusals
 from .saj.budget import BUDGET_PER_MINUTE
 from .saj.catalogue import device_registers
+from .saj.definitions import Quantity
+from .saj.faults import decode
 
 REDACTED_PREFIX = "[redacted]"
 ADDRESS_FORMAT = "#06x"
@@ -78,6 +81,12 @@ async def async_get_config_entry_diagnostics(
             }
             for key, refusal in poller.refusals.items()
         },
+        "faults": _fault_summary(coordinator=coordinator),
+        "repair_issues": {
+            "open": open_issue_keys(hass=hass, entry=entry),
+            "refused_keys": sorted(open_refusals(hass=hass, entry=entry)),
+        },
+        "failing_for_seconds": coordinator.guard.failing_for(now=now),
         "consecutive_failed_cycles": poller.consecutive_failures,
         "backoff_seconds": poller.backoff_seconds,
         "late_frames_discarded": runtime.client.late_frames_discarded,
@@ -179,3 +188,39 @@ def _unknown_codes(*, coordinator: Any) -> dict[str, float]:
         ):
             codes[register.key] = value
     return codes
+
+
+def _fault_summary(*, coordinator: Any) -> dict[str, Any]:
+    device = coordinator.device
+    registers = device_registers(fit=device.fit)
+    fault_map = device.profile.faults
+    values = coordinator.data.values if coordinator.data is not None else {}
+    summary: dict[str, Any] = {}
+    for equipment in dict.fromkeys(
+        register.equipment for register in registers if not register.exposed
+    ):
+        names = {
+            register.key
+            for register in registers
+            if not register.exposed and register.equipment == equipment
+        }
+        words = fault_map.registers_of(
+            values={key: value for key, value in values.items() if key in names}
+        )
+        decoded = decode(fault_map=fault_map, words=words)
+        summary["inverter" if equipment is None else equipment.value] = {
+            "words": {
+                format(register, ADDRESS_FORMAT): format(value, "#010x")
+                for register, value in words.items()
+            },
+            "active": sorted(decoded.active),
+            "unrecognised": sorted(str(source) for source in decoded.unrecognised),
+        }
+    summary["pack_codes"] = {
+        register.key: values[register.key]
+        for register in registers
+        if register.quantity is Quantity.PROBLEM
+        and register.combination is None
+        and register.key in values
+    }
+    return summary

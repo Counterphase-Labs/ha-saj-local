@@ -7,12 +7,16 @@ from saj.definitions import (
     DEFINITIONS,
     FAMILIES,
     FAMILY_BY_NAME,
+    FAULT_DEFINITIONS,
+    FAULT_KEYS,
     Access,
     Category,
+    Combination,
     Definition,
     EntityKind,
     Family,
     Member,
+    Operation,
     Quantity,
     Role,
 )
@@ -321,3 +325,47 @@ def test_a_family_tags_every_row_it_generates_with_its_equipment(
     )
 
     assert {definition.equipment for definition in family.definitions()} == {expected}
+
+
+def test_a_problem_summary_is_primary_and_every_other_problem_is_diagnostic():
+    summary = Definition(
+        key="summary",
+        quantity=Quantity.PROBLEM,
+        encoding=Encoding.U16,
+        kind=EntityKind.BINARY_SENSOR,
+        summary=True,
+    )
+    named = replace(summary, key="named", summary=False)
+
+    assert summary.category is None
+    assert named.category is Category.DIAGNOSTIC
+
+
+def test_a_combination_masks_every_bit_of_a_source_it_gives_no_mask():
+    combination = Combination(
+        operation=Operation.ANY_BIT, sources=("a", "b"), masks={"a": 0b10}
+    )
+
+    assert combination.mask_of(source="a") == 0b10
+    assert combination.mask_of(source="b") & 0xFFFF_FFFF == 0xFFFF_FFFF
+
+
+def test_every_shipped_fault_key_is_mapped_by_a_shipped_model():
+    from saj.models.h2 import PROFILE as H2
+    from saj.models.hs3 import PROFILE as HS3
+
+    mapped = set(HS3.faults.named) | set(H2.faults.named)
+    named = {key for keys in FAULT_KEYS.values() for key in keys}
+
+    assert named == mapped
+
+
+def test_every_shipped_fault_word_and_problem_row_is_defined_once():
+    keys = [definition.key for definition in FAULT_DEFINITIONS]
+
+    assert len(keys) == len(set(keys))
+    assert not [
+        definition.key
+        for definition in FAULT_DEFINITIONS
+        if definition.exposed != (definition.quantity is Quantity.PROBLEM)
+    ]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from functools import cached_property
 from typing import TYPE_CHECKING
@@ -17,6 +17,7 @@ from .codec import (
     scaled,
 )
 from .models import Equipment
+from .models.faults import ALL_BITS
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
@@ -68,6 +69,7 @@ class Quantity(StrEnum):
     TIME_OF_DAY = "time_of_day"
     WEEKDAYS = "weekdays"
     TOGGLE = "toggle"
+    PROBLEM = "problem"
 
 
 class Access(StrEnum):
@@ -78,6 +80,7 @@ class Access(StrEnum):
 
 class EntityKind(StrEnum):
     SENSOR = "sensor"
+    BINARY_SENSOR = "binary_sensor"
     NUMBER = "number"
     SELECT = "select"
     SWITCH = "switch"
@@ -119,12 +122,17 @@ class Role(StrEnum):
 class Operation(StrEnum):
     SUM = "sum"
     WORDS = "words"
+    ANY_BIT = "any_bit"
 
 
 @dataclass(frozen=True)
 class Combination:
     operation: Operation
     sources: tuple[str, ...]
+    masks: Mapping[str, int] = field(default_factory=dict)
+
+    def mask_of(self, *, source: str) -> int:
+        return self.masks.get(source, ALL_BITS)
 
 
 @dataclass(frozen=True)
@@ -150,6 +158,8 @@ class Definition:
     command_value: int | None = None
     equipment: Equipment | None = None
     inverted: bool = False
+    exposed: bool = True
+    summary: bool = False
 
     @cached_property
     def format(self) -> Format:
@@ -183,6 +193,8 @@ class Definition:
             or self.key in HEADER_DERIVED_KEYS
         ):
             return Category.DIAGNOSTIC
+        if self.quantity is Quantity.PROBLEM:
+            return None if self.summary else Category.DIAGNOSTIC
         if self.writable:
             return Category.CONFIGURATION
         return None
@@ -393,6 +405,11 @@ EMS_CONTROL_BITS = {
     "ems_grid_control": 5,
 }
 EMS_CONTROL_EQUIPMENT = {"ems_battery_control": Equipment.BATTERY}
+FAULT_PREFIXES: Mapping[Equipment | None, str] = {
+    None: "inverter",
+    Equipment.BATTERY: "battery",
+    Equipment.EV_CHARGER: "ev",
+}
 PARALLEL_POWER_SUBJECTS = ("pv", "battery", "grid", "load", "backup_load", "grid_load")
 PARALLEL_CORE_POWER_SUBJECTS = frozenset({"pv", "battery", "grid", "load"})
 
@@ -429,6 +446,38 @@ def _meter_power(*, meter: str, equipment: Equipment) -> Definition:
 
 def _core(*, definition: Definition) -> Definition:
     return replace(definition, core=True)
+
+
+def _problem(
+    *, key: str, equipment: Equipment | None = None, summary: bool = False
+) -> Definition:
+    return Definition(
+        key=key,
+        equipment=equipment,
+        quantity=Quantity.PROBLEM,
+        kind=EntityKind.BINARY_SENSOR,
+        encoding=Encoding.U16,
+        core=True,
+        summary=summary,
+    )
+
+
+def _fault_word(*, key: str, equipment: Equipment | None) -> Definition:
+    return Definition(
+        key=key,
+        equipment=equipment,
+        quantity=Quantity.CODE,
+        encoding=Encoding.U32,
+        exposed=False,
+    )
+
+
+def fault_summary_key(*, equipment: Equipment | None) -> str:
+    return f"{FAULT_PREFIXES[equipment]}_fault"
+
+
+def fault_unrecognised_key(*, equipment: Equipment | None) -> str:
+    return f"{fault_summary_key(equipment=equipment)}_unrecognised"
 
 
 def _voltage(*, key: str = "voltage") -> Definition:
@@ -882,6 +931,19 @@ BATTERY_PACK_DISCHARGED_ENERGY = Family(
         ),
     ),
 )
+BATTERY_PACK_FAULTS = Family(
+    name="battery_pack_faults",
+    equipment=Equipment.BATTERY,
+    stem="battery_pack{index}",
+    base=0xA002,
+    stride=2,
+    count=PACK_COUNT,
+    role=Role.PACK,
+    members=(
+        Member(offset=0, definition=_problem(key="fault")),
+        Member(offset=1, definition=_problem(key="warning")),
+    ),
+)
 METER_PHASE_STRIDE = 6
 METER_A_PHASE = _phased(
     family=Family(
@@ -1169,6 +1231,7 @@ FAMILIES = (
     AVERAGE_BATTERY_PACK,
     BATTERY_PACK,
     BATTERY_PACK_DISCHARGED_ENERGY,
+    BATTERY_PACK_FAULTS,
     METER_A_PHASE,
     METER_B_PHASE,
     METER_A_POWER_HIGH_WORDS,
@@ -2360,7 +2423,166 @@ SINGLES: tuple[Definition, ...] = (
         for subject in PARALLEL_POWER_SUBJECTS
     ),
 )
+INVERTER_FAULT_KEYS = (
+    "inverter_fault_internal_communication",
+    "inverter_fault_meter_communication",
+    "inverter_fault_display_memory",
+    "inverter_fault_display_clock",
+    "inverter_fault_bms_device",
+    "inverter_fault_bms_communication",
+    "inverter_fault_ct_device",
+    "inverter_fault_afci_communication",
+    "inverter_fault_slave_communication",
+    "inverter_fault_pv_meter_communication",
+    "inverter_fault_ev_charger_communication",
+    "inverter_fault_grid_phase_r_overvoltage",
+    "inverter_fault_grid_phase_r_undervoltage",
+    "inverter_fault_grid_phase_s_overvoltage",
+    "inverter_fault_grid_phase_s_undervoltage",
+    "inverter_fault_grid_phase_t_overvoltage",
+    "inverter_fault_grid_phase_t_undervoltage",
+    "inverter_fault_grid_overfrequency",
+    "inverter_fault_grid_underfrequency",
+    "inverter_fault_dcdc_communication",
+    "inverter_fault_dcdc_device",
+    "inverter_fault_parallel_communication",
+    "inverter_fault_grid_lost",
+    "inverter_fault_pv_input_mode",
+    "inverter_fault_pv_hardware_overcurrent",
+    "inverter_fault_pv_overvoltage",
+    "inverter_fault_bus_hardware_overvoltage",
+    "inverter_fault_bus_overvoltage",
+    "inverter_fault_bus_undervoltage",
+    "inverter_fault_grid_phase",
+    "inverter_fault_islanding",
+    "inverter_fault_arc_device",
+    "inverter_fault_pv_input",
+    "inverter_fault_hardware_overcurrent",
+    "inverter_fault_neutral_earth_voltage",
+    "inverter_fault_drm0",
+    "inverter_fault_fan_1",
+    "inverter_fault_fan_2",
+    "inverter_fault_fan_3",
+    "inverter_fault_fan_4",
+    "inverter_fault_arc",
+    "inverter_fault_pv_software_overcurrent",
+    "inverter_fault_battery_overvoltage",
+    "inverter_fault_battery_overcurrent",
+    "inverter_fault_battery_charge_overvoltage",
+    "inverter_fault_battery_overload",
+    "inverter_fault_battery_soft_start",
+    "inverter_fault_output_overload",
+    "inverter_fault_battery_open_circuit",
+    "inverter_fault_battery_discharge_undervoltage",
+    "inverter_fault_authorisation_expired",
+    "inverter_fault_display_communication",
+    "inverter_fault_relay",
+    "inverter_fault_controller_memory",
+    "inverter_fault_over_temperature",
+    "inverter_fault_under_temperature",
+    "inverter_fault_leakage_current_device",
+    "inverter_fault_dc_injection_device",
+    "inverter_fault_current_sensor",
+    "inverter_fault_grid_average_overvoltage",
+    "inverter_fault_off_grid_undervoltage",
+    "inverter_fault_grid_phase_r_dc_voltage",
+    "inverter_fault_grid_phase_s_dc_voltage",
+    "inverter_fault_grid_phase_t_dc_voltage",
+    "inverter_fault_leakage_current",
+    "inverter_fault_grid_phase_r_dc_injection",
+    "inverter_fault_grid_phase_s_dc_injection",
+    "inverter_fault_grid_phase_t_dc_injection",
+    "inverter_fault_insulation",
+    "inverter_fault_bus_imbalance",
+)
+BATTERY_FAULT_KEYS = (
+    "battery_fault_internal_communication",
+    "battery_fault_pack_sequence",
+    "battery_fault_discharge_overcurrent",
+    "battery_fault_charge_overcurrent",
+    "battery_fault_total_undervoltage",
+    "battery_fault_total_overvoltage",
+    "battery_fault_cell_undervoltage",
+    "battery_fault_cell_overvoltage",
+    "battery_fault_hardware",
+    "battery_fault_charge_cold",
+    "battery_fault_charge_hot",
+    "battery_fault_discharge_cold",
+    "battery_fault_discharge_hot",
+    "battery_fault_relay",
+    "battery_fault_precharge",
+    "battery_fault_insulation",
+    "battery_fault_bms_incompatible",
+    "battery_fault_cell_supplier_incompatible",
+    "battery_fault_cell_incompatible",
+    "battery_fault_voltage_level_mismatch",
+    "battery_fault_breaker_open",
+    "battery_fault_cell_temperature_difference",
+    "battery_fault_cell_voltage_difference_2",
+    "battery_fault_cell_voltage_difference_1",
+    "battery_fault_cell_over_temperature",
+    "battery_fault_short_circuit",
+    "battery_fault_total_voltage_matching",
+    "battery_fault_system_locked",
+    "battery_fault_fuse",
+    "battery_fault_charging_port_overvoltage",
+)
+EV_FAULT_KEYS = (
+    "ev_fault_relay_over_temperature",
+    "ev_fault_overload",
+    "ev_fault_ac_overvoltage",
+    "ev_fault_ac_undervoltage",
+    "ev_fault_ac_overcurrent",
+    "ev_fault_ac_overfrequency",
+    "ev_fault_ac_underfrequency",
+    "ev_fault_dc_residual_current_a",
+    "ev_fault_emergency_stop",
+    "ev_fault_under_temperature",
+    "ev_fault_ac_residual_current",
+    "ev_fault_input_terminal_over_temperature",
+    "ev_fault_bluetooth",
+    "ev_fault_dc_residual_current_b",
+    "ev_fault_relay",
+    "ev_fault_grounding",
+    "ev_fault_phase_sequence",
+    "ev_fault_rcd_circuit",
+    "ev_fault_rs485_timeout",
+    "ev_fault_supply",
+    "ev_fault_meter",
+    "ev_fault_control_pilot",
+    "ev_fault_connector_lock",
+    "ev_fault_connector_current",
+    "ev_fault_dc_residual_current_c",
+)
+FAULT_KEYS: Mapping[Equipment | None, tuple[str, ...]] = {
+    None: INVERTER_FAULT_KEYS,
+    Equipment.BATTERY: BATTERY_FAULT_KEYS,
+    Equipment.EV_CHARGER: EV_FAULT_KEYS,
+}
+FAULT_WORD_KEYS: Mapping[Equipment | None, tuple[str, ...]] = {
+    None: tuple(f"inverter_fault_word_{index}" for index in range(1, 4)),
+    Equipment.BATTERY: ("battery_fault_word_1",),
+    Equipment.EV_CHARGER: tuple(f"ev_fault_word_{index}" for index in range(1, 3)),
+}
+FAULT_DEFINITIONS: tuple[Definition, ...] = tuple(
+    definition
+    for equipment, named in FAULT_KEYS.items()
+    for definition in (
+        *(
+            _fault_word(key=key, equipment=equipment)
+            for key in FAULT_WORD_KEYS[equipment]
+        ),
+        _problem(
+            key=fault_summary_key(equipment=equipment),
+            equipment=equipment,
+            summary=True,
+        ),
+        _problem(key=fault_unrecognised_key(equipment=equipment), equipment=equipment),
+        *(_problem(key=key, equipment=equipment) for key in named),
+    )
+)
 DEFINITIONS: tuple[Definition, ...] = (
     *SINGLES,
     *(definition for family in FAMILIES for definition in family.definitions()),
+    *FAULT_DEFINITIONS,
 )

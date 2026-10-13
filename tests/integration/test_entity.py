@@ -5,6 +5,7 @@ import pytest
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.saj_local import (
+    binary_sensor,
     button,
     entity,
     number,
@@ -32,6 +33,7 @@ from tests.entities import ENTRY_ID, FakeCoordinator, device, register_of
 
 PLATFORM_MODULES = {
     EntityKind.SENSOR: sensor,
+    EntityKind.BINARY_SENSOR: binary_sensor,
     EntityKind.NUMBER: number,
     EntityKind.SELECT: select,
     EntityKind.SWITCH: switch,
@@ -41,6 +43,7 @@ PLATFORM_MODULES = {
 }
 ENTITY_CLASSES = {
     EntityKind.SENSOR: sensor.SajSensor,
+    EntityKind.BINARY_SENSOR: binary_sensor.SajBinarySensor,
     EntityKind.NUMBER: number.SajNumber,
     EntityKind.SELECT: select.SajSelect,
     EntityKind.SWITCH: switch.SajSwitch,
@@ -333,7 +336,10 @@ def registry(monkeypatch) -> FakeRegistry:
 def rows(monkeypatch):
     registers = [
         register_of(kind=kind, key=f"{kind.value}_row") for kind in ALL_KINDS
-    ] + [register_of(kind=EntityKind.SENSOR, key="second_sensor_row")]
+    ] + [
+        register_of(kind=EntityKind.SENSOR, key="second_sensor_row"),
+        register_of(kind=EntityKind.SENSOR, key="hidden_word", exposed=False),
+    ]
     monkeypatch.setattr(entity, "device_registers", lambda **_: registers)
     return registers
 
@@ -452,6 +458,7 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
             0x1610,
             {
                 "sensor": 426,
+                "binary_sensor": 129,
                 "number": 77,
                 "select": 19,
                 "switch": 37,
@@ -461,6 +468,7 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
             },
             {
                 "sensor": 46,
+                "binary_sensor": 129,
                 "number": 2,
                 "select": 2,
                 "switch": 0,
@@ -474,6 +482,7 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
             0x005A,
             {
                 "sensor": 220,
+                "binary_sensor": 73,
                 "number": 46,
                 "select": 5,
                 "switch": 16,
@@ -483,6 +492,7 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
             },
             {
                 "sensor": 39,
+                "binary_sensor": 73,
                 "number": 3,
                 "select": 1,
                 "switch": 0,
@@ -501,9 +511,12 @@ def test_a_recognised_device_gets_the_entities_of_its_shape_with_the_core_enable
     )
 
     assert {
-        kind.value: sum(row.kind is kind for row in registers) for kind in ALL_KINDS
+        kind.value: sum(row.kind is kind and row.exposed for row in registers)
+        for kind in ALL_KINDS
     } == by_kind
     assert {
-        kind.value: sum(row.kind is kind and row.core for row in registers)
+        kind.value: sum(
+            row.kind is kind and row.core and row.exposed for row in registers
+        )
         for kind in ALL_KINDS
     } == enabled_by_kind

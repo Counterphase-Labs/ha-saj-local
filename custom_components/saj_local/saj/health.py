@@ -12,6 +12,18 @@ REFUSAL_THRESHOLD = 3
 RETEST_PERIOD = 24 * 60 * 60
 
 
+def tracked_refusals(
+    *,
+    tracked: Collection[str],
+    suspended: Collection[str],
+    enabled: Collection[str],
+    answered: Collection[str],
+) -> frozenset[str]:
+    return frozenset(
+        key for key in (*tracked, *suspended) if key in enabled and key not in answered
+    )
+
+
 @dataclass(frozen=True)
 class Refusal:
     count: int
