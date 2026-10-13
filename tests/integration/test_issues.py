@@ -35,6 +35,7 @@ ENTRY = SimpleNamespace(
     data={"host": "inverter", "port": 1502},
 )
 HASS = SimpleNamespace()
+LABEL = "Roof inverter (xxxxxL-1)"
 PROFILE_A = SimpleNamespace(key="a", display_name="HS3")
 PROFILE_B = SimpleNamespace(key="b", display_name="H2")
 
@@ -255,11 +256,11 @@ def test_an_issue_is_logged_once_when_raised_and_once_when_cleared(registry, cap
     assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
         (
             logging.WARNING,
-            "Roof inverter: repair issue identity_mismatch raised",
+            f"{LABEL}: Repair issue identity_mismatch raised",
         ),
         (
             logging.INFO,
-            "Roof inverter: repair issue identity_mismatch cleared",
+            f"{LABEL}: Repair issue identity_mismatch cleared",
         ),
     ]
 
@@ -269,7 +270,7 @@ def test_a_fixed_issue_is_logged_as_cleared_in_the_same_form(caplog):
         log_fixed(entry=ENTRY, key="identity_mismatch")
 
     assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
-        (logging.INFO, "Roof inverter: repair issue identity_mismatch cleared")
+        (logging.INFO, f"{LABEL}: Repair issue identity_mismatch cleared")
     ]
 
 

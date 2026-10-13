@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -21,6 +22,7 @@ from tests.coordinators import (
     ENABLE_KEYS,
     INTERVAL,
     MODE_KEY,
+    ROOF_LABEL,
     STANDBY,
     TARGET_KEYS,
     FakeFunctionControl,
@@ -163,7 +165,7 @@ async def test_switching_on_sends_the_target_then_the_bit_under_the_lock_and_own
         "targets": {"battery": -600},
         "remembered_modes": {},
     }
-    assert "battery power control function started" in caplog.text
+    assert "Power control function battery started" in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -234,7 +236,7 @@ async def test_a_stop_that_fails_while_undoing_a_start_does_not_hide_the_first_f
     ):
         await coordinator.async_power_on(function=BATTERY)
 
-    assert "could not undo the partial start of battery" in caplog.text
+    assert "Could not undo the partial start of battery" in caplog.text
 
 
 async def test_an_operating_mode_start_reads_the_mode_first_and_remembers_it(recorder):
@@ -316,7 +318,7 @@ async def test_an_operating_mode_stop_sends_both_writes_and_forgets_the_mode(
     assert coordinator.remembered_modes == {}
     assert coordinator.ems.owned == frozenset()
     assert coordinator._store.saved[-1]["remembered_modes"] == {}
-    assert "battery power control function stopped" in caplog.text
+    assert "Power control function battery stopped" in caplog.text
 
 
 async def test_a_stop_that_gets_its_first_write_through_is_finished_by_the_next_attempt(
@@ -675,8 +677,8 @@ async def test_one_function_that_cannot_be_switched_off_does_not_stop_the_others
         BATTERY_ENABLE,
         GRID_ENABLE,
     ]
-    assert "could not switch off the battery power control" in caplog.text
-    assert "grid power control function stopped" in caplog.text
+    assert "Could not switch off the battery power control" in caplog.text
+    assert "Power control function grid stopped" in caplog.text
     assert coordinator.ems.owned == frozenset()
 
 
@@ -739,9 +741,38 @@ async def test_a_schedule_change_runs_the_controller_in_the_background(recorder)
     _schedule(coordinator, BATTERY, NIGHT, "on")
     await coordinator.async_follow_schedules()
 
-    coordinator._schedule_changed(None)
+    coordinator._schedule_changed(_state_change(NIGHT, "on"))
 
     assert [name for _, name in recorder.tasks] == ["SAJ power control schedule"]
+
+
+def _state_change(entity_id, state):
+    return SimpleNamespace(
+        data={
+            "entity_id": entity_id,
+            "new_state": None if state is None else SimpleNamespace(state=state),
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("state", "shown"), [("on", "on"), ("off", "off"), (None, "removed")]
+)
+async def test_a_schedule_change_logs_the_function_and_the_state_followed(
+    recorder, caplog, state, shown
+):
+    coordinator = build(recorder)
+    _schedule(coordinator, BATTERY, NIGHT, "on")
+    await coordinator.async_follow_schedules()
+
+    with caplog.at_level(logging.DEBUG, logger=coordinator_module.__name__):
+        coordinator._schedule_changed(_state_change(NIGHT, state))
+
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.DEBUG
+    ] == [f"{ROOF_LABEL}: Schedule helper for battery changed to {shown}"]
 
 
 @pytest.mark.parametrize("state", ["off", "unavailable", "unknown", None])
@@ -932,7 +963,7 @@ async def test_a_start_that_fails_is_tried_again_each_interval_until_it_works(
     assert coordinator.ems.owned == {BATTERY}
     assert len(_timers(recorder, RETRY_TIMER)) == 1
     assert recorder.cancelled >= 1
-    assert "schedule action succeeded" in caplog.text
+    assert "Power control schedule action for battery succeeded" in caplog.text
     sent_after = len(coordinator.control.calls)
     await retry(None)
     assert len(coordinator.control.calls) == sent_after
@@ -1074,7 +1105,7 @@ async def test_shutdown_stops_following(recorder, monkeypatch):
         return
 
     class Client:
-        async def close(self) -> None:
+        async def close(self, **_options) -> None:
             return
 
     coordinator.client = Client()

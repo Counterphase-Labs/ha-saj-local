@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -13,11 +14,17 @@ from custom_components.saj_local.equipment import (
 )
 from custom_components.saj_local.errors import WriteOutcome
 from custom_components.saj_local.saj.budget import BUDGET_PER_MINUTE
-from custom_components.saj_local.saj.catalogue import Row
+from custom_components.saj_local.saj.catalogue import (
+    SERIAL_ADDRESS,
+    SERIAL_WORD_COUNT,
+    Row,
+    device_registers,
+)
 from custom_components.saj_local.saj.device import Device
 from custom_components.saj_local.saj.ems import EmsOwnership
 from custom_components.saj_local.saj.equipment import Detection, Setting
 from custom_components.saj_local.saj.health import Break, Refusal, Region
+from custom_components.saj_local.saj.memory import FailureOutcome, RegisterMemory
 from custom_components.saj_local.saj.models import Equipment, PowerFunction
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from custom_components.saj_local.saj.poller import CadencePlan
@@ -70,6 +77,10 @@ def open_issues(monkeypatch) -> OpenIssues:
 
 class FakeClient:
     late_frames_discarded = 0
+
+    def __init__(self) -> None:
+        self.now = NOW
+        self.memory = RegisterMemory(clock=lambda: self.now)
 
     def is_connected(self) -> bool:
         return True
@@ -716,3 +727,145 @@ async def test_diagnostics_list_the_open_issues_and_the_keys_of_the_refusal_issu
         "open": ["registers_refused"],
         "refused_keys": ["battery_soc", "pv_power"],
     }
+
+
+REGISTER_AGE = 5.0
+PRIVATE_WORD_BASE = 0xA000
+SERIAL_TEXT = "PRIVATE-SERIAL"
+MAC_TEXT = "aa:bb:cc:dd:ee:ff"
+ADDRESS_TEXT = "192.168.1.50"
+EV_SERIAL_TEXT = "EVSERIAL0001"
+
+
+def _row(key: str) -> Row:
+    register = next(
+        register for register in device_registers(fit=DEVICE.fit) if register.key == key
+    )
+    return register.row
+
+
+def _remembered_client() -> tuple[FakeClient, list[int]]:
+    client = FakeClient()
+    client.now = NOW - REGISTER_AGE
+    private_words: list[int] = []
+    for key in (
+        "ethernet_mac_address",
+        "ethernet_ip_address",
+        "ethernet_gateway",
+        "ev_serial_number",
+    ):
+        row = _row(key)
+        words = [PRIVATE_WORD_BASE + len(private_words) + n for n in range(row.words)]
+        private_words.extend(words)
+        client.memory.record_answer(address=row.address, words=words)
+    serial_words = [PRIVATE_WORD_BASE + 0x100 + n for n in range(SERIAL_WORD_COUNT)]
+    private_words.extend(serial_words)
+    client.memory.record_answer(address=SERIAL_ADDRESS, words=serial_words)
+    mode = _row("operating_mode")
+    client.memory.record_answer(address=mode.address, words=[2])
+    client.memory.record_answer(address=0x7001, words=[0x0102])
+    client.now = NOW - REGISTER_AGE + 1
+    client.memory.record_failure(
+        address=0x3024, count=32, outcome=FailureOutcome.EXCEPTION, exception_code=48
+    )
+    client.memory.record_failure(
+        address=0xA03C, count=32, outcome=FailureOutcome.TIMEOUT
+    )
+    client.now = NOW
+    return client, private_words
+
+
+async def test_diagnostics_show_the_serial_only_masked():
+    coordinator = FakeCoordinator(set(), None)
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator))
+
+    assert result["serial"] == "xxxxxIAL"
+
+
+async def test_diagnostics_list_remembered_registers_by_key_and_failed_requests():
+    client, _ = _remembered_client()
+    coordinator = FakeCoordinator(set(), None)
+
+    result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator, client))
+
+    snapshot = result["register_snapshot"]
+    addresses = [int(entry["address"], 16) for entry in snapshot["registers"]]
+    assert addresses == sorted(addresses)
+    by_key = {entry["key"]: entry for entry in snapshot["registers"]}
+    mode = _row("operating_mode")
+    assert by_key["operating_mode"] == {
+        "address": format(mode.address, "#06x"),
+        "key": "operating_mode",
+        "words": ["0x0002"],
+        "age_seconds": REGISTER_AGE,
+    }
+    assert {
+        "address": "0x7001",
+        "key": None,
+        "words": ["0x0102"],
+        "age_seconds": REGISTER_AGE,
+    } in snapshot["registers"]
+    assert by_key["ethernet_mac_address"]["words"] == "**REDACTED**"
+    assert by_key["ethernet_mac_address"]["address"] == format(
+        _row("ethernet_mac_address").address, "#06x"
+    )
+    assert snapshot["failed"] == [
+        {
+            "address": "0x3024",
+            "count": 32,
+            "outcome": "exception",
+            "exception_code": 48,
+            "age_seconds": REGISTER_AGE - 1,
+        },
+        {
+            "address": "0xa03c",
+            "count": 32,
+            "outcome": "timeout",
+            "exception_code": None,
+            "age_seconds": REGISTER_AGE - 1,
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    "forbidden",
+    [
+        "private-host",
+        SERIAL_TEXT,
+        MAC_TEXT,
+        ADDRESS_TEXT,
+        EV_SERIAL_TEXT,
+        "private-house",
+        "Private group name",
+    ],
+)
+async def test_nothing_that_identifies_the_system_is_in_the_whole_dump(forbidden):
+    client, _ = _remembered_client()
+    telemetry = Telemetry(
+        values={
+            "ethernet_mac_address": MAC_TEXT,
+            "ethernet_ip_address": ADDRESS_TEXT,
+            "ev_serial_number": EV_SERIAL_TEXT,
+            "product_code": SERIAL_TEXT,
+        }
+    )
+    entry = _entry(FakeCoordinator(set(), telemetry), client)
+    entry.options = {"prefix": "private-house"}
+
+    result = await async_get_config_entry_diagnostics(HASS, entry)
+
+    assert forbidden.lower() not in json.dumps(result).lower()
+
+
+async def test_no_word_of_a_private_register_or_the_serial_is_in_the_whole_dump():
+    client, private_words = _remembered_client()
+
+    result = await async_get_config_entry_diagnostics(
+        HASS, _entry(FakeCoordinator(set(), None), client)
+    )
+
+    dump = json.dumps(result).lower()
+    assert [
+        format(word, "#06x") for word in private_words if format(word, "#06x") in dump
+    ] == []

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import struct
 from contextlib import suppress
 from types import SimpleNamespace
@@ -6,15 +7,23 @@ from types import SimpleNamespace
 import pytest
 
 from saj.budget import RequestBudget
+from saj.catalogue import Fit
 from saj.client import (
     REQUEST_PAUSE,
     ClientEnvironment,
+    ConnectionReason,
     ModbusError,
     ModbusErrorMessage,
     ModbusTcpClient,
 )
+from saj.memory import FailureOutcome
+from saj.models import ALL_EQUIPMENT
+from saj.models.hs3 import PROFILE as HS3
 
 ANSWER = "0302 0001"
+LABEL = "Roof (xxxxx123)"
+FIT = Fit(profile=HS3, device_type=0x1610, equipment=ALL_EQUIPMENT)
+UNCATALOGUED = 0x7000
 
 
 def _frame(
@@ -117,6 +126,7 @@ def _client(
         1,
         timeout=timeout,
         environment=ClientEnvironment(
+            label=LABEL,
             connector=connector,
             sleep=sleep,
             clock=lambda: 7.0,
@@ -156,7 +166,7 @@ async def test_read_sends_one_holding_register_request_and_decodes_words():
     assert await client.read_holding_registers(0x4004, 2) == (0x1234, 0xABCD)
     assert device.writer.requests == [bytes.fromhex("0001 0000 0006 01 03 4004 0002")]
     assert client.is_connected()
-    await client.close()
+    await client.close(reason=ConnectionReason.UNLOAD)
     assert not client.is_connected()
 
 
@@ -168,7 +178,10 @@ async def test_connect_reuses_an_open_connection():
         return asyncio.StreamReader(), FakeWriter()
 
     client = ModbusTcpClient(
-        "inverter", 502, 1, environment=ClientEnvironment(connector=connector)
+        "inverter",
+        502,
+        1,
+        environment=ClientEnvironment(label=LABEL, connector=connector),
     )
 
     await client.connect()
@@ -182,7 +195,7 @@ async def test_connect_reuses_an_open_connection():
     ("address", "count"), [(0x10000, 1), (0, 0), (0, 126), (0xFFFF, 2)]
 )
 async def test_read_rejects_invalid_register_ranges(address: int, count: int):
-    client = ModbusTcpClient("host", 502, 1)
+    client = ModbusTcpClient("host", 502, 1, environment=ClientEnvironment(label=LABEL))
 
     with pytest.raises(ModbusError, match="Invalid register range"):
         await client.read_holding_registers(address, count)
@@ -202,7 +215,10 @@ async def test_connect_wraps_timeout_and_socket_errors(
         raise connector_error
 
     client = ModbusTcpClient(
-        "host", 502, 1, environment=ClientEnvironment(connector=connector)
+        "host",
+        502,
+        1,
+        environment=ClientEnvironment(label=LABEL, connector=connector),
     )
     with pytest.raises(ModbusError, match=expected):
         await client.connect()
@@ -315,7 +331,7 @@ async def test_late_frame_memory_does_not_survive_a_reconnect():
     device = FakeDevice(_frame(ANSWER))
     client = _client(device)
     await client.read_holding_registers(0x4004, 1)
-    await client.close()
+    await client.close(reason=ConnectionReason.UNLOAD)
     device.reader = asyncio.StreamReader()
     device.writer = FakeWriter()
     device.writer.on_write = device._answer
@@ -437,7 +453,7 @@ async def test_read_wraps_writer_os_error_and_closes():
 
 
 async def test_read_fails_if_connect_returns_without_streams():
-    client = ModbusTcpClient("host", 502, 1)
+    client = ModbusTcpClient("host", 502, 1, environment=ClientEnvironment(label=LABEL))
 
     async def connect_without_streams() -> None:
         return
@@ -457,7 +473,7 @@ async def test_close_suppresses_writer_close_error():
     client = _client(device)
     await client.connect()
 
-    await client.close()
+    await client.close(reason=ConnectionReason.UNLOAD)
     assert device.writer.closed
 
 
@@ -472,16 +488,16 @@ async def test_close_gives_up_on_a_connection_that_never_finishes_closing():
     await client.connect()
     client.timeout = 0
 
-    await client.close()
+    await client.close(reason=ConnectionReason.UNLOAD)
 
     assert device.writer.closed
     assert not client.is_connected()
 
 
 async def test_close_without_connection_is_safe():
-    client = ModbusTcpClient("host", 502, 1)
+    client = ModbusTcpClient("host", 502, 1, environment=ClientEnvironment(label=LABEL))
 
-    await client.close()
+    await client.close(reason=ConnectionReason.UNLOAD)
 
 
 async def test_consecutive_reads_are_paced_without_waiting_in_the_test():
@@ -533,7 +549,9 @@ def test_the_worst_case_duration_counts_each_request_and_the_budget_wait():
         502,
         1,
         timeout=5,
-        environment=ClientEnvironment(budget=RequestBudget(limit=2, window=10)),
+        environment=ClientEnvironment(
+            label=LABEL, budget=RequestBudget(limit=2, window=10)
+        ),
     )
     pace = 5 + REQUEST_PAUSE
 
@@ -730,3 +748,270 @@ async def test_a_late_frame_for_an_earlier_read_is_discarded_while_a_write_is_pe
 
     assert client.late_frames_discarded == 1
     assert not device.writer.closed
+
+
+def _failures(client: ModbusTcpClient):
+    return [
+        (failure.address, failure.count, failure.outcome, failure.exception_code)
+        for failure in client.memory.snapshot(fit=FIT).failed
+    ]
+
+
+async def test_an_answered_read_is_remembered_by_address():
+    client = _client(FakeDevice(_frame("0304 1234 abcd")))
+
+    await client.read_holding_registers(UNCATALOGUED, 2)
+
+    assert [
+        (entry.address, entry.words)
+        for entry in client.memory.snapshot(fit=FIT).registers
+    ] == [(UNCATALOGUED, (0x1234,)), (UNCATALOGUED + 1, (0xABCD,))]
+
+
+async def test_a_refused_read_is_remembered_with_its_exception_code():
+    client = _client(FakeDevice(_frame("8330")))
+
+    with pytest.raises(ModbusError):
+        await client.read_holding_registers(UNCATALOGUED, 32)
+
+    assert _failures(client) == [(UNCATALOGUED, 32, FailureOutcome.EXCEPTION, 0x30)]
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        _frame("0304 1234 abcd", unit_id=2),
+        _frame("0304 1234 abcd", length=254),
+        _frame("0302 1234"),
+    ],
+    ids=["mismatched_header", "malformed_length", "malformed_registers"],
+)
+async def test_a_reply_that_cannot_be_trusted_is_remembered_as_malformed(reply: bytes):
+    client = _client(FakeDevice(reply))
+
+    with pytest.raises(ModbusError):
+        await client.read_holding_registers(UNCATALOGUED, 2)
+
+    assert _failures(client) == [
+        (UNCATALOGUED, 2, FailureOutcome.MALFORMED_REPLY, None)
+    ]
+
+
+async def test_a_read_nobody_answers_is_remembered_as_a_timeout(exchange_stalls):
+    client = _client(FakeDevice())
+
+    with pytest.raises(ModbusError):
+        await client.read_holding_registers(UNCATALOGUED, 2)
+
+    assert _failures(client) == [(UNCATALOGUED, 2, FailureOutcome.TIMEOUT, None)]
+
+
+@pytest.mark.parametrize(
+    "peer_closing", ["eof", "reset"], ids=["peer_closed", "connection_reset"]
+)
+async def test_a_connection_lost_during_a_read_is_remembered_as_connection_lost(
+    peer_closing: str,
+):
+    device = FakeDevice(_frame(ANSWER))
+    client = _client(device)
+    await client.read_holding_registers(UNCATALOGUED, 1)
+    if peer_closing == "eof":
+        device.writer.on_write = lambda _request: device.reader.feed_eof()
+    else:
+        device.writer.drain_error = ConnectionResetError()
+
+    with pytest.raises(ModbusError):
+        await client.read_holding_registers(UNCATALOGUED + 8, 2)
+
+    assert _failures(client) == [
+        (UNCATALOGUED + 8, 2, FailureOutcome.CONNECTION_LOST, None)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("connector_error", "outcome"),
+    [
+        (TimeoutError(), FailureOutcome.TIMEOUT),
+        (OSError(), FailureOutcome.CONNECTION_LOST),
+    ],
+)
+async def test_a_connection_that_cannot_be_opened_for_a_read_is_remembered(
+    connector_error: Exception, outcome: FailureOutcome
+):
+    async def connector(_host: str, _port: int):
+        raise connector_error
+
+    client = ModbusTcpClient(
+        "host",
+        502,
+        1,
+        environment=ClientEnvironment(label=LABEL, connector=connector),
+    )
+
+    with pytest.raises(ModbusError):
+        await client.read_holding_registers(UNCATALOGUED, 4)
+
+    assert _failures(client) == [(UNCATALOGUED, 4, outcome, None)]
+
+
+async def test_a_failed_range_is_forgotten_when_it_answers_later_and_older_words_stay():
+    device = FakeDevice(
+        _frame("0302 1111"),
+        _frame("8330", transaction=2),
+        _frame(ANSWER, transaction=3),
+    )
+    client = _client(device)
+    await client.read_holding_registers(UNCATALOGUED, 1)
+    with pytest.raises(ModbusError):
+        await client.read_holding_registers(UNCATALOGUED, 1)
+    failed_in_between = _failures(client)
+
+    await client.read_holding_registers(UNCATALOGUED, 1)
+
+    assert failed_in_between == [(UNCATALOGUED, 1, FailureOutcome.EXCEPTION, 0x30)]
+    assert _failures(client) == []
+
+
+async def test_writes_and_refused_spans_are_not_remembered_as_reads():
+    client = _client(FakeDevice(_frame("06 4647 0002")))
+
+    await client.write_single_register(0x4647, 2)
+    with pytest.raises(ModbusError):
+        await client.read_holding_registers(0x10000, 1)
+
+    snapshot = client.memory.snapshot(fit=FIT)
+    assert (snapshot.registers, snapshot.failed) == ((), ())
+
+
+async def test_reads_made_while_unremembered_do_not_reach_the_memory():
+    client = _client(FakeDevice(_frame(ANSWER), _frame("8330", transaction=2)))
+
+    with client.unremembered():
+        await client.read_holding_registers(UNCATALOGUED, 1)
+        with pytest.raises(ModbusError):
+            await client.read_holding_registers(UNCATALOGUED + 4, 1)
+
+    snapshot = client.memory.snapshot(fit=FIT)
+    assert (snapshot.registers, snapshot.failed) == ((), ())
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        message
+        for message in ModbusErrorMessage
+        if message
+        not in {ModbusErrorMessage.INVALID_RANGE, ModbusErrorMessage.INVALID_VALUE}
+    ],
+)
+def test_every_failure_that_can_reach_the_wire_has_a_remembered_outcome(
+    message: ModbusErrorMessage,
+):
+    assert isinstance(ModbusError(message).failure_outcome, FailureOutcome)
+
+
+def _debug_lines(caplog) -> list[str]:
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.DEBUG
+    ]
+
+
+async def test_the_connection_is_logged_opening_and_closing_with_the_reason(caplog):
+    device = FakeDevice(_frame(ANSWER))
+    client = _client(device)
+
+    with caplog.at_level(logging.DEBUG, logger="saj.client"):
+        await client.read_holding_registers(UNCATALOGUED, 1)
+        await client.close(reason=ConnectionReason.UNLOAD)
+
+    assert _debug_lines(caplog) == [
+        f"{LABEL}: Connection opened (setup)",
+        f"{LABEL}: Connection closed (unload)",
+    ]
+
+
+async def test_a_connection_reopened_after_a_failure_is_logged_as_a_reconnect(
+    exchange_stalls, caplog
+):
+    client = _client(FakeDevice())
+    exchange_stalls.exchanges_answered_first = 0
+
+    with caplog.at_level(logging.DEBUG, logger="saj.client"):
+        with pytest.raises(ModbusError):
+            await client.read_holding_registers(UNCATALOGUED, 1)
+        await client.connect()
+
+    assert _debug_lines(caplog) == [
+        f"{LABEL}: Connection opened (setup)",
+        f"{LABEL}: Connection closed (reconnect after failure)",
+        f"{LABEL}: Connection opened (reconnect after failure)",
+    ]
+
+
+@pytest.mark.parametrize(
+    "reason", [ConnectionReason.STALE, ConnectionReason.VALIDATION]
+)
+async def test_a_connection_closed_for_a_reason_is_reopened_for_that_reason(
+    reason: ConnectionReason, caplog
+):
+    client = _client(FakeDevice(_frame(ANSWER)))
+    await client.connect()
+    caplog.clear()
+
+    with caplog.at_level(logging.DEBUG, logger="saj.client"):
+        await client.close(reason=reason)
+        await client.connect()
+
+    assert _debug_lines(caplog) == [
+        f"{LABEL}: Connection closed ({reason})",
+        f"{LABEL}: Connection opened ({reason})",
+    ]
+
+
+async def test_closing_a_connection_that_is_not_open_logs_nothing(caplog):
+    client = _client(FakeDevice())
+
+    with caplog.at_level(logging.DEBUG, logger="saj.client"):
+        await client.close(reason=ConnectionReason.UNLOAD)
+
+    assert _debug_lines(caplog) == []
+
+
+async def test_a_connection_reopened_after_a_deliberate_close_keeps_that_reason(caplog):
+    client = _client(FakeDevice(_frame(ANSWER)))
+    await client.connect()
+    await client.close(reason=ConnectionReason.VALIDATION)
+    caplog.clear()
+
+    with caplog.at_level(logging.DEBUG, logger="saj.client"):
+        await client.close(reason=ConnectionReason.RECONNECT)
+        await client.connect()
+
+    assert _debug_lines(caplog) == [f"{LABEL}: Connection opened (validation)"]
+
+
+@pytest.mark.parametrize("remembering", [True, False])
+async def test_a_read_cancelled_before_it_answers_is_remembered_as_a_timeout(
+    *, remembering: bool
+):
+    client = _client(FakeDevice())
+    task = asyncio.create_task(_read_unremembered(client, remembering=remembering))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert _failures(client) == (
+        [(UNCATALOGUED, 2, FailureOutcome.TIMEOUT, None)] if remembering else []
+    )
+
+
+async def _read_unremembered(client: ModbusTcpClient, *, remembering: bool):
+    if remembering:
+        return await client.read_holding_registers(UNCATALOGUED, 2)
+    with client.unremembered():
+        return await client.read_holding_registers(UNCATALOGUED, 2)

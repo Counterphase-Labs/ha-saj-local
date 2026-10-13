@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
+from custom_components.saj_local import coordinator as coordinator_module
 from custom_components.saj_local.coordinator import (
     SajCoordinator,
     WriteStatistics,
 )
+from custom_components.saj_local.label import entry_logger
 from custom_components.saj_local.saj.codec import Range
 from custom_components.saj_local.saj.control import Write, WriteResult
 from custom_components.saj_local.saj.ems import EmsOwnership
@@ -49,6 +52,15 @@ DIRECTION_KEY = "passive_mode"
 PASSIVE = 3
 STANDBY = 0
 CHARGING = 2
+
+ROOF_ENTRY = SimpleNamespace(title="Roof inverter", unique_id="S2303J4567")
+ROOF_LABEL = "Roof inverter (xxxxx567)"
+
+
+def coordinator_logger():
+    return entry_logger(
+        logger=logging.getLogger(coordinator_module.__name__), entry=ROOF_ENTRY
+    )
 
 
 class FakeControl:
@@ -327,7 +339,8 @@ def build(recorder, *, contexts=READ_KEYS, functions=None, rows=None):
     coordinator.unavailable_keys = frozenset()
     coordinator.last_error = None
     coordinator.entry_id = "entry"
-    coordinator._entry = SimpleNamespace(title="Roof inverter")
+    coordinator._entry = ROOF_ENTRY
+    coordinator._log = coordinator_logger()
     coordinator.guard = object()
     coordinator.device = SimpleNamespace(
         fit=None, profile=SimpleNamespace(faults=FaultMap())

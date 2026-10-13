@@ -16,11 +16,11 @@ from .const import (
     entity_id_in_use,
     entity_unique_id,
     fixed_entity_id,
-    object_id,
     selector_options,
 )
 from .coordinator import SajCoordinator
 from .errors import WRITE_ERRORS, write_failure
+from .label import entry_logger
 from .saj.catalogue import device_registers
 from .saj.definitions import Access, Quantity
 
@@ -215,7 +215,7 @@ def add_power_entities(
         return
     _warn_about_displaced_entities(
         hass=hass,
-        entry_id=coordinator.entry_id,
+        entry=entry,
         prefix=prefix,
         kind=platform.kind,
         keys=list(keys.values()),
@@ -247,7 +247,7 @@ def add_entities(
     ]
     _warn_about_displaced_entities(
         hass=hass,
-        entry_id=coordinator.entry_id,
+        entry=entry,
         prefix=prefix,
         kind=kind,
         keys=[register.key for register in registers],
@@ -290,7 +290,7 @@ def platform_setup(
 def _warn_about_displaced_entities(
     *,
     hass: HomeAssistant,
-    entry_id: str,
+    entry: ConfigEntry,
     prefix: str,
     kind: EntityKind,
     keys: list[str],
@@ -299,18 +299,14 @@ def _warn_about_displaced_entities(
     for key in keys:
         is_new = (
             registry.async_get_entity_id(
-                kind, DOMAIN, entity_unique_id(entry_id=entry_id, key=key)
+                kind, DOMAIN, entity_unique_id(entry_id=entry.entry_id, key=key)
             )
             is None
         )
         wanted = fixed_entity_id(domain=kind, prefix=prefix, key=key)
         if is_new and entity_id_in_use(hass=hass, entity_id=wanted):
-            _LOGGER.warning(
-                "Entity ID %s is taken, so %s %s is registered as %s",
-                wanted,
+            entry_logger(logger=_LOGGER, entry=entry).warning(
+                "Entity ID for %s %s is taken, so it is registered under another ID",
                 kind,
                 key,
-                registry.async_get_available_entity_id(
-                    kind, object_id(prefix=prefix, key=key)
-                ),
             )

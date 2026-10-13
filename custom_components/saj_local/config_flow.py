@@ -59,6 +59,7 @@ from .const import (
     SCHEDULE_DOMAIN,
     SUBENTRY_POLLING_GROUP,
     SUBENTRY_POWER_SCHEDULE,
+    VALIDATION_LABEL,
     PowerSchedule,
     enabled_entity_keys,
     endpoint_guard,
@@ -84,7 +85,7 @@ from .saj.catalogue import (
     device_registers,
     known_keys,
 )
-from .saj.client import ClientEnvironment, ModbusTcpClient
+from .saj.client import ClientEnvironment, ConnectionReason, ModbusTcpClient
 from .saj.device import Device, identify
 from .saj.device_type import format_device_type
 from .saj.ems import DEFAULT_HEARTBEAT_INTERVAL, valid_heartbeat_interval
@@ -1251,12 +1252,16 @@ async def _probe_device(
             port=submission.port,
             unit_id=submission.unit_id,
             timeout=REQUEST_TIMEOUT,
-            environment=ClientEnvironment(budget=guard.budget),
+            environment=ClientEnvironment(
+                label=VALIDATION_LABEL,
+                first_open=ConnectionReason.VALIDATION,
+                budget=guard.budget,
+            ),
         )
         try:
             validation = await _probe_with(client=client, submission=submission)
         finally:
-            await client.close()
+            await client.close(reason=ConnectionReason.VALIDATION)
     if validation.change is not None:
         guard.succeeded()
     return validation

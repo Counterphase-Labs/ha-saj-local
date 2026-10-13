@@ -2,18 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NoReturn, Protocol
 
-from .client import ModbusError
+from .client import ConnectionReason, ModbusError
 from .device import identify
 from .errors import ModelError
+from .health import halves
 from .load import planned_load
+from .log import LabelledLogger
+from .memory import FailureOutcome
 from .telemetry import plan_reads, read_telemetry
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Collection, Mapping
+    from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 
+    from .catalogue import Row
     from .client import ModbusTcpClient, RegisterReader
     from .codec import Value
     from .device import Device
@@ -25,6 +29,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 RECONNECT_REQUESTS = 3
+REQUEST_ANSWERED = "ok"
 
 
 class IdentityChangedError(Exception):
@@ -108,14 +113,58 @@ class Identifier(Protocol):
     ) -> Awaitable[Device]: ...
 
 
+def _failure_label(error: ModbusError) -> str:
+    if error.exception_code is not None:
+        return f"exception {error.exception_code}"
+    return error.failure_outcome.value
+
+
+@dataclass(frozen=True)
+class _Request:
+    address: int
+    count: int
+    outcome: str
+
+    def describe(self) -> str:
+        return f"{self.address:#06x}+{self.count} {self.outcome}"
+
+
+@dataclass
+class _Poll:
+    due: tuple[int, ...]
+    started: float
+    reconnect: bool
+    requests: list[_Request] = field(default_factory=list)
+
+
 class _CountingReader:
-    def __init__(self, client: RegisterReader) -> None:
+    def __init__(self, client: RegisterReader, *, poll: _Poll) -> None:
         self._client = client
+        self._poll = poll
         self.requests = 0
 
     async def read_holding_registers(self, address: int, count: int) -> tuple[int, ...]:
         self.requests += 1
-        return await self._client.read_holding_registers(address=address, count=count)
+        try:
+            words = await self._client.read_holding_registers(
+                address=address, count=count
+            )
+        except ModbusError as err:
+            self._poll.requests.append(
+                _Request(address=address, count=count, outcome=_failure_label(err))
+            )
+            raise
+        except asyncio.CancelledError:
+            self._poll.requests.append(
+                _Request(
+                    address=address, count=count, outcome=FailureOutcome.TIMEOUT.value
+                )
+            )
+            raise
+        self._poll.requests.append(
+            _Request(address=address, count=count, outcome=REQUEST_ANSWERED)
+        )
+        return words
 
 
 @dataclass(frozen=True)
@@ -149,7 +198,9 @@ class Poller:
         tracking: Tracking,
         services: Services,
         enabled: Collection[str],
+        label: str,
     ) -> None:
+        self._log = LabelledLogger(logger=_LOGGER, label=label)
         self._client = target.client
         self._device = target.device
         self._selection = target.selection
@@ -217,6 +268,13 @@ class Poller:
             self._schedule.require_full_read()
         enabled_keys = frozenset(enabled)
         self._enabled = enabled_keys
+        poll = _Poll(
+            due=tuple(
+                cadence.interval for cadence in self._schedule.due_cadences(now=now)
+            ),
+            started=now,
+            reconnect=reconnect,
+        )
         keys = (
             (self._schedule.due(now=now) & enabled_keys) - self._health.suspended()
         ) | (self._health.retests_due(now=now) & enabled_keys)
@@ -245,7 +303,7 @@ class Poller:
         try:
             readout = await self._services.bound(
                 self._cycle(
-                    reconnect=reconnect,
+                    poll=poll,
                     keys=keys,
                     full_keys=full_keys,
                     narrowing=narrowing,
@@ -254,27 +312,29 @@ class Poller:
                 deadline,
             )
         except asyncio.CancelledError:
-            await self._client.close()
+            await self._client.close(reason=ConnectionReason.RECONNECT)
             raise
         except CYCLE_ERRORS as err:
-            await self._fail(error=err)
+            await self._fail(error=err, poll=poll)
         self._record(readout=readout, now=now)
         self._schedule.mark_read(now=now)
         self._guard.succeeded()
-        return self._result(enabled=enabled_keys, readout=readout)
+        result = self._result(enabled=enabled_keys, readout=readout)
+        self._log_poll(poll=poll, next_wakeup=result.next_wakeup)
+        return result
 
     async def _cycle(
         self,
         *,
-        reconnect: bool,
+        poll: _Poll,
         keys: Collection[str],
         full_keys: Collection[str],
         narrowing: Collection[Region],
         breaks: Collection[Break],
     ) -> Readout:
-        if reconnect:
-            await self._reopen()
-        counter = _CountingReader(self._client)
+        if poll.reconnect:
+            await self._reopen(poll=poll, reason=ConnectionReason.RECONNECT)
+        counter = _CountingReader(self._client, poll=poll)
         try:
             return await self._services.read(
                 client=counter,
@@ -284,52 +344,72 @@ class Poller:
                 breaks=breaks,
             )
         except ModbusError as err:
-            if reconnect or not err.peer_closed or counter.requests != 1:
+            if poll.reconnect or not err.peer_closed or counter.requests != 1:
                 raise
         self.stale_reconnects += 1
-        _LOGGER.debug("Reopening a stale connection")
-        await self._reopen()
+        self._log.debug("Reopening a stale connection")
+        await self._reopen(poll=poll, reason=ConnectionReason.STALE)
         return await self._services.read(
-            client=self._client,
+            client=_CountingReader(self._client, poll=poll),
             device=self._device,
             enabled=full_keys,
             narrowing=narrowing,
             breaks=breaks,
         )
 
-    async def _reopen(self) -> None:
-        await self._client.close()
+    async def _reopen(self, *, poll: _Poll, reason: ConnectionReason) -> None:
+        await self._client.close(reason=reason)
         await self._client.connect()
         current = await self._services.identity(
-            client=self._client, selection=self._selection
+            client=_CountingReader(self._client, poll=poll),
+            selection=self._selection,
         )
+        self._log.debug("Identity read: %s", current.description)
         if current.serial != self._device.serial:
             raise IdentityChangedError(serial=current.serial)
 
-    async def _fail(self, *, error: Exception) -> NoReturn:
+    async def _fail(self, *, error: Exception, poll: _Poll) -> NoReturn:
         if isinstance(error, ModbusError) and error.device_unavailable:
             next_wakeup = self._back_off()
         else:
             next_wakeup = await self.link_failed()
+        self._log_poll(poll=poll, next_wakeup=next_wakeup)
         raise CycleFailedError(cause=error, next_wakeup=next_wakeup) from error
 
     async def link_failed(self) -> float:
-        await self._client.close()
+        await self._client.close(reason=ConnectionReason.RECONNECT)
         return self._back_off()
 
     def _back_off(self) -> float:
         now = self._services.clock()
         delay = self._guard.failed(now=now, base_delay=self._schedule.shortest_interval)
         self._schedule.require_full_read()
+        self._log.debug(
+            "Backing off for %s s after %s consecutive failed polls",
+            delay,
+            self._guard.consecutive_failures,
+        )
         return now + delay
+
+    def _log_poll(self, *, poll: _Poll, next_wakeup: float | None) -> None:
+        now = self._services.clock()
+        self._log.debug(
+            "Poll of cadences %s: %s; took %.1f s; next wake-up %s",
+            [f"{interval} s" for interval in poll.due],
+            ", ".join(request.describe() for request in poll.requests) or "no requests",
+            now - poll.started,
+            "never"
+            if next_wakeup is None
+            else f"in {max(0.0, next_wakeup - now):.1f} s",
+        )
 
     def _record(self, *, readout: Readout, now: float) -> None:
         recovered = sorted(
             key for key in readout.values if self._health.record_success(key=key)
         )
         if recovered:
-            _LOGGER.info(
-                "SAJ sensors %s answer again and are no longer suspended",
+            self._log.info(
+                "Sensors %s answer again and are no longer suspended",
                 ", ".join(recovered),
             )
         for outcome in readout.outcomes:
@@ -339,9 +419,18 @@ class Poller:
             suspended = self._health.record_request_refused(
                 rows=outcome.rows, keys=outcome.keys, code=outcome.code, now=now
             )
+            if len(outcome.rows) > 1:
+                lower, upper = halves(outcome.rows)
+                self._log.debug(
+                    "Narrowing refused request %s (exception %s) into %s and %s",
+                    _span(rows=outcome.rows),
+                    outcome.code,
+                    _span(rows=lower),
+                    _span(rows=upper),
+                )
             if suspended:
-                _LOGGER.warning(
-                    "SAJ sensors %s suspended after repeated refusals (code %s)",
+                self._log.warning(
+                    "Sensors %s suspended after repeated refusals (code %s)",
                     ", ".join(sorted(suspended)),
                     outcome.code,
                 )
@@ -359,3 +448,7 @@ class Poller:
                 now=self._services.clock(), enabled=enabled
             ),
         )
+
+
+def _span(*, rows: Sequence[Row]) -> str:
+    return f"{rows[0].address:#06x}+{rows[-1].end - rows[0].address}"

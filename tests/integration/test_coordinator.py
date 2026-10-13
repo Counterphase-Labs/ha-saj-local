@@ -1,8 +1,9 @@
 import asyncio
 import logging
+from contextlib import contextmanager
 from datetime import timedelta
 from types import SimpleNamespace
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import pytest
 from homeassistant.helpers.update_coordinator import UpdateFailed
@@ -17,7 +18,11 @@ from custom_components.saj_local.coordinator import (
 )
 from custom_components.saj_local.errors import Translation
 from custom_components.saj_local.saj.budget import BUDGET_PER_MINUTE
-from custom_components.saj_local.saj.client import ModbusError, ModbusErrorMessage
+from custom_components.saj_local.saj.client import (
+    ConnectionReason,
+    ModbusError,
+    ModbusErrorMessage,
+)
 from custom_components.saj_local.saj.device import Device
 from custom_components.saj_local.saj.ems import EmsOwnership
 from custom_components.saj_local.saj.errors import (
@@ -36,8 +41,17 @@ from custom_components.saj_local.saj.poller import (
 )
 from custom_components.saj_local.saj.schedule import Cadence
 from custom_components.saj_local.saj.telemetry import Telemetry
-from tests.coordinators import FakeStore, statements
+from tests.coordinators import (
+    ROOF_ENTRY,
+    ROOF_LABEL,
+    FakeStore,
+    coordinator_logger,
+    statements,
+)
 from tests.issues import IssueRecorder
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 from tests.profiles import profile
 
 SUPPORTED_KEYS = frozenset(
@@ -80,9 +94,20 @@ def _result(
 class FakeClient:
     def __init__(self) -> None:
         self.closed = False
+        self.unremembering = False
+        self.close_reasons: list[ConnectionReason] = []
 
-    async def close(self) -> None:
+    async def close(self, *, reason: ConnectionReason) -> None:
         self.closed = True
+        self.close_reasons.append(reason)
+
+    @contextmanager
+    def unremembered(self) -> Iterator[None]:
+        self.unremembering = True
+        try:
+            yield
+        finally:
+            self.unremembering = False
 
 
 class FakeControl:
@@ -168,7 +193,8 @@ def _coordinator(
     coordinator.device = DEVICE
     coordinator.model_selection = SELECTION
     coordinator.entry_id = "logical-installation"
-    coordinator._entry = SimpleNamespace(title="Roof inverter")
+    coordinator._entry = ROOF_ENTRY
+    coordinator._log = coordinator_logger()
     coordinator.guard = object()
     coordinator._faults = FaultWatch(fault_map=DEVICE.profile.faults)
     coordinator._packs_on = frozenset()
@@ -242,8 +268,9 @@ class RecordingSchedule:
 class RecordingPoller(FakePoller):
     instances: ClassVar[list] = []
 
-    def __init__(self, *, target, tracking, services, enabled) -> None:
+    def __init__(self, *, target, tracking, services, enabled, label) -> None:
         super().__init__()
+        self.label = label
         self.enabled = enabled
         self.target = target
         self.tracking = tracking
@@ -254,7 +281,8 @@ class RecordingPoller(FakePoller):
 def _entry(*, options=None, subentries=()) -> SimpleNamespace:
     return SimpleNamespace(
         entry_id="logical-installation",
-        title="Roof inverter",
+        title=ROOF_ENTRY.title,
+        unique_id=ROOF_ENTRY.unique_id,
         options={"scan_interval": 47} if options is None else options,
         data={"model": "alpha"},
         subentries={
@@ -320,7 +348,8 @@ def test_constructor_builds_the_poller_from_the_default_interval_and_polling_gro
         Cadence(interval=120, keys=frozenset({"battery_soc"})),
     ]
     assert captured["supported"] == SUPPORTED_KEYS
-    assert captured["name"] == "SAJ"
+    assert captured["name"] == ROOF_LABEL
+    assert coordinator.poller.label == ROOF_LABEL
     poller = coordinator.poller
     assert poller.target.client is client
     assert poller.target.device is DEVICE
@@ -646,7 +675,7 @@ async def test_identical_failures_log_only_on_state_transition(caplog):
             with pytest.raises(UpdateFailed):
                 await coordinator._async_update_data()
 
-    assert caplog.text.count("SAJ update failed") == 1
+    assert caplog.text.count(f"{ROOF_LABEL}: Update failed") == 1
 
 
 async def test_recovery_is_logged_once_and_clears_the_last_error(caplog):
@@ -658,7 +687,7 @@ async def test_recovery_is_logged_once_and_clears_the_last_error(caplog):
         await coordinator._async_update_data()
         await coordinator._async_update_data()
 
-    assert caplog.text.count("SAJ connection restored") == 1
+    assert caplog.text.count(f"{ROOF_LABEL}: Connection restored") == 1
     assert coordinator.last_error is None
 
 
@@ -706,10 +735,11 @@ async def test_validation_session_closes_the_client_when_it_ends(fails):
     coordinator, client, _poller = _coordinator()
     lock_held_at_close = None
 
-    async def close() -> None:
+    async def close(*, reason: ConnectionReason) -> None:
         nonlocal lock_held_at_close
         lock_held_at_close = coordinator._cycle_lock.locked()
         client.closed = True
+        client.close_reasons.append(reason)
 
     client.close = close
     lock_held_at_refresh = []
@@ -722,6 +752,7 @@ async def test_validation_session_closes_the_client_when_it_ends(fails):
     async def validate() -> None:
         async with coordinator.async_validation_session():
             assert not client.closed
+            assert client.unremembering
             assert not lock_held_at_refresh
             if fails:
                 failure_message = "validation failed"
@@ -736,6 +767,8 @@ async def test_validation_session_closes_the_client_when_it_ends(fails):
     await asyncio.sleep(0)
 
     assert client.closed
+    assert not client.unremembering
+    assert client.close_reasons == [ConnectionReason.VALIDATION]
     assert lock_held_at_close is True
     assert lock_held_at_refresh == [False]
 
@@ -1012,10 +1045,10 @@ async def test_a_fault_turning_on_and_off_is_logged_once_each(caplog):
             await coordinator._async_update_data()
 
     assert _logged(caplog, logging.WARNING) == [
-        "Roof inverter: fault inverter_fault_grid_lost is on"
+        f"{ROOF_LABEL}: Fault inverter_fault_grid_lost is on"
     ]
     assert _logged(caplog, logging.INFO) == [
-        "Roof inverter: fault inverter_fault_grid_lost cleared"
+        f"{ROOF_LABEL}: Fault inverter_fault_grid_lost cleared"
     ]
 
 
@@ -1031,10 +1064,10 @@ async def test_an_unrecognised_bit_turning_on_and_off_is_logged_with_its_place(c
         await coordinator._async_update_data()
 
     assert _logged(caplog, logging.WARNING) == [
-        "Roof inverter: unrecognised fault bit 0x4007:2 is set"
+        f"{ROOF_LABEL}: Unrecognised fault bit 0x4007:2 is set"
     ]
     assert _logged(caplog, logging.INFO) == [
-        "Roof inverter: unrecognised fault bit 0x4007:2 cleared"
+        f"{ROOF_LABEL}: Unrecognised fault bit 0x4007:2 cleared"
     ]
 
 
@@ -1053,10 +1086,10 @@ async def test_a_battery_pack_fault_is_logged_when_it_turns_on_and_off(caplog):
             await coordinator._async_update_data()
 
     assert _logged(caplog, logging.WARNING) == [
-        "Roof inverter: fault battery_pack1_warning is on"
+        f"{ROOF_LABEL}: Fault battery_pack1_warning is on"
     ]
     assert _logged(caplog, logging.INFO) == [
-        "Roof inverter: fault battery_pack1_warning cleared"
+        f"{ROOF_LABEL}: Fault battery_pack1_warning cleared"
     ]
 
 

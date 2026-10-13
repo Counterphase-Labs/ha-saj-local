@@ -19,6 +19,7 @@ from saj.catalogue import (
     hidden_sources,
     known_keys,
     pack_maximum,
+    private_rows,
 )
 from saj.codec import BitRange, Encoding, Range
 from saj.definitions import (
@@ -1824,3 +1825,42 @@ def test_the_hidden_sources_of_enabled_keys_are_the_words_nobody_shows():
         frozenset()
     )
     assert hidden_sources(fit=fit, keys=set()) == frozenset()
+
+
+@pytest.mark.parametrize(
+    ("profile_under_test", "device_type", "private_keys"),
+    [
+        (
+            HS3,
+            0x1610,
+            {
+                "ethernet_mac_address",
+                "ethernet_ip_address",
+                "ethernet_subnet_mask",
+                "ethernet_gateway",
+                "ethernet_dns_primary",
+                "ethernet_dns_secondary",
+                "ev_serial_number",
+            },
+        ),
+        (H2, 0x005A, set()),
+    ],
+    ids=["hs3", "h2"],
+)
+def test_private_rows_are_the_catalogued_identifiers_and_always_the_inverter_serial(
+    profile_under_test, device_type, private_keys
+):
+    registers = device_registers(
+        fit=Fit(
+            profile=profile_under_test,
+            device_type=device_type,
+            equipment=ALL_EQUIPMENT,
+        )
+    )
+
+    rows = private_rows(registers=registers)
+
+    assert {register.key for register in registers if register.private} == private_keys
+    assert rows == {
+        register.row for register in registers if register.key in private_keys
+    } | {Row(address=0x8F03, words=10)}

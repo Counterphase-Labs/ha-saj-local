@@ -346,7 +346,11 @@ def rows(monkeypatch):
 
 def _entry(coordinator, **options):
     return SimpleNamespace(
-        runtime_data=SimpleNamespace(coordinator=coordinator), options=options
+        runtime_data=SimpleNamespace(coordinator=coordinator),
+        options=options,
+        entry_id=ENTRY_ID,
+        title="Roof inverter",
+        unique_id="S2303J4567",
     )
 
 
@@ -405,7 +409,7 @@ async def test_entities_are_added_without_attaching_them_to_a_subentry(registry,
 
 
 @pytest.mark.parametrize("kind", ALL_KINDS)
-async def test_a_new_entity_whose_id_is_taken_logs_one_warning_naming_both_ids(
+async def test_a_new_entity_whose_id_is_taken_logs_one_warning_without_the_ids(
     kind, registry, rows, caplog
 ):
     del rows
@@ -417,9 +421,9 @@ async def test_a_new_entity_whose_id_is_taken_logs_one_warning_naming_both_ids(
 
     assert [record.getMessage() for record in caplog.records] == [
         (
-            f"Entity ID {kind.value}.saj_house_{kind.value}_row is taken, so "
-            f"{kind.value} {kind.value}_row is registered as "
-            f"{kind.value}.saj_house_{kind.value}_row_2"
+            "Roof inverter (xxxxx567): Entity ID for "
+            f"{kind.value} {kind.value}_row is taken, so it is registered "
+            "under another ID"
         )
     ]
 

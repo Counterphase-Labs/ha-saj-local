@@ -21,6 +21,7 @@ from .const import (
     selector_options,
 )
 from .errors import translate_error
+from .label import entry_logger
 from .saj.models import Equipment
 from .saj.poller import IdentityChangedError
 
@@ -86,7 +87,9 @@ class Issue:
 
 def _raise(*, hass: HomeAssistant, entry: ConfigEntry, issue: Issue) -> None:
     if not _is_open(hass=hass, entry=entry, key=issue.key):
-        _LOGGER.warning("%s: repair issue %s raised", entry.title, issue.key)
+        entry_logger(logger=_LOGGER, entry=entry).warning(
+            "Repair issue %s raised", issue.key
+        )
     ir.async_create_issue(
         hass,
         DOMAIN,
@@ -106,7 +109,7 @@ def _clear(*, hass: HomeAssistant, entry: ConfigEntry, key: str) -> None:
 
 
 def log_fixed(*, entry: ConfigEntry, key: str) -> None:
-    _LOGGER.info("%s: repair issue %s cleared", entry.title, key)
+    entry_logger(logger=_LOGGER, entry=entry).info("Repair issue %s cleared", key)
 
 
 def model_finding(*, error: Exception) -> ModelFinding | None:

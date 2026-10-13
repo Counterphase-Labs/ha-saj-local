@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass, field, replace
 from types import SimpleNamespace
 from typing import ClassVar
@@ -44,7 +45,7 @@ class FakeClient:
     def is_connected(self) -> bool:
         return not self.closed
 
-    async def close(self) -> None:
+    async def close(self, **_options) -> None:
         self.closed = True
 
 
@@ -181,6 +182,33 @@ def _patch_success(monkeypatch) -> None:
         return device, {}, PACKS
 
     monkeypatch.setattr(integration, "settle_equipment", settle_equipment)
+
+
+async def test_setup_gives_the_masked_label_to_the_client_and_control_and_logs_identity(
+    monkeypatch, caplog
+):
+    captured = {}
+
+    class RecordingControl:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    _patch_success(monkeypatch)
+    monkeypatch.setattr(integration, "Control", RecordingControl)
+
+    with caplog.at_level(logging.DEBUG, logger=integration.__name__):
+        assert await integration.async_setup_entry(_hass(), _entry())
+
+    label = "Roof inverter (xxxxx001)"
+    assert FakeClient.instances[0].environment.label == label
+    assert captured["environment"].label == label
+    assert [record.getMessage() for record in caplog.records] == [
+        (
+            f"{label}: Identity read: model alpha, device type 0x1610, "
+            "rated power 12000 W, detected"
+        )
+    ]
+    assert SERIAL not in caplog.text
 
 
 async def test_entry_loads_into_runtime_and_unloads_owned_resources(monkeypatch):

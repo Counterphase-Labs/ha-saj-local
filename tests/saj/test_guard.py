@@ -54,8 +54,8 @@ def test_a_success_resets_the_count_the_delay_and_the_wait():
 async def test_a_second_client_on_the_same_guard_inherits_budget_and_failures():
     guard = EndpointGuard()
     guard.failed(now=0, base_delay=10)
-    first = ClientEnvironment(budget=guard.budget)
-    second = ClientEnvironment(budget=guard.budget)
+    first = ClientEnvironment(label="guard", budget=guard.budget)
+    second = ClientEnvironment(label="guard", budget=guard.budget)
     for _ in range(guard.budget.limit):
         first.budget.record(now=0)
 

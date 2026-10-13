@@ -5,16 +5,18 @@ import logging
 import struct
 import time
 from collections import deque
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import partial
 from typing import TYPE_CHECKING, Protocol
 
 from .budget import RequestBudget
+from .log import LabelledLogger
+from .memory import FailureOutcome, RegisterMemory
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Sequence
+    from collections.abc import Awaitable, Callable, Iterator, Sequence
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +58,29 @@ class ModbusErrorMessage(StrEnum):
     CONNECTION_CLOSED = "Connection closed by the device"
 
 
+FAILURE_OUTCOMES: dict[str, FailureOutcome] = {
+    ModbusErrorMessage.CONNECTION_TIMEOUT: FailureOutcome.TIMEOUT,
+    ModbusErrorMessage.REQUEST_TIMEOUT: FailureOutcome.TIMEOUT,
+    ModbusErrorMessage.CONNECTION_FAILED: FailureOutcome.CONNECTION_LOST,
+    ModbusErrorMessage.CONNECTION_UNAVAILABLE: FailureOutcome.CONNECTION_LOST,
+    ModbusErrorMessage.CONNECTION_CLOSED: FailureOutcome.CONNECTION_LOST,
+    ModbusErrorMessage.INCOMPLETE_RESPONSE: FailureOutcome.CONNECTION_LOST,
+    ModbusErrorMessage.MISMATCHED_HEADER: FailureOutcome.MALFORMED_REPLY,
+    ModbusErrorMessage.MALFORMED_LENGTH: FailureOutcome.MALFORMED_REPLY,
+    ModbusErrorMessage.MALFORMED_REGISTERS: FailureOutcome.MALFORMED_REPLY,
+    ModbusErrorMessage.MALFORMED_ACKNOWLEDGEMENT: FailureOutcome.MALFORMED_REPLY,
+    ModbusErrorMessage.EXCEPTION_RESPONSE: FailureOutcome.EXCEPTION,
+}
+
+
+class ConnectionReason(StrEnum):
+    SETUP = "setup"
+    RECONNECT = "reconnect after failure"
+    STALE = "stale connection"
+    VALIDATION = "validation"
+    UNLOAD = "unload"
+
+
 class ModbusError(Exception):
     def __init__(
         self,
@@ -71,6 +96,12 @@ class ModbusError(Exception):
     @property
     def device_unavailable(self) -> bool:
         return self.exception_code in DEVICE_UNAVAILABLE_CODES
+
+    @property
+    def failure_outcome(self) -> FailureOutcome:
+        if self.exception_code is not None:
+            return FailureOutcome.EXCEPTION
+        return FAILURE_OUTCOMES[str(self)]
 
 
 class RegisterReader(Protocol):
@@ -94,6 +125,8 @@ type Connector = Callable[
 
 @dataclass(frozen=True)
 class ClientEnvironment:
+    label: str
+    first_open: ConnectionReason = ConnectionReason.SETUP
     connector: Connector = asyncio.open_connection
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
     clock: Callable[[], float] = time.monotonic
@@ -107,14 +140,17 @@ class ModbusTcpClient:
         port: int,
         unit_id: int,
         *,
+        environment: ClientEnvironment,
         timeout: float = 5,
-        environment: ClientEnvironment | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self.unit_id = unit_id
         self.timeout = timeout
-        self._environment = ClientEnvironment() if environment is None else environment
+        self._environment = environment
+        self._log = LabelledLogger(logger=_LOGGER, label=environment.label)
+        self.memory = RegisterMemory(clock=environment.clock)
+        self._reason = environment.first_open
         self._retired: deque[int] = deque(maxlen=LATE_FRAME_MEMORY)
         self.late_frames_discarded = 0
         self._has_answered = False
@@ -136,13 +172,36 @@ class ModbusTcpClient:
             raise ModbusError(ModbusErrorMessage.CONNECTION_FAILED) from err
         self._has_answered = False
         self._retired.clear()
+        self._log.debug("Connection opened (%s)", self._reason)
+        self._reason = ConnectionReason.RECONNECT
 
     async def read_holding_registers(self, address: int, count: int) -> tuple[int, ...]:
         self._require_span(address=address, count=count, limit=MAX_READ_REGISTERS)
         pdu = struct.pack(">BHH", READ_HOLDING_REGISTERS, address, count)
-        return await self._request(
-            pdu=pdu, interpret=partial(_registers_of, count=count)
-        )
+        try:
+            words = await self._request(
+                pdu=pdu, interpret=partial(_registers_of, count=count)
+            )
+        except ModbusError as err:
+            self.memory.record_failure(
+                address=address,
+                count=count,
+                outcome=err.failure_outcome,
+                exception_code=err.exception_code,
+            )
+            raise
+        except asyncio.CancelledError:
+            self.memory.record_failure(
+                address=address, count=count, outcome=FailureOutcome.TIMEOUT
+            )
+            raise
+        self.memory.record_answer(address=address, words=words)
+        return words
+
+    @contextmanager
+    def unremembered(self) -> Iterator[None]:
+        with self.memory.paused():
+            yield
 
     async def write_single_register(self, address: int, value: int) -> None:
         self._require_span(address=address, count=1, limit=1)
@@ -209,22 +268,22 @@ class ModbusTcpClient:
                     timeout=self.timeout,
                 )
             except TimeoutError as err:
-                await self.close()
+                await self.close(reason=ConnectionReason.RECONNECT)
                 raise ModbusError(ModbusErrorMessage.REQUEST_TIMEOUT) from err
             except (asyncio.IncompleteReadError, OSError) as err:
                 peer_closed = self._peer_closed(error=err)
-                await self.close()
+                await self.close(reason=ConnectionReason.RECONNECT)
                 raise ModbusError(
                     ModbusErrorMessage.INCOMPLETE_RESPONSE, peer_closed=peer_closed
                 ) from err
             except ModbusError as err:
                 if err.exception_code is None:
-                    await self.close()
+                    await self.close(reason=ConnectionReason.RECONNECT)
                 else:
                     self._answered(transaction=transaction)
                 raise
             except asyncio.CancelledError:
-                await self.close()
+                await self.close(reason=ConnectionReason.RECONNECT)
                 raise
             else:
                 self._answered(transaction=transaction)
@@ -306,18 +365,20 @@ class ModbusTcpClient:
             if response_transaction not in self._retired:
                 raise ModbusError(ModbusErrorMessage.MISMATCHED_HEADER)
             self.late_frames_discarded += 1
-            _LOGGER.debug("Discarded a late frame for an earlier request")
+            self._log.debug("Discarded a late frame for an earlier request")
 
     def is_connected(self) -> bool:
         return self._writer is not None and not self._writer.is_closing()
 
-    async def close(self) -> None:
+    async def close(self, *, reason: ConnectionReason) -> None:
         writer, self._writer = self._writer, None
         self._reader = None
         self._has_answered = False
         self._retired.clear()
         if writer is None:
             return
+        self._reason = reason
+        self._log.debug("Connection closed (%s)", reason)
         writer.close()
         with suppress(TimeoutError, OSError):
             await asyncio.wait_for(writer.wait_closed(), timeout=self.timeout)

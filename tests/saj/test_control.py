@@ -10,6 +10,7 @@ from saj.client import ModbusError, ModbusErrorMessage
 from saj.codec import BitRange, Encoding, Range
 from saj.control import (
     Control,
+    ControlEnvironment,
     Inspection,
     RequestPlan,
     Write,
@@ -58,6 +59,7 @@ LIMIT_LOW_ADDRESS = 0x2060
 LIMIT_PAIR_ADDRESS = 0x2070
 LIMIT_LONE_ADDRESS = 0x2073
 GAP_ADDRESS = 0x2072
+PRIVATE_ADDRESS = 0x10A0
 
 
 EVERY_RULE = pytest.mark.parametrize(
@@ -191,6 +193,14 @@ def _definitions() -> dict[int, list[Definition]]:
         LIMIT_PAIR_ADDRESS + 1: [_limit("ems_inverter_export_power_limit")],
         GAP_ADDRESS: [_setting("gap", EntityKind.NUMBER, access=Access.WRITE_ONLY)],
         LIMIT_LONE_ADDRESS: [_limit("ems_pv_power_limit", invalid=frozenset({0xFFFF}))],
+        PRIVATE_ADDRESS: [
+            _setting(
+                "private_setting",
+                EntityKind.NUMBER,
+                range=Range(minimum=0, maximum=65535),
+                private=True,
+            )
+        ],
         0x2030: [
             _setting(
                 "sync",
@@ -331,7 +341,7 @@ def _control(
         device=device,
         guard=guard or StubGuard(),
         enabled=enabled,
-        clock=lambda: NOW,
+        environment=ControlEnvironment(clock=lambda: NOW, label="control"),
     )
 
 
@@ -1171,6 +1181,20 @@ async def test_a_write_is_logged_at_debug_with_its_request_and_its_read_back(
     messages = [record.getMessage() for record in caplog.records]
     for expected in logged:
         assert any(key in message and expected in message for message in messages)
+
+
+async def test_a_write_to_a_private_row_never_logs_its_words(device: Device, caplog):
+    with caplog.at_level(logging.DEBUG, logger=control_module.__name__):
+        await _control(device, WritableClient()).write(
+            key="private_setting", value=48879
+        )
+
+    text = caplog.text
+    assert "private_setting" in text
+    assert f"function 0x06 at {PRIVATE_ADDRESS:#06x} with [private]" in text
+    assert "read back [private]" in text
+    assert "48879" not in text
+    assert "0xbeef" not in text.lower()
 
 
 async def test_a_refused_write_is_not_logged(device: Device, caplog):

@@ -57,6 +57,7 @@ def _entry(coordinator, **options):
         {
             "runtime_data": type("Runtime", (), {"coordinator": coordinator})(),
             "options": options,
+            "entry_id": ENTRY_ID,
         },
     )()
 
@@ -126,7 +127,7 @@ async def test_the_registry_is_checked_for_the_ids_of_the_new_entities(monkeypat
 
     call = asked[-1]
     assert call["keys"] == ["battery_power_target", "grid_power_target"]
-    assert (call["kind"], call["prefix"], call["entry_id"]) == (
+    assert (call["kind"], call["prefix"], call["entry"].entry_id) == (
         EntityKind.NUMBER,
         "house",
         ENTRY_ID,

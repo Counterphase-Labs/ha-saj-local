@@ -65,7 +65,7 @@ class _Narrowing:
     link: _Link | None
 
 
-def _halves(rows: Collection[Row]) -> tuple[list[Row], list[Row]]:
+def halves(rows: Collection[Row]) -> tuple[list[Row], list[Row]]:
     ordered = sorted(rows, key=lambda row: (row.address, row.words))
     middle = (ordered[0].address + ordered[-1].end) / 2
     index = min(
@@ -141,7 +141,7 @@ class ReadHealth:
         if len(rows) > 1:
             for key in keys:
                 self._mark_unavailable(key=key, code=code)
-            lower, upper = _halves(rows)
+            lower, upper = halves(rows)
             link = _Link(gap=Break(before=lower[-1].end, after=upper[0].address))
             self._narrowing.extend(
                 [_Narrowing(rows=lower, link=link), _Narrowing(rows=upper, link=link)]

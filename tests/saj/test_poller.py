@@ -4,9 +4,10 @@ import logging
 import pytest
 
 from saj.catalogue import Row
-from saj.client import ModbusError, ModbusErrorMessage
+from saj.client import ConnectionReason, ModbusError, ModbusErrorMessage
 from saj.device import Device
 from saj.errors import UnsupportedDeviceError
+from saj.guard import EndpointGuard
 from saj.health import REFUSAL_THRESHOLD, Break, ReadHealth, Refusal, Region
 from saj.models.hs3 import PROFILE as HS3
 from saj.poller import (
@@ -30,6 +31,7 @@ OTHER_DEVICE = Device("SERIAL-2", 1, 6000, PROFILE, detected=True)
 ROW_AB = (Row(address=0x4000, words=1), Row(address=0x4001, words=1))
 ROW_C = (Row(address=0x4002, words=1),)
 NOW = 1000.0
+LABEL = "Roof (xxxxx123)"
 PER_REQUEST = 10.0
 
 
@@ -41,7 +43,8 @@ class FakeClient:
     def is_connected(self) -> bool:
         return self.connected
 
-    async def close(self) -> None:
+    async def close(self, *, reason: ConnectionReason) -> None:
+        del reason
         self.connected = False
         self.events.append("close")
 
@@ -68,6 +71,10 @@ class FakeSchedule:
     def due(self, *, now):
         self.calls.append(("due", now))
         return self.due_keys
+
+    def due_cadences(self, *, now):
+        del now
+        return self.cadences
 
     def mark_read(self, *, now):
         self.calls.append(("mark_read", now))
@@ -204,7 +211,12 @@ class Harness:
                 identity=self.find_identity,
             ),
             enabled=self.enabled,
+            label=LABEL,
         )
+
+
+async def _read_through(reader) -> None:
+    await reader.read_holding_registers(address=0x4000, count=1)
 
 
 def _readout(**values) -> Readout:
@@ -402,8 +414,8 @@ async def test_many_keys_suspended_or_lifted_together_make_one_line_each(caplog)
         await harness.poller().run(enabled={"a", "b", "c", "d"})
 
     assert [r.getMessage() for r in caplog.records] == [
-        "SAJ sensors a, d answer again and are no longer suspended",
-        "SAJ sensors b, c suspended after repeated refusals (code 5)",
+        f"{LABEL}: Sensors a, d answer again and are no longer suspended",
+        f"{LABEL}: Sensors b, c suspended after repeated refusals (code 5)",
     ]
 
 
@@ -512,7 +524,9 @@ async def test_a_dropped_connection_is_reopened_with_identity_verified_before_re
     await harness.poller().run(enabled={"a"})
 
     assert harness.client.events == ["close", "connect"]
-    assert harness.identified == [(harness.client, "automatic")]
+    assert [selection for _, selection in harness.identified] == ["automatic"]
+    await _read_through(harness.identified[0][0])
+    assert harness.client.events[-1] == "read"
     assert ("require_full_read",) in harness.schedule.calls
     assert harness.schedule.calls.index(("require_full_read",)) < (
         harness.schedule.calls.index(("due", NOW))
@@ -567,9 +581,9 @@ async def test_a_stale_connection_is_reopened_once_and_the_read_sent_again():
 
     assert result.values == {"a": 1}
     assert len(harness.reads) == 2
-    assert harness.reads[1]["client"] is harness.client
-    assert harness.client.events == ["read", "close", "connect"]
-    assert harness.identified == [(harness.client, "automatic")]
+    await _read_through(harness.reads[1]["client"])
+    assert harness.client.events == ["read", "close", "connect", "read"]
+    assert [selection for _, selection in harness.identified] == ["automatic"]
     assert poller.stale_reconnects == 1
     assert ("succeeded",) in harness.guard.calls
 
@@ -762,6 +776,7 @@ async def test_the_planned_load_counts_enabled_keys_of_each_cadence_planned_alon
         ),
         services=Services(clock=harness.clock, bound=harness.bound, read=harness.read),
         enabled=enabled,
+        label=LABEL,
     )
 
     assert poller.planned_load() == expected
@@ -800,22 +815,35 @@ BATTERY_ADDRESS = 0x40A6
 GRID_ADDRESS = 0x40A7
 
 
-def _narrowing_poller(*, bad_address: int) -> tuple[Poller, MemoryClient]:
+def _poller_over(
+    *, client: FakeClient, guard: object | None = None, bound=None
+) -> tuple[Poller, Harness]:
     harness = Harness()
     harness.schedule.due_keys = POWER_KEYS
-    memory = MemoryClient(bad_addresses=frozenset({bad_address}))
-    client = MemoryPollerClient(memory)
+    harness.schedule.cadences = (Cadence(interval=10, keys=POWER_KEYS),)
     return (
         Poller(
             target=Target(client=client, device=POWER_DEVICE, selection="automatic"),
             tracking=Tracking(
-                schedule=harness.schedule, health=ReadHealth(), guard=harness.guard
+                schedule=harness.schedule,
+                health=ReadHealth(),
+                guard=harness.guard if guard is None else guard,
             ),
-            services=Services(clock=harness.clock, bound=harness.bound),
+            services=Services(
+                clock=harness.clock,
+                bound=harness.bound if bound is None else bound,
+            ),
             enabled=POWER_KEYS,
+            label=LABEL,
         ),
-        memory,
+        harness,
     )
+
+
+def _narrowing_poller(*, bad_address: int) -> tuple[Poller, MemoryClient]:
+    memory = MemoryClient(bad_addresses=frozenset({bad_address}))
+    poller, _ = _poller_over(client=MemoryPollerClient(memory))
+    return poller, memory
 
 
 async def test_a_refused_request_is_narrowed_until_the_refused_row_is_alone():
@@ -872,6 +900,7 @@ async def test_a_fault_in_a_gap_word_is_found_as_a_break_that_later_cycles_keep(
         ),
         services=Services(clock=harness.clock, bound=harness.bound),
         enabled=keys,
+        label=LABEL,
     )
 
     for _ in range(4):
@@ -913,3 +942,141 @@ async def test_the_next_cycle_after_a_link_failure_reopens_the_connection():
     await poller.run(enabled={"a"})
 
     assert harness.client.events == ["close", "close", "connect"]
+
+
+class UnansweredClient(FakeClient):
+    async def read_holding_registers(self, address: int, count: int) -> tuple[int, ...]:
+        del address, count
+        raise ModbusError(ModbusErrorMessage.REQUEST_TIMEOUT)
+
+
+def _poller_debug(caplog) -> list[str]:
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "saj.poller" and record.levelno == logging.DEBUG
+    ]
+
+
+async def test_a_poll_logs_one_line_with_its_cadences_requests_duration_and_next_wakeup(
+    caplog,
+):
+    poller, _ = _poller_over(client=MemoryPollerClient(MemoryClient()))
+
+    with caplog.at_level(logging.DEBUG, logger="saj.poller"):
+        await poller.run(enabled=POWER_KEYS)
+
+    assert _poller_debug(caplog) == [
+        (
+            f"{LABEL}: Poll of cadences ['10 s']: {LOAD_ADDRESS:#06x}+8 ok; "
+            "took 0.0 s; next wake-up in 10.0 s"
+        )
+    ]
+
+
+async def test_a_refused_request_is_listed_with_its_code_and_its_narrowing_logged(
+    caplog,
+):
+    poller, _ = _poller_over(
+        client=MemoryPollerClient(
+            MemoryClient(bad_addresses=frozenset({BATTERY_ADDRESS}), code=48)
+        )
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="saj.poller"):
+        await poller.run(enabled=POWER_KEYS)
+
+    assert _poller_debug(caplog) == [
+        (
+            f"{LABEL}: Narrowing refused request {LOAD_ADDRESS:#06x}+8 "
+            f"(exception 48) into {LOAD_ADDRESS:#06x}+1 and {PV_ADDRESS:#06x}+3"
+        ),
+        (
+            f"{LABEL}: Poll of cadences ['10 s']: {LOAD_ADDRESS:#06x}+8 "
+            "exception 48; took 0.0 s; next wake-up in 10.0 s"
+        ),
+    ]
+
+
+async def test_a_failed_poll_still_logs_its_line_after_the_back_off(caplog):
+    poller, _ = _poller_over(client=UnansweredClient(), guard=EndpointGuard())
+
+    with (
+        caplog.at_level(logging.DEBUG, logger="saj.poller"),
+        pytest.raises(CycleFailedError),
+    ):
+        await poller.run(enabled=POWER_KEYS)
+
+    assert _poller_debug(caplog) == [
+        f"{LABEL}: Backing off for 10 s after 1 consecutive failed polls",
+        (
+            f"{LABEL}: Poll of cadences ['10 s']: {LOAD_ADDRESS:#06x}+8 timeout; "
+            "took 0.0 s; next wake-up in 10.0 s"
+        ),
+    ]
+
+
+async def test_a_poll_cut_short_by_its_deadline_lists_the_pending_request_as_timeout(
+    caplog,
+):
+    class SlowClient(FakeClient):
+        async def read_holding_registers(
+            self, address: int, count: int
+        ) -> tuple[int, ...]:
+            del address, count
+            await asyncio.sleep(10)
+            return ()
+
+    async def bound(awaitable, seconds):
+        return await asyncio.wait_for(awaitable, timeout=0.01)
+
+    poller, _ = _poller_over(client=SlowClient(), guard=EndpointGuard(), bound=bound)
+
+    with (
+        caplog.at_level(logging.DEBUG, logger="saj.poller"),
+        pytest.raises(CycleFailedError),
+    ):
+        await poller.run(enabled=POWER_KEYS)
+
+    assert f"{LOAD_ADDRESS:#06x}+8 timeout" in _poller_debug(caplog)[-1]
+
+
+async def test_the_back_off_after_a_link_failure_logs_the_delay_and_failure_count(
+    caplog,
+):
+    harness = Harness()
+    harness.guard.delay = 40
+    harness.guard.consecutive_failures = 3
+
+    with caplog.at_level(logging.DEBUG, logger="saj.poller"):
+        await harness.poller().link_failed()
+
+    assert _poller_debug(caplog) == [
+        f"{LABEL}: Backing off for 40 s after 3 consecutive failed polls"
+    ]
+
+
+async def test_a_reconnect_logs_the_identity_read_without_the_serial(caplog):
+    harness = Harness(connected=False)
+    harness.schedule.due_keys = frozenset({"a"})
+
+    with caplog.at_level(logging.DEBUG, logger="saj.poller"):
+        await harness.poller().run(enabled={"a"})
+
+    lines = _poller_debug(caplog)
+    assert lines[0] == (
+        f"{LABEL}: Identity read: model alpha, device type 0x0001, "
+        "rated power 6000 W, detected"
+    )
+    assert all(DEVICE.serial not in line for line in lines)
+
+
+async def test_a_stale_connection_is_logged_before_it_is_reopened(caplog):
+    harness = Harness(connected=True)
+    harness.schedule.due_keys = frozenset({"a"})
+    _stale(harness)
+
+    with caplog.at_level(logging.DEBUG, logger="saj.poller"):
+        await harness.poller().run(enabled={"a"})
+
+    assert _poller_debug(caplog)[0] == f"{LABEL}: Reopening a stale connection"

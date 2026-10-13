@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -34,8 +35,14 @@ from .issues import (
     raise_model_issue,
     remove_issues,
 )
-from .saj.client import ClientEnvironment, ModbusError, ModbusTcpClient
-from .saj.control import Control
+from .label import entry_label, entry_logger
+from .saj.client import (
+    ClientEnvironment,
+    ConnectionReason,
+    ModbusError,
+    ModbusTcpClient,
+)
+from .saj.control import Control, ControlEnvironment
 from .saj.device import Device, identify
 
 if TYPE_CHECKING:
@@ -45,6 +52,8 @@ if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
 
     from .saj.models import Equipment
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -68,15 +77,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN, translation_key="backing_off"
         )
+    label = entry_label(entry=entry)
     client = ModbusTcpClient(
         host=entry.data[CONF_HOST],
         port=entry.data.get(CONF_PORT, DEFAULT_PORT),
         unit_id=entry.data.get(CONF_UNIT_ID, DEFAULT_UNIT_ID),
         timeout=REQUEST_TIMEOUT,
-        environment=ClientEnvironment(budget=guard.budget),
+        environment=ClientEnvironment(label=label, budget=guard.budget),
     )
     try:
         device = await identify(client=client, selection=model_selection)
+        entry_logger(logger=_LOGGER, entry=entry).debug(
+            "Identity read: %s", device.description
+        )
         _validate_identity(hass=hass, entry=entry, device=device)
         device, equipment, packs = await settle_equipment(
             hass=hass, entry=entry, client=client, device=device
@@ -92,7 +105,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     device=device,
                     guard=guard,
                     enabled=entry.options.get(CONF_ALLOW_CONTROL, False),
-                    clock=hass.loop.time,
+                    environment=ControlEnvironment(clock=hass.loop.time, label=label),
                 ),
             ),
             entry=entry,
@@ -100,7 +113,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_load_power_state()
         await coordinator.async_config_entry_first_refresh()
     except HANDLED_ERRORS as err:
-        await client.close()
+        await client.close(reason=ConnectionReason.SETUP)
         finding = model_finding(error=err)
         if finding is not None:
             raise_model_issue(hass=hass, entry=entry, finding=finding)
@@ -119,10 +132,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             translation_placeholders=translation.placeholders,
         ) from err
     except asyncio.CancelledError:
-        await client.close()
+        await client.close(reason=ConnectionReason.SETUP)
         raise
     except Exception:
-        await client.close()
+        await client.close(reason=ConnectionReason.SETUP)
         raise
     entry.runtime_data = SajRuntimeData(
         client=client,
@@ -136,11 +149,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_follow_schedules()
     except asyncio.CancelledError:
         await coordinator.async_shutdown()
-        await client.close()
+        await client.close(reason=ConnectionReason.UNLOAD)
         raise
     except Exception:
         await coordinator.async_shutdown()
-        await client.close()
+        await client.close(reason=ConnectionReason.UNLOAD)
         raise
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     entry.async_on_unload(
@@ -157,7 +170,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded:
         await entry.runtime_data.coordinator.async_release_power_control()
         await entry.runtime_data.coordinator.async_shutdown()
-        await entry.runtime_data.client.close()
+        await entry.runtime_data.client.close(reason=ConnectionReason.UNLOAD)
     return unloaded
 
 

@@ -54,9 +54,10 @@ from .issues import (
     raise_model_issue,
     sync_refusals,
 )
+from .label import entry_label, entry_logger
 from .saj.budget import BUDGET_PER_MINUTE
 from .saj.catalogue import device_keys, device_registers, hidden_sources
-from .saj.client import ModbusError, ModbusTcpClient
+from .saj.client import ConnectionReason, ModbusError, ModbusTcpClient
 from .saj.definitions import Quantity
 from .saj.ems import (
     DEFAULT_HEARTBEAT_INTERVAL,
@@ -166,7 +167,9 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         installation: Installation,
         entry: ConfigEntry,
     ) -> None:
-        super().__init__(hass=hass, logger=_LOGGER, name="SAJ")
+        label = entry_label(entry=entry)
+        super().__init__(hass=hass, logger=_LOGGER, name=label)
+        self._log = entry_logger(logger=_LOGGER, entry=entry)
         client = installation.client
         device = installation.device
         guard = installation.guard
@@ -225,6 +228,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             ),
             services=Services(clock=hass.loop.time, bound=asyncio.wait_for),
             enabled=self.enabled_keys,
+            label=label,
         )
         self._values: dict[str, Value] = {}
         self._cycle_lock = asyncio.Lock()
@@ -234,8 +238,8 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
     def _log_plan(self) -> None:
         plans = self.poller.cadence_plans()
         for plan in plans:
-            _LOGGER.debug(
-                "SAJ cadence every %s s reads %s as %s%s",
+            self._log.debug(
+                "Cadence every %s s reads %s as %s%s",
                 plan.interval,
                 sorted(plan.keys),
                 [f"{address:#06x}+{count}" for address, count in plan.ranges],
@@ -243,8 +247,8 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             )
         load = self.poller.planned_load()
         if load > BUDGET_PER_MINUTE:
-            _LOGGER.warning(
-                "SAJ cadences plan %.1f requests per minute, above the budget of %.0f;"
+            self._log.warning(
+                "Cadences plan %.1f requests per minute, above the budget of %.0f;"
                 " they will run slower than configured",
                 load,
                 BUDGET_PER_MINUTE,
@@ -255,9 +259,10 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         try:
             async with self._cycle_lock:
                 try:
-                    yield self.client
+                    with self.client.unremembered():
+                        yield self.client
                 finally:
-                    await self.client.close()
+                    await self.client.close(reason=ConnectionReason.VALIDATION)
         finally:
             self.hass.async_create_task(
                 self.async_request_refresh(), name="SAJ refresh after validation"
@@ -292,7 +297,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             else None,
         }
         if self.last_error != error:
-            _LOGGER.warning("SAJ update failed (%s)", error["type"])
+            self._log.warning("Update failed (%s)", error["type"])
         self.last_error = error
         finding = model_finding(error=err)
         if finding is not None:
@@ -308,7 +313,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
 
     def _publish(self, *, result: CycleResult, enabled: Collection[str]) -> Telemetry:
         if self.last_error is not None:
-            _LOGGER.info("SAJ connection restored for configured device")
+            self._log.info("Connection restored for configured device")
         self.last_error = None
         self._initial_refresh = False
         merged = {**self._values, **result.values}
@@ -346,20 +351,19 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             sync_refusals(hass=self.hass, entry=self._entry, keys=updated)
 
     def _log_faults(self) -> None:
-        name = self._entry.title
         words = self.device.profile.faults.registers_of(values=self._values)
         transition = self._faults.observe(words=words)
         for fault in sorted(transition.raised):
-            _LOGGER.warning("%s: fault %s is on", name, fault)
+            self._log.warning("Fault %s is on", fault)
         for fault in sorted(transition.cleared):
-            _LOGGER.info("%s: fault %s cleared", name, fault)
+            self._log.info("Fault %s cleared", fault)
         for source in transition.unrecognised_raised:
-            _LOGGER.warning("%s: unrecognised fault bit %s is set", name, source)
+            self._log.warning("Unrecognised fault bit %s is set", source)
         for source in transition.unrecognised_cleared:
-            _LOGGER.info("%s: unrecognised fault bit %s cleared", name, source)
-        self._log_pack_faults(name=name)
+            self._log.info("Unrecognised fault bit %s cleared", source)
+        self._log_pack_faults()
 
-    def _log_pack_faults(self, *, name: str) -> None:
+    def _log_pack_faults(self) -> None:
         seen = {
             register.key: bool(self._values[register.key])
             for register in device_registers(fit=self.device.fit)
@@ -371,9 +375,9 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             self._packs_on - seen.keys()
         )
         for key in sorted(on - self._packs_on):
-            _LOGGER.warning("%s: fault %s is on", name, key)
+            self._log.warning("Fault %s is on", key)
         for key in sorted(self._packs_on - on):
-            _LOGGER.info("%s: fault %s cleared", name, key)
+            self._log.info("Fault %s cleared", key)
         self._packs_on = on
 
     def _schedule_wakeup(self, *, target: float | None) -> None:
@@ -443,7 +447,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                 key=key, outcome=WriteOutcome.ACKNOWLEDGED, exception_code=None
             )
             if result.assumed and not result.values:
-                _LOGGER.info("SAJ command %s acknowledged", key)
+                self._log.info("Command %s acknowledged", key)
         self._track_ownership(changes=changes, result=result)
 
     async def _write_failed(self, *, key: str, error: WriteError) -> None:
@@ -460,12 +464,11 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             self.writes.rejected += 1
         elif outcome is WriteOutcome.UNCONFIRMED:
             self.writes.unconfirmed += 1
-            _LOGGER.warning("SAJ write to %s was not confirmed by the inverter", key)
+            self._log.warning("Write to %s was not confirmed by the inverter", key)
         else:
             self.writes.acknowledged += 1
-            _LOGGER.warning(
-                "SAJ write to %s was acknowledged but the inverter holds"
-                " a different value",
+            self._log.warning(
+                "Write to %s was acknowledged but the inverter holds a different value",
                 key,
             )
             self._apply_written(values=read_back_values(error=error), assumed=False)
@@ -516,8 +519,8 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                     states[function] = control.running(values=values)
         released = sorted(self.ems.found_off(states=states))
         for function in released:
-            _LOGGER.info(
-                "SAJ %s power control function was found switched off in the"
+            self._log.info(
+                "Power control function %s was found switched off in the"
                 " inverter; it is no longer owned",
                 function,
             )
@@ -578,10 +581,15 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                         return
                 else:
                     self.writes.beats_sent += 1
+                    self._log.debug(
+                        "EMS beat for %s read back %s",
+                        self.ems_rows.target_functions[key],
+                        key,
+                    )
                     if self.ems.beat_succeeded(
                         function=self.ems_rows.target_functions[key]
                     ):
-                        _LOGGER.info("SAJ EMS heartbeat for %s recovered", key)
+                        self._log.info("EMS heartbeat for %s recovered", key)
                     self._apply_written(values={key: value}, assumed=True)
             if keys:
                 await self._read_limits()
@@ -590,7 +598,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         try:
             values = await self.control.read_ems_limits()
         except WRITE_ERRORS as error:
-            _LOGGER.debug("SAJ EMS limits were not read: %s", error)
+            self._log.debug("EMS limits were not read: %s", error)
             if error.link_failed:
                 await self._link_lost()
             return
@@ -599,14 +607,14 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
     def _beat_dropped(self, *, key: str, error: WriteError) -> None:
         self.writes.beats_dropped += 1
         if self.ems.beat_dropped(function=self.ems_rows.target_functions[key]):
-            _LOGGER.warning(
-                "SAJ EMS heartbeat for %s dropped: %s; the inverter's EMS timeout"
+            self._log.warning(
+                "EMS heartbeat for %s dropped: %s; the inverter's EMS timeout"
                 " will end the function if beats keep failing",
                 key,
                 error,
             )
         else:
-            _LOGGER.debug("SAJ EMS heartbeat for %s dropped: %s", key, error)
+            self._log.debug("EMS heartbeat for %s dropped: %s", key, error)
 
     @property
     def power_values(self) -> dict[str, Value]:
@@ -700,7 +708,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         self._sync_heartbeat()
         await self._save_power_state()
         self.async_update_listeners()
-        _LOGGER.info("SAJ %s power control function started", function)
+        self._log.info("Power control function %s started", function)
 
     async def _require_others_idle(self, *, function: PowerFunction) -> None:
         others = {
@@ -746,8 +754,8 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             try:
                 await self._stop(function=function)
             except WRITE_ERRORS as error:
-                _LOGGER.warning(
-                    "SAJ could not undo the partial start of %s: %s;"
+                self._log.warning(
+                    "Could not undo the partial start of %s: %s;"
                     " its stop is outstanding",
                     function,
                     error,
@@ -788,7 +796,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         self._sync_heartbeat()
         await self._save_power_state()
         self.async_update_listeners()
-        _LOGGER.info("SAJ %s power control function stopped", function)
+        self._log.info("Power control function %s stopped", function)
 
     async def _send(self, *, write: Write) -> None:
         inspection = (
@@ -827,7 +835,16 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
 
     @callback
     def _schedule_changed(self, event: Event[EventStateChangedData]) -> None:
-        del event
+        state = event.data["new_state"]
+        self._log.debug(
+            "Schedule helper for %s changed to %s",
+            next(
+                schedule.function
+                for schedule in self.schedules
+                if schedule.entity_id == event.data["entity_id"]
+            ),
+            "removed" if state is None else state.state,
+        )
         self.hass.async_create_task(self._follow(), name="SAJ power control schedule")
 
     def _wishes(self) -> dict[PowerFunction, Wish]:
@@ -868,9 +885,9 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                     if previous.get(function) == label
                     else logging.WARNING
                 )
-                _LOGGER.log(
+                self._log.log(
                     level,
-                    "SAJ %s power control function could not be stopped: %s",
+                    "Power control function %s could not be stopped: %s",
                     function,
                     error,
                 )
@@ -909,8 +926,8 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             self._attempt_failed(action=action, previous=previous, error=error)
             return
         if action.function in previous:
-            _LOGGER.info(
-                "SAJ %s power control schedule action succeeded", action.function
+            self._log.info(
+                "Power control schedule action for %s succeeded", action.function
             )
 
     async def _forget(self, action: Action) -> None:
@@ -966,11 +983,11 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         self.outstanding[function] = label
         level = logging.DEBUG if previous.get(function) == label else logging.WARNING
         reason = BLOCKER_MESSAGES[action.blocker] if error is None else str(error)
-        _LOGGER.log(
+        self._log.log(
             level,
-            "SAJ %s power control schedule action %s did not complete: %s",
-            function,
+            "Power control schedule action %s for %s did not complete: %s",
             label,
+            function,
             reason,
         )
 
@@ -1007,9 +1024,8 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                     for function in owned:
                         await self._release_function(function=function)
             except TimeoutError:
-                _LOGGER.warning(
-                    "SAJ ran out of time switching off the power control"
-                    " functions it owns"
+                self._log.warning(
+                    "Ran out of time switching off the power control functions it owns"
                 )
             finally:
                 self._end_ownership()
@@ -1018,8 +1034,8 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         try:
             await self._stop(function=function)
         except WRITE_ERRORS as error:
-            _LOGGER.warning(
-                "SAJ could not switch off the %s power control function it owns (%s)",
+            self._log.warning(
+                "Could not switch off the %s power control function it owns (%s)",
                 function,
                 type(error).__name__,
             )
@@ -1033,7 +1049,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
-        await self.client.close()
+        await self.client.close(reason=ConnectionReason.UNLOAD)
 
     @property
     def enabled_keys(self) -> set[str]:

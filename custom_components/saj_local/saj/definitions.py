@@ -160,6 +160,7 @@ class Definition:
     inverted: bool = False
     exposed: bool = True
     summary: bool = False
+    private: bool = False
 
     @cached_property
     def format(self) -> Format:
@@ -1039,6 +1040,7 @@ ETHERNET_ADDRESSES = Family(
                 access=Access.READ_WRITE,
                 encoding=Encoding.ADDRESS_TEXT,
                 words=ADDRESS_WORDS,
+                private=True,
             ),
         )
         for position, name in enumerate(ETHERNET_ADDRESS_NAMES)
@@ -1330,7 +1332,10 @@ SINGLES: tuple[Definition, ...] = (
         invalid=frozenset({INVALID_VERSION}),
     ),
     Definition(
-        key="ethernet_mac_address", quantity=Quantity.ADDRESS, encoding=Encoding.MAC
+        key="ethernet_mac_address",
+        quantity=Quantity.ADDRESS,
+        encoding=Encoding.MAC,
+        private=True,
     ),
     Definition(
         key="ethernet_mode",
@@ -1347,6 +1352,7 @@ SINGLES: tuple[Definition, ...] = (
         encoding=Encoding.TEXT,
         words=16,
         invalid=frozenset({EMPTY_TEXT}),
+        private=True,
     ),
     Definition(
         key="ev_model",

@@ -23,6 +23,7 @@ from custom_components.saj_local.saj.telemetry import Telemetry
 from tests.coordinators import (
     INTERVAL,
     READ_KEYS,
+    ROOF_LABEL,
     build,
     cycle,
     failed_cycle,
@@ -156,7 +157,7 @@ async def test_a_command_is_logged_at_info_when_acknowledged(recorder, caplog):
     with caplog.at_level(logging.INFO, logger=coordinator_module.__name__):
         await coordinator.write(key="restart_inverter", value=None)
 
-    assert "command restart_inverter acknowledged" in caplog.text
+    assert "Command restart_inverter acknowledged" in caplog.text
     assert recorder.notified == []
 
 
@@ -498,7 +499,7 @@ async def test_a_cycle_that_reads_an_owned_switch_off_ends_that_function(
 
     assert coordinator.ems.owned == {PowerFunction.GRID}
     assert recorder.cancelled == 0
-    assert "battery power control function was found switched off" in caplog.text
+    assert "Power control function battery was found switched off" in caplog.text
 
 
 async def test_the_heartbeat_ends_when_the_last_owned_function_is_found_off(
@@ -702,7 +703,29 @@ async def _beat_logged(coordinator, caplog):
     caplog.clear()
     with caplog.at_level(logging.DEBUG, logger=coordinator_module.__name__):
         await coordinator._beat(None)
-    return [(r.levelno, r.getMessage()) for r in caplog.records]
+    return [
+        (r.levelno, r.getMessage())
+        for r in caplog.records
+        if "EMS beat for" not in r.getMessage()
+    ]
+
+
+async def test_each_successful_beat_logs_one_debug_line_with_its_function_and_target(
+    recorder, caplog
+):
+    coordinator = _beating(recorder, [1], "ems_battery_control")
+    await coordinator.write(key="ems_battery_control", value=1)
+    caplog.clear()
+
+    with caplog.at_level(logging.DEBUG, logger=coordinator_module.__name__):
+        await coordinator._beat(None)
+
+    assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
+        (
+            logging.DEBUG,
+            f"{ROOF_LABEL}: EMS beat for battery read back ems_battery_power_target",
+        )
+    ]
 
 
 async def test_the_first_dropped_beat_warns_naming_the_target_and_the_timeout(
@@ -781,7 +804,7 @@ async def test_releasing_clears_the_enable_bit_of_every_owned_function_in_order(
     assert len(coordinator.control.calls) == 2
     assert coordinator.ems.owned == frozenset()
     assert recorder.cancelled == 1
-    assert "battery power control function stopped" in caplog.text
+    assert "Power control function battery stopped" in caplog.text
 
 
 async def test_releasing_with_nothing_owned_sends_nothing(recorder):
@@ -805,7 +828,7 @@ async def test_a_refused_release_warns_naming_the_timeout_and_still_lets_go(
     with caplog.at_level(logging.WARNING, logger=coordinator_module.__name__):
         await coordinator.async_release_power_control()
 
-    assert "could not switch off the battery power control" in caplog.text
+    assert "Could not switch off the battery power control" in caplog.text
     assert "WriteRejectedError" in caplog.text
     assert coordinator.ems.owned == frozenset()
     assert recorder.cancelled == 1
@@ -823,7 +846,7 @@ async def test_a_release_that_takes_too_long_is_abandoned(
     with caplog.at_level(logging.WARNING, logger=coordinator_module.__name__):
         await coordinator.async_release_power_control()
 
-    assert "ran out of time" in caplog.text
+    assert "Ran out of time" in caplog.text
     assert coordinator.ems.owned == frozenset()
     assert not coordinator._cycle_lock.locked()
 
@@ -866,7 +889,7 @@ async def test_a_release_whose_own_requests_exceed_the_limit_is_abandoned(
     assert coordinator.control.switch_offs == [
         Write(key="ems_battery_control", value=0)
     ]
-    assert "ran out of time" in caplog.text
+    assert "Ran out of time" in caplog.text
     assert coordinator.ems.owned == frozenset()
     assert not coordinator._cycle_lock.locked()
 
@@ -879,7 +902,7 @@ async def test_shutdown_stops_the_heartbeat(recorder, monkeypatch):
     async def framework_shutdown(_coordinator):
         return
 
-    async def close() -> None:
+    async def close(**_options) -> None:
         return
 
     coordinator.client = SimpleNamespace(close=close)

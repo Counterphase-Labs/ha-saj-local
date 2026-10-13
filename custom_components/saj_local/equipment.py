@@ -12,6 +12,7 @@ from .const import (
     installation_entities,
 )
 from .issues import sync_lapse_issues
+from .label import entry_label, entry_logger
 from .saj.catalogue import absent_keys, pack_maximum
 from .saj.detection import detect
 from .saj.equipment import (
@@ -108,6 +109,7 @@ async def settle_equipment(
         client=client,
         device=device,
         probed=to_probe(settings=settings, equipment=equipment),
+        label=entry_label(entry=entry),
         also=(BATTERY_PACK_COUNT,) if reads_pack_count else (),
     )
     outcome = resolve(
@@ -121,9 +123,10 @@ async def settle_equipment(
     limit = next_pack_limit(
         stored=stored_limit, reading=count_read, maximum=maximum, battery=battery
     )
+    log = entry_logger(logger=_LOGGER, entry=entry)
     for lapsed in sorted(outcome.lapsed):
-        _LOGGER.warning(
-            "SAJ %s was detected before but its probe now reads %s;"
+        log.warning(
+            "Equipment %s was detected before but its probe now reads %s;"
             " it stays fitted until it is set to Not fitted",
             lapsed,
             dict(detection.detections[lapsed].values),
@@ -132,13 +135,13 @@ async def settle_equipment(
         hass=hass, entry=entry, equipment=equipment, lapsed=outcome.lapsed
     )
     if outcome.fitted != resolved:
-        _LOGGER.info(
-            "SAJ fitted equipment changed from %s to %s",
+        log.info(
+            "Fitted equipment changed from %s to %s",
             sorted(resolved),
             sorted(outcome.fitted),
         )
     if limit != stored_limit:
-        _LOGGER.debug("SAJ battery pack limit moved from %s to %s", stored_limit, limit)
+        log.debug("Battery pack limit moved from %s to %s", stored_limit, limit)
     if (
         outcome.remembered != detected
         or outcome.fitted != resolved

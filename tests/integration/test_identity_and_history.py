@@ -29,7 +29,7 @@ class QuietClient:
     def __init__(self, **_parameters) -> None:
         return
 
-    async def close(self) -> None:
+    async def close(self, **_options) -> None:
         return
 
 

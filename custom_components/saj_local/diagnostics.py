@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.components.diagnostics import REDACTED
+
 from .const import (
     CONF_ALLOW_CONTROL,
     CONF_MODEL,
@@ -17,9 +19,12 @@ from .saj.budget import BUDGET_PER_MINUTE
 from .saj.catalogue import device_registers
 from .saj.definitions import Quantity
 from .saj.faults import decode
+from .saj.log import mask_serial
 
 REDACTED_PREFIX = "[redacted]"
 ADDRESS_FORMAT = "#06x"
+WORD_FORMAT = "#06x"
+AGE_DECIMALS = 1
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -28,6 +33,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from .saj.health import Break, Region
+    from .saj.memory import FailureEntry, RegisterEntry, Snapshot
 
 
 async def async_get_config_entry_diagnostics(
@@ -39,6 +45,7 @@ async def async_get_config_entry_diagnostics(
     now = hass.loop.time()
     return {
         "model_selection": entry.data[CONF_MODEL],
+        "serial": mask_serial(serial=runtime.device.serial),
         "profile": runtime.device.profile.key,
         "profile_detected": runtime.device.detected,
         "profile_hand_verified": runtime.device.profile.hand_verified,
@@ -96,6 +103,37 @@ async def async_get_config_entry_diagnostics(
         "narrowing": [_region_summary(region=region) for region in poller.narrowing],
         **_control_summary(entry=entry, coordinator=coordinator, now=now),
         "power_control": _power_control_summary(hass=hass, coordinator=coordinator),
+        "register_snapshot": _snapshot_summary(
+            snapshot=runtime.client.memory.snapshot(fit=runtime.device.fit)
+        ),
+    }
+
+
+def _snapshot_summary(*, snapshot: Snapshot) -> dict[str, Any]:
+    return {
+        "registers": [_register_entry(entry=entry) for entry in snapshot.registers],
+        "failed": [_failure_entry(entry=entry) for entry in snapshot.failed],
+    }
+
+
+def _register_entry(*, entry: RegisterEntry) -> dict[str, Any]:
+    return {
+        "address": format(entry.address, ADDRESS_FORMAT),
+        "key": entry.key,
+        "words": REDACTED
+        if entry.private
+        else [format(word, WORD_FORMAT) for word in entry.words],
+        "age_seconds": round(entry.age_seconds, AGE_DECIMALS),
+    }
+
+
+def _failure_entry(*, entry: FailureEntry) -> dict[str, Any]:
+    return {
+        "address": format(entry.address, ADDRESS_FORMAT),
+        "count": entry.count,
+        "outcome": entry.outcome.value,
+        "exception_code": entry.exception_code,
+        "age_seconds": round(entry.age_seconds, AGE_DECIMALS),
     }
 
 

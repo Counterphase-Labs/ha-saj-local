@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
-from .catalogue import Register, Row, device_registers
+from .catalogue import Register, Row, device_registers, private_rows
 from .client import ModbusError, RegisterReader, RegisterWriter
 from .codec import (
     Value,
@@ -34,6 +34,7 @@ from .errors import (
     WriteRejectedError,
     WriteUnconfirmedError,
 )
+from .log import LabelledLogger
 from .models import ems_rows
 from .telemetry import decode_values
 
@@ -45,12 +46,19 @@ if TYPE_CHECKING:
 
 
 _LOGGER = logging.getLogger(__name__)
+PRIVATE_WORDS = "[private]"
 WRITE_SINGLE_FUNCTION = 0x06
 WRITE_MULTIPLE_FUNCTION = 0x10
 
 
 class ControlLink(RegisterReader, RegisterWriter, Protocol):
     def is_connected(self) -> bool: ...
+
+
+@dataclass(frozen=True)
+class ControlEnvironment:
+    clock: Callable[[], float]
+    label: str
 
 
 @dataclass(frozen=True)
@@ -119,14 +127,16 @@ class Control:
         device: Device,
         guard: EndpointGuard,
         enabled: bool,
-        clock: Callable[[], float],
+        environment: ControlEnvironment,
     ) -> None:
+        self._log = LabelledLogger(logger=_LOGGER, label=environment.label)
         self._link = link
         self._device = device
         self._guard = guard
         self._enabled = enabled
-        self._clock = clock
+        self._clock = environment.clock
         registers = device_registers(fit=device.fit)
+        self._private_rows = private_rows(registers=registers)
         self._targets = {
             register.key: _Target(register=register, row=register.row)
             for register in registers
@@ -240,8 +250,8 @@ class Control:
             except ModbusError as err:
                 if err.exception_code is None:
                     raise LinkUnavailableError(cause=err) from err
-                _LOGGER.debug(
-                    "SAJ EMS limits at %#06x refused with exception %s",
+                self._log.debug(
+                    "EMS limits at %#06x refused with exception %s",
                     start,
                     err.exception_code,
                 )
@@ -313,10 +323,10 @@ class Control:
                 written=True,
             )
         read_back = await self._read_back(row=row)
-        _LOGGER.debug(
-            "SAJ write to %s read back %s from %#06x",
+        self._log.debug(
+            "Write to %s read back %s from %#06x",
             register.key,
-            read_back,
+            self._shown(row=row, words=read_back),
             row.address,
         )
         values = self._values(row=row, words=read_back)
@@ -345,12 +355,12 @@ class Control:
     async def _send(self, *, key: str, row: Row, words: Sequence[int]) -> None:
         self._guard.allowance.record(now=self._clock())
         function = WRITE_SINGLE_FUNCTION if len(words) == 1 else WRITE_MULTIPLE_FUNCTION
-        _LOGGER.debug(
-            "SAJ write to %s: function %#04x at %#06x with %s",
+        self._log.debug(
+            "Write to %s: function %#04x at %#06x with %s",
             key,
             function,
             row.address,
-            tuple(words),
+            self._shown(row=row, words=words),
         )
         try:
             if function == WRITE_SINGLE_FUNCTION:
@@ -365,6 +375,11 @@ class Control:
             if err.exception_code is not None:
                 raise WriteRejectedError(exception_code=err.exception_code) from err
             raise WriteUnconfirmedError(cause=err, acknowledged=False) from err
+
+    def _shown(self, *, row: Row, words: Sequence[int]) -> str | tuple[int, ...]:
+        if row in self._private_rows:
+            return PRIVATE_WORDS
+        return tuple(words)
 
     async def _read_back(self, *, row: Row) -> tuple[int, ...]:
         try:

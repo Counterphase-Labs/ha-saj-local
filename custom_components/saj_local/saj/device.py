@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .catalogue import Fit
+from .catalogue import SERIAL_ADDRESS, SERIAL_WORD_COUNT, Fit
+from .device_type import format_device_type
 from .models import ALL_EQUIPMENT, Equipment
 from .profiles import AUTOMATIC, resolve_profile
 
@@ -13,8 +14,6 @@ if TYPE_CHECKING:
 
 IDENTITY_ADDRESS = 0x8F00
 IDENTITY_WORD_COUNT = 2
-SERIAL_ADDRESS = 0x8F03
-SERIAL_WORD_COUNT = 10
 
 
 @dataclass(frozen=True)
@@ -26,6 +25,15 @@ class Device:
     detected: bool
     equipment: frozenset[Equipment] = field(default=ALL_EQUIPMENT)
     pack_limit: int | None = None
+
+    @property
+    def description(self) -> str:
+        return (
+            f"model {self.profile.key}, "
+            f"device type {format_device_type(self.device_type)}, "
+            f"rated power {self.rated_power} W, "
+            f"{'detected' if self.detected else 'assumed'}"
+        )
 
     @property
     def fit(self) -> Fit:

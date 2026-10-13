@@ -13,7 +13,7 @@ from saj.catalogue import (
     device_unread_registers,
 )
 from saj.codec import Encoding, Value
-from saj.control import Control
+from saj.control import Control, ControlEnvironment
 from saj.definitions import EntityKind
 from saj.device import Device
 from saj.errors import InvalidValueError, UnknownSettingError
@@ -66,7 +66,9 @@ def _control(*, device: Device, link: WritableClient) -> Control:
         device=device,
         guard=EndpointGuard(),
         enabled=True,
-        clock=lambda: float(next(ticks)),
+        environment=ControlEnvironment(
+            clock=lambda: float(next(ticks)), label="control"
+        ),
     )
 
 

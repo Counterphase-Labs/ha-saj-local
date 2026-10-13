@@ -208,7 +208,9 @@ async def test_confirming_what_was_shown_saves_it_and_reloads_the_entry_once(
     assert result == {"type": "create_entry", "data": {}}
     assert FakeChanges.instances[1].saved == [CHANGE]
     assert flow.hass.config_entries.reloads == reloads
-    assert _logged(caplog) == ["Roof inverter: repair issue identity_mismatch cleared"]
+    assert _logged(caplog) == [
+        "Roof inverter (xxxxxL-1): Repair issue identity_mismatch cleared"
+    ]
 
 
 async def test_values_the_user_did_not_see_are_shown_instead_of_saved(caplog):
@@ -378,7 +380,9 @@ async def test_confirming_disables_the_listed_entities_as_the_user(refused, capl
         ("sensor.saj_grid_power", real_entity_registry.RegistryEntryDisabler.USER),
         ("sensor.saj_pv_power", real_entity_registry.RegistryEntryDisabler.USER),
     ]
-    assert _logged(caplog) == ["Roof inverter: repair issue registers_refused cleared"]
+    assert _logged(caplog) == [
+        "Roof inverter (xxxxxL-1): Repair issue registers_refused cleared"
+    ]
 
 
 async def test_the_refusal_fix_for_an_installation_that_is_gone_aborts_unlogged(

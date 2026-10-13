@@ -41,6 +41,8 @@ ASSUMED_CORE_PHASES = 1
 ASSUMED_CORE_STRINGS = 2
 REALTIME_SPAN = "realtime"
 ENERGY_BLOCK = "energy"
+SERIAL_ADDRESS = 0x8F03
+SERIAL_WORD_COUNT = 10
 TRIMMED_OPERATIONS = frozenset({Operation.SUM, Operation.ANY_BIT})
 
 
@@ -154,6 +156,10 @@ class Register:
     @property
     def exposed(self) -> bool:
         return self.definition.exposed
+
+    @property
+    def private(self) -> bool:
+        return self.definition.private
 
     @property
     def sources(self) -> tuple[str, ...]:
@@ -768,6 +774,14 @@ def device_read_registers(*, fit: Fit) -> tuple[Register, ...]:
         equipment=fit.equipment,
         pack_limit=fit.pack_limit,
     )
+
+
+def private_rows(*, registers: Iterable[Register]) -> frozenset[Row]:
+    return frozenset(
+        register.row
+        for register in registers
+        if register.private and register.row is not None
+    ) | {Row(address=SERIAL_ADDRESS, words=SERIAL_WORD_COUNT)}
 
 
 def device_unread_registers(*, fit: Fit) -> tuple[Register, ...]:

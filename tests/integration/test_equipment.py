@@ -62,6 +62,7 @@ class FakeEntry:
     options: dict[str, object] = field(default_factory=dict)
     entry_id: str = "entry-1"
     title: str = "Roof inverter"
+    unique_id: str = "S2303J4567"
 
 
 @dataclass
@@ -70,6 +71,7 @@ class Harness:
     registry: FakeRegistry
     lapses: list[tuple[frozenset[Equipment], frozenset[Equipment]]]
     probed: list[frozenset[Equipment]] = field(default_factory=list)
+    labels: list[str] = field(default_factory=list)
     registered: dict[str, SimpleNamespace] = field(default_factory=dict)
     asked_also: list[tuple[str, ...]] = field(default_factory=list)
     readings: dict[str, object] = field(default_factory=dict)
@@ -117,8 +119,9 @@ def harness(monkeypatch) -> Harness:
 
 
 def _probing(monkeypatch, harness: Harness, detections: dict[Equipment, Detection]):
-    async def detect(*, client, device, probed, also=()):
+    async def detect(*, client, device, probed, label, also=()):
         del client, device
+        harness.labels.append(label)
         harness.probed.append(frozenset(probed))
         harness.asked_also.append(tuple(also))
         return Detected(
@@ -203,6 +206,23 @@ async def test_only_equipment_on_automatic_is_probed(
     await _settle(harness, FakeEntry(options={CONF_EQUIPMENT: options}))
 
     assert harness.probed == [probed]
+
+
+async def test_detection_is_given_the_label_of_the_system_being_set_up(
+    monkeypatch, harness
+):
+    _probing(
+        monkeypatch,
+        harness,
+        {
+            BATTERY: _detection(BATTERY, fitted=True),
+            METER: _detection(METER, fitted=True),
+        },
+    )
+
+    await _settle(harness, FakeEntry())
+
+    assert harness.labels == ["Roof inverter (xxxxx567)"]
 
 
 async def test_the_remembered_set_is_stored_before_anything_else_only_when_it_changes(

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .equipment import Detection, evaluate
+from .log import LabelledLogger
 from .telemetry import read_telemetry
 
 if TYPE_CHECKING:
@@ -29,8 +30,10 @@ async def detect(
     client: RegisterReader,
     device: Device,
     probed: Collection[Equipment],
+    label: str,
     also: Collection[str] = (),
 ) -> Detected:
+    log = LabelledLogger(logger=_LOGGER, label=label)
     probes = [probe for probe in device.profile.probes if probe.equipment in probed]
     keys = tuple(
         dict.fromkeys([*(key for probe in probes for key in probe.keys), *also])
@@ -46,8 +49,8 @@ async def detect(
                 key: readout.values[key] for key in probe.keys if key in readout.values
             },
         )
-        _LOGGER.debug(
-            "SAJ %s probe read %s and found it %s",
+        log.debug(
+            "Probe for %s read %s and found it %s",
             probe.equipment,
             dict(detection.values),
             "fitted" if detection.fitted else "not fitted",

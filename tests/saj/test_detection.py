@@ -29,6 +29,8 @@ METER = Probe(
     unanswered=False,
 )
 
+LABEL = "Roof (xxxxx123)"
+
 
 class StubReader:
     def __init__(self, outcome: Readout | Exception) -> None:
@@ -70,6 +72,7 @@ async def test_every_probe_is_read_in_one_request_and_judged(monkeypatch):
     reader = _reader(monkeypatch, _answer(battery_protocol=24, meter_b_status=0))
 
     detected = await detect(
+        label=LABEL,
         client=object(),
         device=_device(BATTERY, METER),
         probed={Equipment.BATTERY, Equipment.METER_B},
@@ -100,7 +103,7 @@ async def test_only_the_equipment_asked_for_is_probed(monkeypatch, probed):
     reader = _reader(monkeypatch, _answer(battery_protocol=24, meter_b_status=1))
 
     detected = await detect(
-        client=object(), device=_device(BATTERY, METER), probed=probed
+        label=LABEL, client=object(), device=_device(BATTERY, METER), probed=probed
     )
 
     assert set(detected.detections) == probed & {Equipment.METER_B}
@@ -124,6 +127,7 @@ async def test_a_refused_or_undecodable_probe_takes_its_unanswered_result(
     _reader(monkeypatch, outcome)
 
     detected = await detect(
+        label=LABEL,
         client=object(),
         device=_device(BATTERY, METER),
         probed={Equipment.BATTERY, Equipment.METER_B},
@@ -144,6 +148,7 @@ async def test_a_refused_request_leaves_only_the_probes_it_carried_unanswered(
     )
 
     detected = await detect(
+        label=LABEL,
         client=object(),
         device=_device(BATTERY, METER),
         probed={Equipment.BATTERY, Equipment.METER_B},
@@ -162,6 +167,7 @@ async def test_a_lost_connection_fails_detection(monkeypatch, message):
 
     with pytest.raises(ModbusError):
         await detect(
+            label=LABEL,
             client=object(),
             device=_device(BATTERY),
             probed={Equipment.BATTERY},
@@ -189,7 +195,7 @@ async def test_the_shipped_probes_share_requests_and_stay_within_four(
     )
 
     detected = await detect(
-        client=client, device=device, probed=shipped.equipment, also=also
+        label=LABEL, client=client, device=device, probed=shipped.equipment, also=also
     )
 
     assert len(client.reads) == requests
@@ -201,6 +207,7 @@ async def test_extra_keys_are_read_in_the_same_request_as_the_probes(monkeypatch
     reader = _reader(monkeypatch, _answer(battery_protocol=24, battery_pack_count=3))
 
     detected = await detect(
+        label=LABEL,
         client=object(),
         device=_device(BATTERY),
         probed={Equipment.BATTERY},
@@ -216,6 +223,7 @@ async def test_extra_keys_are_read_even_when_nothing_is_probed(monkeypatch):
     reader = _reader(monkeypatch, _answer(battery_pack_count=2))
 
     detected = await detect(
+        label=LABEL,
         client=object(),
         device=_device(BATTERY),
         probed=set(),
@@ -235,6 +243,7 @@ async def test_an_extra_key_the_request_did_not_return_is_missing_from_the_readi
     )
 
     detected = await detect(
+        label=LABEL,
         client=object(),
         device=_device(BATTERY),
         probed={Equipment.BATTERY},
@@ -248,7 +257,9 @@ async def test_an_extra_key_the_request_did_not_return_is_missing_from_the_readi
 async def test_nothing_is_read_when_there_is_nothing_to_probe_or_ask(monkeypatch):
     reader = _reader(monkeypatch, _answer())
 
-    detected = await detect(client=object(), device=_device(BATTERY), probed=set())
+    detected = await detect(
+        label=LABEL, client=object(), device=_device(BATTERY), probed=set()
+    )
 
     assert reader.asked == []
     assert detected == Detected(detections={}, readings={})
@@ -268,7 +279,7 @@ async def test_an_h2_that_refuses_the_parallel_block_has_no_parallel_equipment()
     client = MemoryClient(bad_addresses=frozenset(range(0x4200, 0x4204)))
 
     detected = await detect(
-        client=client, device=_shipped_h2(), probed={Equipment.PARALLEL}
+        label=LABEL, client=client, device=_shipped_h2(), probed={Equipment.PARALLEL}
     )
 
     parallel = detected.detections[Equipment.PARALLEL]
@@ -289,6 +300,7 @@ async def test_an_h2_that_answers_the_parallel_block_is_judged_by_mode_and_machi
     memory, *, fitted
 ):
     detected = await detect(
+        label=LABEL,
         client=MemoryClient(memory),
         device=_shipped_h2(),
         probed={Equipment.PARALLEL},

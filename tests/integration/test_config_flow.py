@@ -78,7 +78,7 @@ class InstallationClient:
     def __init__(self) -> None:
         self.closed = False
 
-    async def close(self) -> None:
+    async def close(self, **_options) -> None:
         self.closed = True
 
 
@@ -121,7 +121,7 @@ class FlowClient:
             self.validation_session.events.append("client_create")
             self.created_inside_session = self.validation_session.active
 
-    async def close(self) -> None:
+    async def close(self, **_options) -> None:
         self.closed = True
         if self.validation_session is not None:
             self.validation_session.events.append("client_close")

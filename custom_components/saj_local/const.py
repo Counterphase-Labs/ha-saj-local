@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 DOMAIN = "saj_local"
 INTEGRATION_TITLE = "SAJ Local"
+VALIDATION_LABEL = f"{INTEGRATION_TITLE} validation"
 CONF_MODEL = "model"
 CONF_DEVICE_TYPE = "device_type"
 CONF_UNIT_ID = "unit_id"

@@ -57,15 +57,17 @@ class Schedule:
         )
         self._full_read = False
 
+    def due_cadences(self, *, now: float) -> tuple[Cadence, ...]:
+        return tuple(
+            cadence
+            for index, cadence in enumerate(self.cadences)
+            if self._full_read
+            or self._tick(cadence=cadence, now=now) > self._served[index]
+        )
+
     def due(self, *, now: float) -> frozenset[str]:
-        if self._full_read:
-            return frozenset().union(*(cadence.keys for cadence in self.cadences))
         return frozenset().union(
-            *(
-                cadence.keys
-                for index, cadence in enumerate(self.cadences)
-                if self._tick(cadence=cadence, now=now) > self._served[index]
-            )
+            *(cadence.keys for cadence in self.due_cadences(now=now))
         )
 
     def mark_read(self, *, now: float) -> None:
