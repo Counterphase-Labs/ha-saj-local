@@ -343,8 +343,8 @@ def _shipped_selection(
         (HS3.key, "core", 14),
         (HS3.key, "every", 36),
         (HS3.key, "fast", 1),
-        (H2.key, "core", 8),
-        (H2.key, "every", 13),
+        (H2.key, "core", 9),
+        (H2.key, "every", 17),
         (H2.key, "fast", 1),
     ],
 )
@@ -360,7 +360,7 @@ def test_the_shipped_catalogues_read_in_few_requests_within_the_largest(
 BATTERY_AND_METER_A = frozenset({Equipment.BATTERY, Equipment.METER_A})
 
 
-@pytest.mark.parametrize(("profile_key", "requests"), [(HS3.key, 10), (H2.key, 7)])
+@pytest.mark.parametrize(("profile_key", "requests"), [(HS3.key, 10), (H2.key, 8)])
 def test_the_default_read_of_a_battery_and_meter_a_installation_includes_the_pack_words(
     profile_key: str, requests: int
 ):

@@ -31,10 +31,20 @@ SWITCH_RANGE = Range(minimum=0, maximum=1)
 DAYS_RANGE = Range(minimum=0, maximum=127)
 PERCENT_RANGE = Range(minimum=0, maximum=100)
 SIGNED_PERCENT_RANGE = Range(minimum=-100, maximum=100)
+POWER_LIMIT_RANGE = Range(minimum=0, maximum=110)
+WORD_RANGE = Range(minimum=0, maximum=65535)
+LEAD_ACID_VOLTAGE_RANGE = Range(minimum=85, maximum=450)
+FORCED_CHARGE_POWER_RANGE = Range(minimum=10, maximum=100)
+LEAD_ACID_CURRENT_RANGE = Range(minimum=0, maximum=30)
+PV_VOLTAGE_RANGE = Range(minimum=0, maximum=650)
+MPPT_VOLTAGE_RANGE = Range(minimum=90, maximum=500)
 EV_POWER_RANGE = Range(minimum=0, maximum=11000)
 PHASE_COUNT = 3
 STRING_COUNT = 4
 PACK_COUNT = 4
+IDENTITY_PACK_COUNT = 5
+IDENTITY_PACK_STRIDE = 20
+IDENTITY_SERIAL_WORDS = 8
 SLOT_COUNT = 7
 SLOT_STRIDE = 3
 EV_SLOT_STRIDE = 5
@@ -106,6 +116,7 @@ class Unit(StrEnum):
     KILOWATT_HOUR = "kWh"
     PERCENT = "%"
     CELSIUS = "°C"
+    HOUR = "h"
     SECOND = "s"
     MINUTE = "min"
     KILOOHM = "kΩ"
@@ -314,6 +325,42 @@ COMMISSIONING_KEYS = frozenset(
         "ev_communication_timeout",
         "ev_port_mode",
         "ev_port_address",
+        "reverse_flow_mode",
+        "fcas_frequency_hysteresis",
+        "lead_acid_off_grid_discharge_cutoff_voltage",
+        "lead_acid_charge_cutoff_voltage",
+        "lead_acid_on_grid_discharge_cutoff_voltage",
+        "lead_acid_high_voltage_protection",
+        "lead_acid_low_voltage_warning",
+        "lead_acid_discharge_current_limit",
+        "lead_acid_charge_current_limit",
+        "lead_acid_capacity",
+        "lead_acid_float_charge_voltage",
+        "lead_acid_equalising_charge_voltage",
+        "bms_update_id",
+        "bms_update_mode",
+        "parallel_role",
+        "parallel_number",
+        "parallel_configured_mode",
+        "battery_input_mode",
+        "pv_input_mode",
+        "off_grid_output_voltage",
+        "off_grid_output_frequency",
+        "motor_enable",
+        "machine_model",
+        "rated_power",
+        "function_flags_1",
+        "function_flags_2",
+        "max_dc_current_component",
+        "max_dc_voltage_component",
+        "insulation_resistance_limit",
+        "max_leakage_current",
+        "grid_type",
+        "pv_start_voltage",
+        "pv_shutdown_voltage",
+        "mppt_voltage_high",
+        "mppt_voltage_low",
+        "mppt_scan_time",
     }
 )
 HEADER_DERIVED_KEYS = frozenset({"settings_sequence"})
@@ -387,6 +434,24 @@ EV_STATUS_OPTIONS = {
 EV_REMOTE_CONTROL_OPTIONS = {0: "shutdown", 1: "on"}
 EV_PORT_MODE_OPTIONS = {0: "invalid", 1: "host", 2: "modbus_slave"}
 EV_SLOT_MODE_OPTIONS = {0: "not_set", 1: "standard", 2: "pv_mode"}
+OFF_GRID_MODE_OPTIONS = {0: "off", 1: "on"}
+INVERTER_STOP_OPTIONS = {0: "running", 1: "stopped"}
+GRID_TYPE_OPTIONS = {
+    0: "single_phase",
+    1: "split_phase",
+    2: "three_phase_three_wire",
+    3: "three_phase_four_wire",
+}
+REVERSE_FLOW_MODE_OPTIONS = {0: "off", 1: "master", 2: "slave"}
+PARALLEL_CONFIGURED_MODE_OPTIONS = {
+    0: "not_parallel",
+    1: "on_grid",
+    2: "off_grid",
+    3: "on_and_off_grid",
+}
+BATTERY_INPUT_MODE_OPTIONS = {1: "independent", 2: "parallel"}
+PV_INPUT_MODE_OPTIONS = {0: "automatic", 1: "independent", 2: "parallel"}
+BATTERY_TYPE_OPTIONS = {1: "50_ah", 2: "80_ah", 3: "100_ah"}
 
 SLOT_ENABLED_FIELD = BitRange(first=0, last=0)
 SLOT_POWER_FIELD = BitRange(first=0, last=7)
@@ -395,6 +460,7 @@ EV_SLOT_MODE_FIELD = BitRange(first=0, last=2)
 EV_SLOT_GRID_CHARGING_FIELD = BitRange(first=3, last=3)
 EV_SLOT_BATTERY_DISCHARGE_FIELD = BitRange(first=4, last=4)
 EV_MINIMUM_CURRENT_CHARGING_FIELD = BitRange(first=2, last=2)
+BUZZER_FIELD = BitRange(first=0, last=0)
 EV_EMS_CHARGING_FIELD = BitRange(first=0, last=0)
 EV_EMS_PHASE_MODE_FIELD = BitRange(first=1, last=2)
 EV_EMS_PHASE_MODE_OPTIONS = {0: "three_phase", 1: "single_phase"}
@@ -945,6 +1011,59 @@ BATTERY_PACK_FAULTS = Family(
         Member(offset=1, definition=_problem(key="warning")),
     ),
 )
+
+
+def _pack_serial(*, key: str) -> Definition:
+    return Definition(
+        key=key,
+        quantity=Quantity.TEXT,
+        encoding=Encoding.TEXT,
+        words=IDENTITY_SERIAL_WORDS,
+        invalid=frozenset({EMPTY_TEXT}),
+        private=True,
+    )
+
+
+def _pack_version(*, key: str) -> Definition:
+    return Definition(
+        key=key,
+        quantity=Quantity.VERSION,
+        encoding=Encoding.U16,
+        scale=0.001,
+        invalid=frozenset({INVALID_VERSION}),
+    )
+
+
+BATTERY_PACK_IDENTITY = Family(
+    name="battery_pack_identity",
+    equipment=Equipment.BATTERY,
+    stem="battery_pack{index}",
+    base=0x8E00,
+    stride=IDENTITY_PACK_STRIDE,
+    count=IDENTITY_PACK_COUNT,
+    role=Role.PACK,
+    members=(
+        Member(
+            offset=0,
+            definition=Definition(
+                key="bms_type", quantity=Quantity.CODE, encoding=Encoding.U16
+            ),
+        ),
+        Member(offset=1, definition=_pack_serial(key="bms_serial_number")),
+        Member(offset=9, definition=_pack_version(key="bms_software_version")),
+        Member(offset=10, definition=_pack_version(key="bms_hardware_version")),
+        Member(
+            offset=11,
+            definition=Definition(
+                key="type",
+                quantity=Quantity.CODE,
+                encoding=Encoding.U16,
+                options=BATTERY_TYPE_OPTIONS,
+            ),
+        ),
+        Member(offset=12, definition=_pack_serial(key="serial_number")),
+    ),
+)
 METER_PHASE_STRIDE = 6
 METER_A_PHASE = _phased(
     family=Family(
@@ -1234,6 +1353,7 @@ FAMILIES = (
     BATTERY_PACK,
     BATTERY_PACK_DISCHARGED_ENERGY,
     BATTERY_PACK_FAULTS,
+    BATTERY_PACK_IDENTITY,
     METER_A_PHASE,
     METER_B_PHASE,
     METER_A_POWER_HIGH_WORDS,
@@ -1251,7 +1371,12 @@ FAMILIES = (
 FAMILY_BY_NAME = {family.name: family for family in FAMILIES}
 
 
-def _power_limit_setting(*, key: str, equipment: Equipment | None = None) -> Definition:
+def _power_limit_setting(
+    *,
+    key: str,
+    equipment: Equipment | None = None,
+    value_range: Range = POWER_LIMIT_RANGE,
+) -> Definition:
     return Definition(
         key=key,
         equipment=equipment,
@@ -1261,7 +1386,7 @@ def _power_limit_setting(*, key: str, equipment: Equipment | None = None) -> Def
         encoding=Encoding.U16,
         scale=0.1,
         unit=Unit.PERCENT,
-        range=Range(minimum=0, maximum=110),
+        range=value_range,
     )
 
 
@@ -1321,6 +1446,280 @@ def _ems_current_limit(
         unit=Unit.AMPERE,
         range=Range(minimum=0, maximum=maximum),
     )
+
+
+def _setting(
+    *,
+    key: str,
+    quantity: Quantity,
+    value_range: Range,
+    scale: float = 1,
+    unit: Unit | None = None,
+) -> Definition:
+    return replace(
+        _measure(
+            key=key,
+            quantity=quantity,
+            encoding=Encoding.U16,
+            scale=scale,
+            unit=unit,
+        ),
+        kind=EntityKind.NUMBER,
+        access=Access.READ_WRITE,
+        range=value_range,
+    )
+
+
+def _of_battery(*, definition: Definition) -> Definition:
+    return replace(definition, equipment=Equipment.BATTERY)
+
+
+def _lead_acid_voltage(*, key: str) -> Definition:
+    return _of_battery(
+        definition=_setting(
+            key=key,
+            quantity=Quantity.VOLTAGE,
+            scale=0.1,
+            unit=Unit.VOLT,
+            value_range=LEAD_ACID_VOLTAGE_RANGE,
+        )
+    )
+
+
+def _lead_acid_current(*, key: str) -> Definition:
+    return _of_battery(
+        definition=_setting(
+            key=key,
+            quantity=Quantity.CURRENT,
+            scale=0.1,
+            unit=Unit.AMPERE,
+            value_range=LEAD_ACID_CURRENT_RANGE,
+        )
+    )
+
+
+def _select_setting(*, key: str, options: Mapping[int, str]) -> Definition:
+    return Definition(
+        key=key,
+        quantity=Quantity.CODE,
+        kind=EntityKind.SELECT,
+        access=Access.READ_WRITE,
+        encoding=Encoding.U16,
+        options=options,
+    )
+
+
+def _flag_word(*, key: str) -> Definition:
+    return _setting(key=key, quantity=Quantity.CODE, value_range=WORD_RANGE)
+
+
+def _reading(
+    *, key: str, quantity: Quantity, options: Mapping[int, str] | None = None
+) -> Definition:
+    return replace(
+        _measure(key=key, quantity=quantity, encoding=Encoding.U16),
+        options=options,
+    )
+
+
+def _battery_controller_current(*, key: str) -> Definition:
+    return _of_battery(
+        definition=_measure(
+            key=key,
+            quantity=Quantity.CURRENT,
+            encoding=Encoding.I16,
+            scale=0.01,
+            unit=Unit.AMPERE,
+        )
+    )
+
+
+COMMISSIONING_SETTINGS: tuple[Definition, ...] = (
+    _select_setting(key="reverse_flow_mode", options=REVERSE_FLOW_MODE_OPTIONS),
+    _setting(
+        key="fcas_frequency_hysteresis",
+        quantity=Quantity.FREQUENCY,
+        scale=0.01,
+        unit=Unit.HERTZ,
+        value_range=Range(minimum=0, maximum=0.15),
+    ),
+    _lead_acid_voltage(key="lead_acid_off_grid_discharge_cutoff_voltage"),
+    _lead_acid_voltage(key="lead_acid_charge_cutoff_voltage"),
+    _lead_acid_voltage(key="lead_acid_on_grid_discharge_cutoff_voltage"),
+    _lead_acid_voltage(key="lead_acid_high_voltage_protection"),
+    _lead_acid_voltage(key="lead_acid_low_voltage_warning"),
+    _lead_acid_current(key="lead_acid_discharge_current_limit"),
+    _lead_acid_current(key="lead_acid_charge_current_limit"),
+    _of_battery(
+        definition=_setting(
+            key="lead_acid_capacity",
+            quantity=Quantity.CAPACITY,
+            unit=Unit.AMPERE_HOUR,
+            value_range=Range(minimum=0, maximum=1000),
+        )
+    ),
+    _lead_acid_voltage(key="lead_acid_float_charge_voltage"),
+    _lead_acid_voltage(key="lead_acid_equalising_charge_voltage"),
+    _of_battery(
+        definition=_setting(
+            key="bms_update_id",
+            quantity=Quantity.COUNT,
+            value_range=Range(minimum=0, maximum=31),
+        )
+    ),
+    _of_battery(
+        definition=_setting(
+            key="bms_update_mode",
+            quantity=Quantity.CODE,
+            value_range=Range(minimum=0, maximum=255),
+        )
+    ),
+    _setting(
+        key="parallel_role",
+        quantity=Quantity.CODE,
+        value_range=Range(minimum=0, maximum=10),
+    ),
+    _setting(
+        key="parallel_number",
+        quantity=Quantity.COUNT,
+        value_range=Range(minimum=1, maximum=255),
+    ),
+    _select_setting(
+        key="parallel_configured_mode", options=PARALLEL_CONFIGURED_MODE_OPTIONS
+    ),
+    _select_setting(key="battery_input_mode", options=BATTERY_INPUT_MODE_OPTIONS),
+    _select_setting(key="pv_input_mode", options=PV_INPUT_MODE_OPTIONS),
+    _setting(
+        key="off_grid_output_voltage",
+        quantity=Quantity.VOLTAGE,
+        scale=0.1,
+        unit=Unit.VOLT,
+        value_range=Range(minimum=220, maximum=240),
+    ),
+    _setting(
+        key="off_grid_output_frequency",
+        quantity=Quantity.FREQUENCY,
+        scale=0.01,
+        unit=Unit.HERTZ,
+        value_range=Range(minimum=50, maximum=60),
+    ),
+    _flag_word(key="motor_enable"),
+    _setting(
+        key="machine_model",
+        quantity=Quantity.CODE,
+        value_range=Range(minimum=90, maximum=96),
+    ),
+    _setting(
+        key="rated_power",
+        quantity=Quantity.POWER,
+        unit=Unit.WATT,
+        value_range=Range(minimum=3000, maximum=6000),
+    ),
+    _flag_word(key="function_flags_1"),
+    _flag_word(key="function_flags_2"),
+    _setting(
+        key="max_dc_current_component",
+        quantity=Quantity.CURRENT,
+        unit=Unit.MILLIAMPERE,
+        value_range=Range(minimum=0, maximum=3000),
+    ),
+    _setting(
+        key="max_dc_voltage_component",
+        quantity=Quantity.VOLTAGE,
+        scale=0.1,
+        unit=Unit.VOLT,
+        value_range=Range(minimum=0, maximum=40),
+    ),
+    _setting(
+        key="insulation_resistance_limit",
+        quantity=Quantity.RESISTANCE,
+        unit=Unit.KILOOHM,
+        value_range=Range(minimum=30, maximum=1000),
+    ),
+    _setting(
+        key="max_leakage_current",
+        quantity=Quantity.CURRENT,
+        unit=Unit.MILLIAMPERE,
+        value_range=Range(minimum=30, maximum=500),
+    ),
+    _select_setting(key="grid_type", options=GRID_TYPE_OPTIONS),
+    _setting(
+        key="pv_start_voltage",
+        quantity=Quantity.VOLTAGE,
+        scale=0.1,
+        unit=Unit.VOLT,
+        value_range=PV_VOLTAGE_RANGE,
+    ),
+    _setting(
+        key="pv_shutdown_voltage",
+        quantity=Quantity.VOLTAGE,
+        scale=0.1,
+        unit=Unit.VOLT,
+        value_range=PV_VOLTAGE_RANGE,
+    ),
+    _setting(
+        key="mppt_voltage_high",
+        quantity=Quantity.VOLTAGE,
+        scale=0.1,
+        unit=Unit.VOLT,
+        value_range=MPPT_VOLTAGE_RANGE,
+    ),
+    _setting(
+        key="mppt_voltage_low",
+        quantity=Quantity.VOLTAGE,
+        scale=0.1,
+        unit=Unit.VOLT,
+        value_range=MPPT_VOLTAGE_RANGE,
+    ),
+    _setting(
+        key="mppt_scan_time",
+        quantity=Quantity.DURATION,
+        unit=Unit.MINUTE,
+        value_range=Range(minimum=3, maximum=30000),
+    ),
+)
+READINGS: tuple[Definition, ...] = (
+    _reading(
+        key="off_grid_mode", quantity=Quantity.CODE, options=OFF_GRID_MODE_OPTIONS
+    ),
+    _reading(
+        key="inverter_stop", quantity=Quantity.CODE, options=INVERTER_STOP_OPTIONS
+    ),
+    _reading(key="inverter_error_count", quantity=Quantity.COUNT),
+    _reading(key="drm_hardware_status", quantity=Quantity.CODE),
+    _reading(key="drm_software_status", quantity=Quantity.CODE),
+    _reading(key="fault_record_sequence", quantity=Quantity.COUNT),
+    _reading(
+        key="application_mode_active",
+        quantity=Quantity.CODE,
+        options=APPLICATION_MODE_OPTIONS,
+    ),
+    _battery_controller_current(key="battery_controller_1_current"),
+    _battery_controller_current(key="battery_controller_2_current"),
+    _measure(
+        key="pv_generation_time_today",
+        quantity=Quantity.DURATION,
+        encoding=Encoding.U16,
+        scale=0.1,
+        unit=Unit.HOUR,
+    ),
+    _measure(
+        key="pv_generation_time_total",
+        quantity=Quantity.DURATION,
+        encoding=Encoding.U32,
+        scale=0.1,
+        unit=Unit.HOUR,
+    ),
+    _of_battery(
+        definition=_measure(
+            key="battery_voltage_low_warning",
+            quantity=Quantity.VOLTAGE,
+            encoding=Encoding.U16,
+            scale=0.1,
+            unit=Unit.VOLT,
+        )
+    ),
+)
 
 
 SINGLES: tuple[Definition, ...] = (
@@ -1645,6 +2044,21 @@ SINGLES: tuple[Definition, ...] = (
         range=SWITCH_RANGE,
     ),
     Definition(
+        key="buzzer",
+        quantity=Quantity.TOGGLE,
+        kind=EntityKind.SWITCH,
+        access=Access.READ_WRITE,
+        encoding=Encoding.U16,
+        field=BUZZER_FIELD,
+        inverted=True,
+        range=SWITCH_RANGE,
+    ),
+    _power_limit_setting(
+        key="battery_forced_charge_power_limit",
+        equipment=Equipment.BATTERY,
+        value_range=FORCED_CHARGE_POWER_RANGE,
+    ),
+    Definition(
         key="led_mode",
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
@@ -1936,7 +2350,6 @@ SINGLES: tuple[Definition, ...] = (
         equipment=Equipment.PARALLEL,
         quantity=Quantity.STATE_OF_CHARGE,
         encoding=Encoding.U16,
-        scale=0.01,
         unit=Unit.PERCENT,
     ),
     Definition(
@@ -2410,6 +2823,8 @@ SINGLES: tuple[Definition, ...] = (
     ),
     _meter_power(meter="a", equipment=Equipment.METER_A),
     _meter_power(meter="b", equipment=Equipment.METER_B),
+    *COMMISSIONING_SETTINGS,
+    *READINGS,
     *(
         Definition(
             key=f"parallel_{subject}_power",

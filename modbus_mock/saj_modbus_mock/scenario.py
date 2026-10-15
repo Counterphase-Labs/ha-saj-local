@@ -341,18 +341,13 @@ def _parse_battery(*, root: Section, device: DeviceConfig) -> BatteryConfig:
     return config
 
 
-def _parse_meters(*, root: Section, device: DeviceConfig) -> MetersConfig:
+def _parse_meters(*, root: Section) -> MetersConfig:
     section = root.section(name="meters")
     config = MetersConfig(
         meter_a=section.boolean(name="meter_a", default=True),
         meter_b=section.boolean(name="meter_b", default=False),
     )
     section.finish()
-    if config.meter_b and not device.model.supports_meter_b:
-        raise ScenarioError(
-            key="meters.meter_b",
-            reason=f"not available on {device.model.name}",
-        )
     return config
 
 
@@ -399,17 +394,12 @@ def _parse_ev_charger(*, root: Section, device: DeviceConfig) -> EvChargerConfig
     return config
 
 
-def _parse_parallel(*, root: Section, device: DeviceConfig) -> ParallelConfig:
+def _parse_parallel(*, root: Section) -> ParallelConfig:
     section = root.section(name="parallel")
     inverters = section.integer(name="inverters", default=1, minimum=1)
     section.finish()
     if inverters not in PARALLEL_INVERTERS:
         raise ScenarioError(key="parallel.inverters", reason="must be 1 or 2")
-    if inverters > 1 and not device.model.supports_parallel:
-        raise ScenarioError(
-            key="parallel.inverters",
-            reason=f"not available on {device.model.name}",
-        )
     return ParallelConfig(inverters=inverters)
 
 
@@ -439,9 +429,9 @@ def parse_scenario(*, data: object) -> Scenario:
         simulation=_parse_simulation(root=root),
         site=_parse_site(root=root, device=device),
         battery=_parse_battery(root=root, device=device),
-        meters=_parse_meters(root=root, device=device),
+        meters=_parse_meters(root=root),
         ev_charger=_parse_ev_charger(root=root, device=device),
-        parallel=_parse_parallel(root=root, device=device),
+        parallel=_parse_parallel(root=root),
         faults=_parse_faults(root=root),
     )
     root.finish()

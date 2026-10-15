@@ -4,7 +4,7 @@ from saj_modbus_mock.device import Block
 from saj_modbus_mock.exceptions import ExceptionCode
 from saj_modbus_mock.models import MODELS, ModelSpec
 
-from . import common, hs3_equipment
+from . import common, hs3_equipment, parallel
 from .fields import fixed
 from .undocumented import UNDOCUMENTED_SETTINGS
 
@@ -86,7 +86,7 @@ def build_blocks(*, scenario: Scenario) -> tuple[Block, ...]:
         Block(
             start=0x4200,
             end=0x427C,
-            fields=tuple(hs3_equipment.parallel_fields(scenario=scenario)),
+            fields=tuple(parallel.parallel_fields(scenario=scenario, extended=True)),
         ),
         Block(start=0x513E, end=0x51BE, fields=tuple(hs3_equipment.average_fields())),
         Block(
@@ -94,9 +94,7 @@ def build_blocks(*, scenario: Scenario) -> tuple[Block, ...]:
             end=0xA077,
             fields=(
                 *common.battery_fields(populated=False),
-                *common.meter_fields(
-                    phases=SPEC.phases, with_meter_b=True, extended=True
-                ),
+                *common.meter_fields(phases=SPEC.phases, extended=True),
             ),
         ),
         Block(start=0x8400, end=0x8412, fields=tuple(hs3_equipment.ems_fields())),

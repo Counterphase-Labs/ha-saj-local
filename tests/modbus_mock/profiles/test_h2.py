@@ -42,6 +42,11 @@ def calls(monkeypatch):
     )
     monkeypatch.setattr(h2, "common", common)
     monkeypatch.setattr(h2, "h2_extras", extras)
+    monkeypatch.setattr(
+        h2,
+        "parallel",
+        SimpleNamespace(parallel_fields=stub("parallel_fields", 0x4200, "parallel")),
+    )
     monkeypatch.setattr(h2, "fixed", fake_fixed)
     monkeypatch.setattr(h2, "text", fake_text)
     return recorded
@@ -56,7 +61,8 @@ def test_the_block_ranges_follow_the_protocol_and_do_not_overlap(calls):
 
     assert set(spans) == {
         (0x3604, 0x367C),
-        (0x4000, 0x4166),
+        (0x4000, 0x4176),
+        (0x4200, 0x4264),
         (0x8E00, 0x8E63),
         (0x8F00, 0x8F1C),
         (0x8015, 0x8023),
@@ -84,16 +90,15 @@ def test_the_common_builders_are_asked_for_the_single_phase_layout(calls):
     assert arguments_of(calls=calls, name="common.realtime_energy_fields") == {
         "scenario": scenario,
         "phases": 1,
-        "extended": False,
+        "extended": True,
     }
     assert arguments_of(calls=calls, name="common.settings_fields") == {
         "scenario": scenario,
-        "modes": frozenset({0, 1, 2, 3, 14}),
+        "modes": frozenset({0, 1, 2, 3, 10, 14}),
         "extended": False,
     }
     assert arguments_of(calls=calls, name="common.meter_fields") == {
         "phases": 1,
-        "with_meter_b": False,
         "extended": False,
     }
     assert arguments_of(calls=calls, name="common.battery_fields") == {
@@ -111,7 +116,7 @@ def test_reads_past_a_block_use_the_ordinary_address_error(calls):
 def test_the_device_has_no_hs3_equipment_blocks(calls):
     blocks = build()
 
-    for address in (0x8400, 0x4B04, 0x3024, 0x4200, 0x513E, 0x0F00):
+    for address in (0x8400, 0x4B04, 0x3024, 0x513E, 0x0F00):
         assert not any(block.contains(address=address) for block in blocks)
 
 
@@ -143,6 +148,20 @@ def test_the_peripheral_block_holds_the_module_descriptions(calls):
     assert {f.name for f in peripheral.fields} >= {"bms1_type", "battery5_serial"}
 
 
-@pytest.mark.parametrize("modules", [0, 4])
+@pytest.mark.parametrize("modules", [0, 5])
 def test_the_blocks_build_for_any_battery_size(calls, modules):
     assert build(battery={"modules": modules})
+
+
+def test_the_parallel_block_is_served_without_the_hs3_only_registers(calls):
+    scenario = make_scenario(model="h2", parallel={"inverters": 2})
+
+    blocks = h2.build_blocks(scenario=scenario)
+
+    assert arguments_of(calls=calls, name="parallel.parallel_fields") == {
+        "scenario": scenario,
+        "extended": False,
+    }
+    assert {f.name for f in block_at(blocks=blocks, address=0x4200).fields} == {
+        "parallel.parallel_fields"
+    }

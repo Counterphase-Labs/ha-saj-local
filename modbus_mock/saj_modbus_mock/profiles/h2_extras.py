@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from saj_modbus_mock.registers import Field
     from saj_modbus_mock.scenario import Scenario
 
-MAX_CAPACITY_SETTING_AH = 1000
 RUNNING_DATA_WORDS = 6
 RESERVED_WORDS = 12
 HOURS_SCALE = 0.1
@@ -72,10 +71,6 @@ def realtime_fields() -> list[Field]:
 
 
 def settings_fields(*, scenario: Scenario) -> list[Field]:
-    capacity_ah = min(
-        scenario.battery.modules * scenario.battery.module_capacity_ah,
-        MAX_CAPACITY_SETTING_AH,
-    )
     return [
         _bounded(
             address=0x3632,
@@ -92,83 +87,55 @@ def settings_fields(*, scenario: Scenario) -> list[Field]:
         _bounded(
             address=0x3642,
             name="return_frequency_hysteresis",
-            raw_default=5,
+            raw_default=15,
             shape=Shape(minimum=0, maximum=15, scale=HERTZ),
         ),
         _bounded(
             address=0x3652,
             name="battery_off_grid_discharge_cutoff_voltage",
-            raw_default=440,
-            shape=Shape(
-                minimum=50,
-                maximum=4500,
-                scale=VOLTS,
-            ),
+            raw_default=850,
+            shape=Shape(minimum=850, maximum=4500, scale=VOLTS),
         ),
         _bounded(
             address=0x3653,
             name="battery_charge_cutoff_voltage",
-            raw_default=580,
-            shape=Shape(
-                minimum=50,
-                maximum=4500,
-                scale=VOLTS,
-            ),
+            raw_default=4500,
+            shape=Shape(minimum=850, maximum=4500, scale=VOLTS),
         ),
         _bounded(
             address=0x3654,
             name="battery_on_grid_discharge_cutoff_voltage",
-            raw_default=460,
-            shape=Shape(
-                minimum=50,
-                maximum=4500,
-                scale=VOLTS,
-            ),
+            raw_default=850,
+            shape=Shape(minimum=850, maximum=4500, scale=VOLTS),
         ),
         _bounded(
             address=0x3655,
             name="battery_voltage_protection",
-            raw_default=600,
-            shape=Shape(
-                minimum=50,
-                maximum=4500,
-                scale=VOLTS,
-            ),
+            raw_default=4500,
+            shape=Shape(minimum=850, maximum=4500, scale=VOLTS),
         ),
         _bounded(
             address=0x3656,
             name="battery_low_voltage_warning",
-            raw_default=450,
-            shape=Shape(
-                minimum=50,
-                maximum=4500,
-                scale=VOLTS,
-            ),
+            raw_default=850,
+            shape=Shape(minimum=850, maximum=4500, scale=VOLTS),
         ),
         _bounded(
             address=0x3657,
             name="battery_discharge_current_limit_setting",
-            raw_default=200,
-            shape=Shape(
-                minimum=0,
-                maximum=300,
-                scale=AMPS,
-            ),
+            raw_default=300,
+            shape=Shape(minimum=0, maximum=300, scale=AMPS),
         ),
         _bounded(
             address=0x3658,
             name="battery_charge_current_limit_setting",
-            raw_default=200,
-            shape=Shape(
-                minimum=0,
-                maximum=300,
-                scale=AMPS,
-            ),
+            raw_default=300,
+            shape=Shape(minimum=0, maximum=300, scale=AMPS),
         ),
         _bounded(
             address=0x3659,
             name="battery_total_capacity_setting",
-            raw_default=capacity_ah,
+            raw_default=0,
             shape=Shape(
                 minimum=0,
                 maximum=1000,
@@ -207,22 +174,14 @@ def settings_fields(*, scenario: Scenario) -> list[Field]:
         _bounded(
             address=0x3664,
             name="battery_discharge_voltage",
-            raw_default=460,
-            shape=Shape(
-                minimum=50,
-                maximum=4500,
-                scale=VOLTS,
-            ),
+            raw_default=4500,
+            shape=Shape(minimum=850, maximum=4500, scale=VOLTS),
         ),
         _bounded(
             address=0x3665,
             name="battery_average_charge_voltage",
-            raw_default=560,
-            shape=Shape(
-                minimum=50,
-                maximum=4500,
-                scale=VOLTS,
-            ),
+            raw_default=4500,
+            shape=Shape(minimum=850, maximum=4500, scale=VOLTS),
         ),
         _bounded(
             address=0x3666,
@@ -245,14 +204,14 @@ def settings_fields(*, scenario: Scenario) -> list[Field]:
         _bounded(
             address=0x3669,
             name="off_grid_voltage",
-            raw_default=2300,
-            shape=Shape(minimum=0, maximum=2400, scale=VOLTS),
+            raw_default=2200,
+            shape=Shape(minimum=2200, maximum=2400, scale=VOLTS),
         ),
         _bounded(
             address=0x366A,
             name="off_grid_frequency",
             raw_default=5000,
-            shape=Shape(minimum=0, maximum=6000, scale=HERTZ),
+            shape=Shape(minimum=5000, maximum=6000, scale=HERTZ),
         ),
         _bounded(
             address=0x366B,
@@ -282,29 +241,25 @@ def settings_fields(*, scenario: Scenario) -> list[Field]:
             address=0x3670,
             name="max_dc_current_component",
             raw_default=1000,
-            shape=Shape(
-                minimum=0,
-                maximum=3000,
-                scale=MILLIAMPS,
-            ),
+            shape=Shape(minimum=0, maximum=3000, scale=MILLIAMPS),
         ),
         _bounded(
             address=0x3671,
             name="max_dc_voltage_component",
-            raw_default=150,
+            raw_default=100,
             shape=Shape(minimum=0, maximum=400, scale=VOLTS),
         ),
         _bounded(
             address=0x3672,
             name="max_iso_limit",
-            raw_default=100,
-            shape=Shape(minimum=50, maximum=1000),
+            raw_default=150,
+            shape=Shape(minimum=30, maximum=1000),
         ),
         _bounded(
             address=0x3673,
             name="max_leakage_current",
-            raw_default=300,
-            shape=Shape(minimum=0, maximum=500, scale=MILLIAMPS),
+            raw_default=200,
+            shape=Shape(minimum=30, maximum=500, scale=MILLIAMPS),
         ),
         _bounded(
             address=0x3674,
@@ -315,12 +270,8 @@ def settings_fields(*, scenario: Scenario) -> list[Field]:
         _bounded(
             address=0x3676,
             name="battery_forced_charge_power",
-            raw_default=1000,
-            shape=Shape(
-                minimum=0,
-                maximum=1000,
-                scale=0.1,
-            ),
+            raw_default=200,
+            shape=Shape(minimum=100, maximum=1000, scale=0.1),
         ),
         _bounded(
             address=0x3677,
@@ -337,25 +288,25 @@ def settings_fields(*, scenario: Scenario) -> list[Field]:
         _bounded(
             address=0x3679,
             name="pv_shutdown_voltage",
-            raw_default=900,
+            raw_default=700,
             shape=Shape(minimum=0, maximum=6500, scale=VOLTS),
         ),
         _bounded(
             address=0x367A,
             name="mppt_voltage_high",
-            raw_default=4800,
-            shape=Shape(minimum=0, maximum=5000, scale=VOLTS),
+            raw_default=5000,
+            shape=Shape(minimum=900, maximum=5000, scale=VOLTS),
         ),
         _bounded(
             address=0x367B,
             name="mppt_voltage_low",
-            raw_default=800,
-            shape=Shape(minimum=0, maximum=5000, scale=VOLTS),
+            raw_default=900,
+            shape=Shape(minimum=900, maximum=5000, scale=VOLTS),
         ),
         _bounded(
             address=0x367C,
             name="mppt_scan_interval_minutes",
             raw_default=30,
-            shape=Shape(minimum=0, maximum=3000),
+            shape=Shape(minimum=3, maximum=30000),
         ),
     ]

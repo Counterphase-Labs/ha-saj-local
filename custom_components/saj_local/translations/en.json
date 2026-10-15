@@ -1727,6 +1727,174 @@
       },
       "battery_discharge_cutoff_voltage": {
         "name": "Battery discharge cutoff voltage"
+      },
+      "off_grid_mode": {
+        "name": "Off-grid mode",
+        "state": {
+          "off": "Off",
+          "on": "On"
+        }
+      },
+      "inverter_stop": {
+        "name": "Inverter stop",
+        "state": {
+          "running": "Running",
+          "stopped": "Stopped"
+        }
+      },
+      "inverter_error_count": {
+        "name": "Inverter error count"
+      },
+      "drm_hardware_status": {
+        "name": "DRM hardware status"
+      },
+      "drm_software_status": {
+        "name": "DRM software status"
+      },
+      "fault_record_sequence": {
+        "name": "Fault record sequence"
+      },
+      "application_mode_active": {
+        "name": "Application mode in effect",
+        "state": {
+          "self_use": "Self-use",
+          "time_of_use": "Time-of-use",
+          "backup": "Backup",
+          "passive": "Passive",
+          "legacy": "Legacy",
+          "ai_saving": "AI saving",
+          "peak_shaving": "Peak shaving"
+        }
+      },
+      "battery_controller_1_current": {
+        "name": "Battery controller 1 current"
+      },
+      "battery_controller_2_current": {
+        "name": "Battery controller 2 current"
+      },
+      "pv_generation_time_today": {
+        "name": "PV generation time today"
+      },
+      "pv_generation_time_total": {
+        "name": "PV generation time total"
+      },
+      "battery_voltage_low_warning": {
+        "name": "Battery voltage low warning"
+      },
+      "battery_pack1_bms_type": {
+        "name": "Battery pack 1 BMS type"
+      },
+      "battery_pack1_bms_serial_number": {
+        "name": "Battery pack 1 BMS serial number"
+      },
+      "battery_pack1_bms_software_version": {
+        "name": "Battery pack 1 BMS software version"
+      },
+      "battery_pack1_bms_hardware_version": {
+        "name": "Battery pack 1 BMS hardware version"
+      },
+      "battery_pack1_type": {
+        "name": "Battery pack 1 type",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack1_serial_number": {
+        "name": "Battery pack 1 serial number"
+      },
+      "battery_pack2_bms_type": {
+        "name": "Battery pack 2 BMS type"
+      },
+      "battery_pack2_bms_serial_number": {
+        "name": "Battery pack 2 BMS serial number"
+      },
+      "battery_pack2_bms_software_version": {
+        "name": "Battery pack 2 BMS software version"
+      },
+      "battery_pack2_bms_hardware_version": {
+        "name": "Battery pack 2 BMS hardware version"
+      },
+      "battery_pack2_type": {
+        "name": "Battery pack 2 type",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack2_serial_number": {
+        "name": "Battery pack 2 serial number"
+      },
+      "battery_pack3_bms_type": {
+        "name": "Battery pack 3 BMS type"
+      },
+      "battery_pack3_bms_serial_number": {
+        "name": "Battery pack 3 BMS serial number"
+      },
+      "battery_pack3_bms_software_version": {
+        "name": "Battery pack 3 BMS software version"
+      },
+      "battery_pack3_bms_hardware_version": {
+        "name": "Battery pack 3 BMS hardware version"
+      },
+      "battery_pack3_type": {
+        "name": "Battery pack 3 type",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack3_serial_number": {
+        "name": "Battery pack 3 serial number"
+      },
+      "battery_pack4_bms_type": {
+        "name": "Battery pack 4 BMS type"
+      },
+      "battery_pack4_bms_serial_number": {
+        "name": "Battery pack 4 BMS serial number"
+      },
+      "battery_pack4_bms_software_version": {
+        "name": "Battery pack 4 BMS software version"
+      },
+      "battery_pack4_bms_hardware_version": {
+        "name": "Battery pack 4 BMS hardware version"
+      },
+      "battery_pack4_type": {
+        "name": "Battery pack 4 type",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack4_serial_number": {
+        "name": "Battery pack 4 serial number"
+      },
+      "battery_pack5_bms_type": {
+        "name": "Battery pack 5 BMS type"
+      },
+      "battery_pack5_bms_serial_number": {
+        "name": "Battery pack 5 BMS serial number"
+      },
+      "battery_pack5_bms_software_version": {
+        "name": "Battery pack 5 BMS software version"
+      },
+      "battery_pack5_bms_hardware_version": {
+        "name": "Battery pack 5 BMS hardware version"
+      },
+      "battery_pack5_type": {
+        "name": "Battery pack 5 type",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack5_serial_number": {
+        "name": "Battery pack 5 serial number"
       }
     },
     "binary_sensor": {
@@ -2388,6 +2556,102 @@
       },
       "inverter_power_target": {
         "name": "Inverter power target"
+      },
+      "battery_forced_charge_power_limit": {
+        "name": "Battery forced charge power limit"
+      },
+      "fcas_frequency_hysteresis": {
+        "name": "FCAS frequency hysteresis"
+      },
+      "lead_acid_off_grid_discharge_cutoff_voltage": {
+        "name": "Lead-acid off-grid discharge cutoff voltage"
+      },
+      "lead_acid_charge_cutoff_voltage": {
+        "name": "Lead-acid charge cutoff voltage"
+      },
+      "lead_acid_on_grid_discharge_cutoff_voltage": {
+        "name": "Lead-acid on-grid discharge cutoff voltage"
+      },
+      "lead_acid_high_voltage_protection": {
+        "name": "Lead-acid high voltage protection"
+      },
+      "lead_acid_low_voltage_warning": {
+        "name": "Lead-acid low voltage warning"
+      },
+      "lead_acid_discharge_current_limit": {
+        "name": "Lead-acid discharge current limit"
+      },
+      "lead_acid_charge_current_limit": {
+        "name": "Lead-acid charge current limit"
+      },
+      "lead_acid_capacity": {
+        "name": "Lead-acid capacity"
+      },
+      "lead_acid_float_charge_voltage": {
+        "name": "Lead-acid float charge voltage"
+      },
+      "lead_acid_equalising_charge_voltage": {
+        "name": "Lead-acid equalising charge voltage"
+      },
+      "bms_update_id": {
+        "name": "BMS update ID"
+      },
+      "bms_update_mode": {
+        "name": "BMS update mode"
+      },
+      "parallel_role": {
+        "name": "Parallel role"
+      },
+      "parallel_number": {
+        "name": "Parallel number"
+      },
+      "off_grid_output_voltage": {
+        "name": "Off-grid output voltage"
+      },
+      "off_grid_output_frequency": {
+        "name": "Off-grid output frequency"
+      },
+      "motor_enable": {
+        "name": "Motor enable"
+      },
+      "machine_model": {
+        "name": "Machine model"
+      },
+      "rated_power": {
+        "name": "Rated power"
+      },
+      "function_flags_1": {
+        "name": "Function flags 1"
+      },
+      "function_flags_2": {
+        "name": "Function flags 2"
+      },
+      "max_dc_current_component": {
+        "name": "Maximum DC current component"
+      },
+      "max_dc_voltage_component": {
+        "name": "Maximum DC voltage component"
+      },
+      "insulation_resistance_limit": {
+        "name": "Insulation resistance limit"
+      },
+      "max_leakage_current": {
+        "name": "Maximum leakage current"
+      },
+      "pv_start_voltage": {
+        "name": "PV start voltage"
+      },
+      "pv_shutdown_voltage": {
+        "name": "PV shutdown voltage"
+      },
+      "mppt_voltage_high": {
+        "name": "MPPT voltage high"
+      },
+      "mppt_voltage_low": {
+        "name": "MPPT voltage low"
+      },
+      "mppt_scan_time": {
+        "name": "MPPT scan time"
       }
     },
     "select": {
@@ -2436,7 +2700,8 @@
           "passive": "Passive",
           "legacy": "Legacy",
           "time_of_use_bms": "Time-of-use (BMS)",
-          "ai_saving": "AI saving"
+          "ai_saving": "AI saving",
+          "peak_shaving": "Peak shaving"
         }
       },
       "export_limit_mode": {
@@ -2570,6 +2835,47 @@
           "standard": "Standard",
           "pv_mode": "PV mode"
         }
+      },
+      "grid_type": {
+        "name": "Grid type",
+        "state": {
+          "single_phase": "Single phase",
+          "split_phase": "Split phase",
+          "three_phase_three_wire": "Three-phase three-wire",
+          "three_phase_four_wire": "Three-phase four-wire"
+        }
+      },
+      "reverse_flow_mode": {
+        "name": "Reverse flow mode",
+        "state": {
+          "off": "Off",
+          "master": "Master",
+          "slave": "Slave"
+        }
+      },
+      "parallel_configured_mode": {
+        "name": "Parallel configured mode",
+        "state": {
+          "not_parallel": "Not parallel",
+          "on_grid": "On-grid",
+          "off_grid": "Off-grid",
+          "on_and_off_grid": "On-grid and off-grid"
+        }
+      },
+      "battery_input_mode": {
+        "name": "Battery input mode",
+        "state": {
+          "independent": "Independent",
+          "parallel": "Parallel"
+        }
+      },
+      "pv_input_mode": {
+        "name": "PV input mode",
+        "state": {
+          "automatic": "Automatic",
+          "independent": "Independent",
+          "parallel": "Parallel"
+        }
       }
     },
     "switch": {
@@ -2692,6 +2998,9 @@
       },
       "inverter_power_control": {
         "name": "Inverter power control"
+      },
+      "buzzer": {
+        "name": "Buzzer"
       }
     },
     "time": {
@@ -3048,7 +3357,8 @@
         "ems": "EMS",
         "identity": "Versions",
         "battery": "Battery",
-        "meters": "Meters"
+        "meters": "Meters",
+        "battery_identity": "Battery identity"
       }
     },
     "entity_state": {

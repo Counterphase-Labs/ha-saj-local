@@ -694,14 +694,14 @@ def settings_fields(
     return fields
 
 
-def meter_fields(*, phases: int, with_meter_b: bool, extended: bool) -> list[Field]:
+def meter_fields(*, phases: int, extended: bool) -> list[Field]:
     fields = [
         live(address=0xA03C, name="meter_a_status", source="meter_a_status"),
         live(address=0xA053, name="meter_b_status", source="meter_b_status"),
     ]
     for meter, status_base in (("a", 0xA03D), ("b", 0xA054)):
         for phase in range(METER_PHASES):
-            present = phase < phases and (meter == "a" or with_meter_b)
+            present = phase < phases
 
             def key(
                 *,

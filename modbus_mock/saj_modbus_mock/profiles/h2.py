@@ -4,7 +4,7 @@ from saj_modbus_mock.device import Block
 from saj_modbus_mock.exceptions import ExceptionCode
 from saj_modbus_mock.models import MODELS, ModelSpec
 
-from . import common, h2_extras
+from . import common, h2_extras, parallel
 from .fields import fixed, text
 
 if TYPE_CHECKING:
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from saj_modbus_mock.scenario import Scenario
 
 SPEC: ModelSpec = MODELS["h2"]
-APP_MODES = frozenset({0, 1, 2, 3, 14})
+APP_MODES = frozenset({0, 1, 2, 3, 10, 14})
 OVERRUN_CODE = ExceptionCode.ILLEGAL_DATA_ADDRESS
 PERIPHERAL_START = 0x8E00
 MODULE_STRIDE = 20
@@ -79,10 +79,10 @@ def build_blocks(*, scenario: Scenario) -> tuple[Block, ...]:
         ),
         Block(
             start=0x4000,
-            end=0x4166,
+            end=0x4176,
             fields=(
                 *common.realtime_energy_fields(
-                    scenario=scenario, phases=SPEC.phases, extended=False
+                    scenario=scenario, phases=SPEC.phases, extended=True
                 ),
                 *h2_extras.realtime_fields(),
             ),
@@ -98,6 +98,11 @@ def build_blocks(*, scenario: Scenario) -> tuple[Block, ...]:
             ),
         ),
         Block(
+            start=0x4200,
+            end=0x4264,
+            fields=tuple(parallel.parallel_fields(scenario=scenario, extended=False)),
+        ),
+        Block(
             start=0xA000,
             end=0xA037,
             fields=tuple(common.battery_fields(populated=True)),
@@ -105,11 +110,7 @@ def build_blocks(*, scenario: Scenario) -> tuple[Block, ...]:
         Block(
             start=0xA03C,
             end=0xA065,
-            fields=tuple(
-                common.meter_fields(
-                    phases=SPEC.phases, with_meter_b=False, extended=False
-                )
-            ),
+            fields=tuple(common.meter_fields(phases=SPEC.phases, extended=False)),
         ),
         Block(
             start=common.FACTORY_BLOCK_START,

@@ -103,12 +103,11 @@ def test_every_section_can_be_stated():
         ({**HS3, "site": {"pv_strings": [{"peak": 1}]}}, "site.pv_strings[0].peak"),
         ({**HS3, "site": {"load": {"base_w": 500, "peak_w": 100}}}, "site.load.peak_w"),
         ({**HS3, "battery": {"modules": 9}}, "battery.modules"),
-        ({**H2, "battery": {"modules": 5}}, "battery.modules"),
+        ({**H2, "battery": {"modules": 6}}, "battery.modules"),
         (
             {**HS3, "battery": {"initial_soc_percent": 101}},
             "battery.initial_soc_percent",
         ),
-        ({**H2, "meters": {"meter_b": True}}, "meters.meter_b"),
         ({**H2, "ev_charger": {"installed": True}}, "ev_charger.installed"),
         ({**HS3, "ev_charger": {"phases": 2}}, "ev_charger.phases"),
         (
@@ -156,7 +155,6 @@ def test_every_section_can_be_stated():
             "ev_charger.sessions[0].unplug",
         ),
         ({**HS3, "parallel": {"inverters": 3}}, "parallel.inverters"),
-        ({**H2, "parallel": {"inverters": 2}}, "parallel.inverters"),
         (
             {**HS3, "faults": {"inverter_fault_bits": [32]}},
             "faults.inverter_fault_bits[0]",
@@ -211,3 +209,21 @@ def test_an_empty_scenario_file_is_refused_for_the_missing_model(tmp_path):
         load_scenario(path=path)
 
     assert caught.value.key == "device.model"
+
+
+def test_an_h2_scenario_accepts_five_battery_packs():
+    scenario = parse_scenario(data={**H2, "battery": {"modules": 5}})
+
+    assert scenario.battery.modules == 5
+
+
+def test_an_h2_scenario_can_configure_a_parallel_system():
+    scenario = parse_scenario(data={**H2, "parallel": {"inverters": 2}})
+
+    assert scenario.parallel.inverters == 2
+
+
+def test_an_h2_scenario_can_fit_a_meter_b():
+    scenario = parse_scenario(data={**H2, "meters": {"meter_b": True}})
+
+    assert scenario.meters.meter_b

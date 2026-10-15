@@ -31,6 +31,15 @@ PARALLEL_ENERGY_FAMILIES = (
     "parallel_grid_l3_import_energy",
     "parallel_load_energy",
 )
+APPLICATION_MODE_OPTIONS = {
+    0: "self_use",
+    1: "time_of_use",
+    2: "backup",
+    3: "passive",
+    10: "peak_shaving",
+    12: "ai_saving",
+    14: "legacy",
+}
 PARALLEL_POWER_ENCODINGS = {
     "parallel_pv_power": "u16",
     "parallel_battery_power": "i16",
@@ -66,7 +75,8 @@ PROFILE = Profile(
     largest_request=56,
     spans=(
         Span(name="settings", first=0x3604, last=0x367C),
-        Span(name="realtime", first=0x4000, last=0x4166),
+        Span(name="realtime", first=0x4000, last=0x4176),
+        Span(name="battery_identity", first=0x8E00, last=0x8E63),
         Span(name="identity", first=0x8F00, last=0x8F1C),
         Span(name="battery", first=0xA000, last=0xA037),
         Span(name="parallel", first=0x4200, last=0x4264),
@@ -111,6 +121,8 @@ PROFILE = Profile(
                 "battery_depth_of_discharge_active": 0x402B,
                 "backup_reserve_soc_active": 0x402C,
                 "meter_configuration_active": 0x4030,
+                "battery_voltage": 0x4069,
+                "battery_current": 0x406A,
                 "battery_temperature": 0x406E,
                 "battery_soc": 0x406F,
                 "pv_direction": 0x4095,
@@ -144,6 +156,7 @@ PROFILE = Profile(
                 "battery_usable_capacity": 0xA00A,
                 "battery_online_code": 0xA00B,
                 "battery_voltage_high_protection": 0xA032,
+                "battery_voltage_low_warning": 0xA033,
                 "battery_charge_voltage": 0xA034,
                 "battery_discharge_cutoff_voltage": 0xA035,
                 "battery_discharge_current_limit": 0xA036,
@@ -157,17 +170,67 @@ PROFILE = Profile(
                 "synchronise_clock": 0x8020,
                 "meter_configuration": 0x3630,
                 "meter_address": 0x3631,
+                "buzzer": 0x3632,
                 "rs485_address": 0x3633,
                 "rs485_baud_rate": 0x3634,
+                "reverse_flow_mode": 0x3635,
                 "battery_protocol": 0x363B,
+                "fcas_frequency_hysteresis": 0x3642,
                 "battery_auto_wake": 0x3643,
                 "backup_reserve_soc": 0x3651,
+                "lead_acid_off_grid_discharge_cutoff_voltage": 0x3652,
+                "lead_acid_charge_cutoff_voltage": 0x3653,
+                "lead_acid_on_grid_discharge_cutoff_voltage": 0x3654,
+                "lead_acid_high_voltage_protection": 0x3655,
+                "lead_acid_low_voltage_warning": 0x3656,
+                "lead_acid_discharge_current_limit": 0x3657,
+                "lead_acid_charge_current_limit": 0x3658,
+                "lead_acid_capacity": 0x3659,
+                "bms_update_id": 0x365D,
+                "bms_update_mode": 0x365E,
+                "parallel_role": 0x3661,
+                "parallel_number": 0x3662,
+                "parallel_configured_mode": 0x3663,
+                "lead_acid_float_charge_voltage": 0x3664,
+                "lead_acid_equalising_charge_voltage": 0x3665,
+                "battery_input_mode": 0x3666,
+                "pv_input_mode": 0x3667,
+                "off_grid_mode": 0x3668,
+                "off_grid_output_voltage": 0x3669,
+                "off_grid_output_frequency": 0x366A,
+                "motor_enable": 0x366B,
+                "machine_model": 0x366C,
+                "rated_power": 0x366D,
+                "function_flags_1": 0x366E,
+                "function_flags_2": 0x366F,
+                "max_dc_current_component": 0x3670,
+                "max_dc_voltage_component": 0x3671,
+                "insulation_resistance_limit": 0x3672,
+                "max_leakage_current": 0x3673,
+                "grid_type": 0x3674,
+                "led_mode": 0x3675,
+                "battery_forced_charge_power_limit": 0x3676,
+                "inverter_stop": 0x3677,
+                "pv_start_voltage": 0x3678,
+                "pv_shutdown_voltage": 0x3679,
+                "mppt_voltage_high": 0x367A,
+                "mppt_voltage_low": 0x367B,
+                "mppt_scan_time": 0x367C,
                 "inverter_clock": 0x4000,
+                "inverter_error_count": 0x400F,
+                "drm_hardware_status": 0x4017,
+                "drm_software_status": 0x4018,
+                "grid_connection_countdown": 0x4019,
+                "fault_record_sequence": 0x401A,
+                "settings_sequence": 0x401B,
+                "application_mode_active": 0x4022,
                 "dc_bus_voltage": 0x4067,
                 "dc_bus_slave_voltage": 0x4068,
-                "battery_voltage": 0x4069,
-                "battery_current": 0x406A,
+                "battery_controller_1_current": 0x406B,
+                "battery_controller_2_current": 0x406C,
                 "battery_port_power": 0x406D,
+                "pv_generation_time_today": 0x40BC,
+                "pv_generation_time_total": 0x40BD,
                 "meter_a_status": 0xA03C,
                 "meter_b_status": 0xA053,
                 "meter_a_power": None,
@@ -207,11 +270,13 @@ PROFILE = Profile(
         FamilyPlacement(family="inverter_energy", evidence=Evidence.IMPLEMENTED),
         FamilyPlacement(family="load_energy", evidence=Evidence.IMPLEMENTED),
         FamilyPlacement(family="backup_load_energy", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="grid_export_energy", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="grid_import_energy", evidence=Evidence.IMPLEMENTED),
         FamilyPlacement(
-            family="grid_export_energy", evidence=Evidence.IMPLEMENTED, base=0x40EF
+            family="grid_first_phase_export_energy", evidence=Evidence.IMPLEMENTED
         ),
         FamilyPlacement(
-            family="grid_import_energy", evidence=Evidence.IMPLEMENTED, base=0x40F7
+            family="grid_first_phase_import_energy", evidence=Evidence.IMPLEMENTED
         ),
         FamilyPlacement(
             family="grid_other_phases_export_energy", evidence=Evidence.IMPLEMENTED
@@ -227,6 +292,7 @@ PROFILE = Profile(
             family="battery_pack_discharged_energy", evidence=Evidence.IMPLEMENTED
         ),
         FamilyPlacement(family="battery_pack_faults", evidence=Evidence.IMPLEMENTED),
+        FamilyPlacement(family="battery_pack_identity", evidence=Evidence.DOCUMENTED),
         FamilyPlacement(family="meter_a_phase", evidence=Evidence.IMPLEMENTED),
         FamilyPlacement(family="meter_b_phase", evidence=Evidence.DOCUMENTED),
         *(
@@ -255,16 +321,9 @@ PROFILE = Profile(
             Replacement(key=key, encoding=encoding, uncombined=True)
             for key, encoding in PARALLEL_POWER_ENCODINGS.items()
         ),
-        Replacement(
-            key="application_mode",
-            options={
-                0: "self_use",
-                1: "time_of_use",
-                2: "backup",
-                3: "passive",
-                12: "ai_saving",
-                14: "legacy",
-            },
+        *(
+            Replacement(key=key, options=APPLICATION_MODE_OPTIONS)
+            for key in ("application_mode", "application_mode_active")
         ),
     ),
     probes=(

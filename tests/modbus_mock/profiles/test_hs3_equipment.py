@@ -15,42 +15,6 @@ def stubbed_helpers(monkeypatch):
     monkeypatch.setattr(eq, "ems_combinations", lambda: frozenset({0, 99}))
 
 
-def test_the_parallel_block_reports_the_installed_inverter_count():
-    fields = by_address(
-        fields=eq.parallel_fields(
-            scenario=make_scenario(model="hs3", parallel={"inverters": 2})
-        )
-    )
-
-    assert fields[0x4202].initial == fields[0x4203].initial == 2
-    assert fields[0x420B].source == "parallel_capacity_ah"
-
-
-def test_parallel_powers_split_into_a_low_word_and_a_signed_high_word():
-    fields = by_address(fields=eq.parallel_fields(scenario=make_scenario(model="hs3")))
-
-    assert fields[0x4206].encoding is Encoding.U16
-    assert fields[0x420E].encoding is Encoding.I16
-    assert fields[0x420C].encoding is Encoding.U16
-    assert fields[0x4206].source == "parallel_grid_w_low"
-    assert fields[0x420E].source == "parallel_grid_w_high"
-
-
-def test_parallel_state_of_charge_is_in_whole_percent():
-    field = by_address(fields=eq.parallel_fields(scenario=make_scenario(model="hs3")))[
-        0x4209
-    ]
-
-    assert field.scale == 1.0
-
-
-def test_parallel_energy_counters_describe_the_whole_system_where_a_quantity_exists():
-    fields = by_address(fields=eq.parallel_fields(scenario=make_scenario(model="hs3")))
-
-    assert fields[0x4215].source == "counter:pv:True:True"
-    assert fields[0x4235].source == "counter::False:True"
-
-
 def test_average_registers_read_the_five_minute_mean_of_their_quantity():
     fields = by_address(fields=eq.average_fields())
 

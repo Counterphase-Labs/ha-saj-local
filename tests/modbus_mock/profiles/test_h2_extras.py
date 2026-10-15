@@ -34,17 +34,10 @@ def test_the_machine_mirrors_report_the_scenario_not_a_constant():
     assert fields[0x366C].initial == scenario.device.model.device_type
 
 
-@pytest.mark.parametrize(
-    ("modules", "ah", "expected"), [(3, 100, 300), (0, 100, 0), (8, 200, 1000)]
-)
-def test_the_battery_capacity_setting_follows_the_bank_up_to_its_maximum(
-    modules, ah, expected
-):
-    fields = by_name(
-        fields=settings(battery={"modules": modules, "module_capacity_ah": ah})
-    )
+def test_the_lead_acid_capacity_keeps_its_default_with_a_lithium_battery_fitted():
+    fields = by_name(fields=settings(battery={"modules": 3, "module_capacity_ah": 100}))
 
-    assert fields["battery_total_capacity_setting"].initial == expected
+    assert fields["battery_total_capacity_setting"].initial == 0
 
 
 @pytest.mark.parametrize(

@@ -211,6 +211,18 @@ def test_meter_b_reads_external_generation_only_when_installed():
     assert without["meter_b_r_w"] == 0.0
 
 
+def test_a_single_phase_model_with_a_meter_b_reads_the_external_generation():
+    sample = make_sample(ext_pv_w=900.0)
+
+    out = telemetry(
+        model="h2", sample=sample, meters={"meter_a": True, "meter_b": True}
+    )
+
+    assert out["meter_b_status"] == 1.0
+    assert out["meter_b_r_w"] == pytest.approx(900.0)
+    assert out["meter_b_r_v"] > 0.0
+
+
 def test_energy_counters_cover_every_flow_and_period_and_scale_with_inverters():
     single = telemetry()
     double = telemetry(parallel={"inverters": 2})

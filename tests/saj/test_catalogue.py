@@ -21,7 +21,7 @@ from saj.catalogue import (
     pack_maximum,
     private_rows,
 )
-from saj.codec import BitRange, Encoding, Range
+from saj.codec import BitRange, Encoding, Range, decode
 from saj.definitions import (
     Access,
     Combination,
@@ -673,9 +673,9 @@ def test_a_device_gets_the_registers_of_its_types_shape():
 
 SHIPPED_SHAPES = [
     ("hs3", Shape(phases=3, strings=2), 547, 746, 179),
-    ("h2", Shape(phases=1, strings=2), 299, 396, 116),
-    ("h2", Shape(phases=1, strings=3), 307, 404, 119),
-    ("h2", Shape(phases=3, strings=4, assumed=True), 391, 488, 116),
+    ("h2", Shape(phases=1, strings=2), 390, 487, 118),
+    ("h2", Shape(phases=1, strings=3), 398, 495, 121),
+    ("h2", Shape(phases=3, strings=4, assumed=True), 482, 579, 118),
 ]
 
 
@@ -692,7 +692,7 @@ def test_shipped_profiles_have_the_catalogued_totals(
     assert sum(register.core for register in registers) == core
 
 
-def test_the_two_shipped_models_share_332_catalogued_rows():
+def test_the_two_shipped_models_share_342_catalogued_rows():
     hs3 = {
         register.row
         for register in CATALOGUES["hs3"].read_registers_for(
@@ -710,18 +710,44 @@ def test_the_two_shipped_models_share_332_catalogued_rows():
     hs3_keys = {r.key for r in CATALOGUES["hs3"].registers if r.readable}
     h2_keys = {r.key for r in CATALOGUES["h2"].registers if r.readable}
 
-    assert len(hs3 & h2) == 332
-    assert len(hs3_keys & h2_keys) == 421
+    assert len(hs3 & h2) == 342
+    assert len(hs3_keys & h2_keys) == 432
 
 
-def test_the_grid_counters_have_a_different_address_in_each_model():
-    def address(key: str, name: str) -> int | None:
-        return {r.key: r.address for r in CATALOGUES[key].registers}[name]
+@pytest.mark.parametrize("period", ["today", "month", "year", "total"])
+@pytest.mark.parametrize(
+    "key",
+    [
+        "grid_export_energy",
+        "grid_import_energy",
+        "grid_l1_export_energy",
+        "grid_l1_import_energy",
+    ],
+)
+def test_both_models_place_the_grid_totals_and_the_first_phase_counters_alike(
+    key: str, period: str
+):
+    def address(profile_key: str) -> int | None:
+        return {r.key: r.address for r in CATALOGUES[profile_key].registers}[
+            f"{key}_{period}"
+        ]
 
-    assert address("hs3", "grid_export_energy_today") == 0x416F
-    assert address("h2", "grid_export_energy_today") == 0x40EF
-    assert address("hs3", "grid_import_energy_today") == 0x4167
-    assert address("h2", "grid_import_energy_today") == 0x40F7
+    assert address("h2") == address("hs3")
+
+
+def test_the_grid_totals_and_the_first_phase_counters_are_separate_rows_on_the_h2():
+    rows = {r.key: r for r in CATALOGUES["h2"].registers}
+
+    assert (
+        rows["grid_export_energy_total"].address
+        != rows["grid_l1_export_energy_total"].address
+    )
+    assert (
+        rows["grid_import_energy_total"].address
+        != rows["grid_l1_import_energy_total"].address
+    )
+    assert rows["grid_import_energy_total"].core
+    assert not rows["grid_l1_import_energy_total"].core
 
 
 def test_every_shipped_profile_has_a_catalogue_built_at_import():
@@ -1368,7 +1394,14 @@ def test_a_catalogue_knows_the_highest_pack_it_has_rows_for():
 
 @pytest.mark.parametrize(
     ("limit", "packs"),
-    [(None, {1, 2, 3, 4}), (4, {1, 2, 3, 4}), (3, {1, 2, 3}), (2, {1, 2}), (1, {1})],
+    [
+        (None, {1, 2, 3, 4, 5}),
+        (5, {1, 2, 3, 4, 5}),
+        (4, {1, 2, 3, 4}),
+        (3, {1, 2, 3}),
+        (2, {1, 2}),
+        (1, {1}),
+    ],
 )
 def test_a_device_with_a_pack_limit_has_the_pack_rows_up_to_it_only(
     limit: int | None, packs: set[int]
@@ -1513,7 +1546,7 @@ def _parallel_rows(profile_key: str) -> dict[str, Register]:
         for register in catalogue.registers_for(
             shape=catalogue.profile.maximum_shape, equipment=ALL_EQUIPMENT
         )
-        if register.key.startswith("parallel_")
+        if register.key.startswith("parallel_") and not register.writable
     }
 
 
@@ -1573,7 +1606,9 @@ def test_the_parallel_rows_of_an_h2_exist_only_when_the_equipment_is_fitted():
     )
 
     assert {
-        register.key for register in without if register.key.startswith("parallel_")
+        register.key
+        for register in without
+        if register.key.startswith("parallel_") and not register.writable
     } == {"parallel_mode", "parallel_online_count"}
 
 
@@ -1843,7 +1878,15 @@ def test_the_hidden_sources_of_enabled_keys_are_the_words_nobody_shows():
                 "ev_serial_number",
             },
         ),
-        (H2, 0x005A, set()),
+        (
+            H2,
+            0x005A,
+            {
+                f"battery_pack{pack}_{name}"
+                for pack in range(1, 6)
+                for name in ("bms_serial_number", "serial_number")
+            },
+        ),
     ],
     ids=["hs3", "h2"],
 )
@@ -1864,3 +1907,12 @@ def test_private_rows_are_the_catalogued_identifiers_and_always_the_inverter_ser
     assert rows == {
         register.row for register in registers if register.key in private_keys
     } | {Row(address=0x8F03, words=10)}
+
+
+@pytest.mark.parametrize("profile_key", ["hs3", "h2"])
+def test_the_parallel_state_of_charge_reads_whole_percent_on_both_models(
+    profile_key: str,
+):
+    register = _parallel_rows(profile_key)["parallel_battery_soc"]
+
+    assert decode(words=[100], encoding_format=register.format) == 100

@@ -204,26 +204,30 @@ def test_percent_settings_carry_one_decimal_and_a_ceiling_above_full_power():
     assert fields[0x3639].initial == 4.2
 
 
-@pytest.mark.parametrize(("phases", "meter_b"), [(3, True), (1, False)])
-def test_meter_values_exist_only_for_installed_meters_and_phases(phases, meter_b):
-    fields = by_address(
-        fields=common.meter_fields(phases=phases, with_meter_b=meter_b, extended=False)
-    )
+@pytest.mark.parametrize("phases", [3, 1])
+def test_meter_values_exist_only_for_the_phases_of_the_model(phases):
+    fields = by_address(fields=common.meter_fields(phases=phases, extended=False))
 
     assert fields[0xA03D].source == "meter_a_r_v"
     assert fields[0xA043].source == ("meter_a_s_v" if phases == 3 else ZERO)
-    assert fields[0xA054].source == ("meter_b_r_v" if meter_b else ZERO)
+    assert fields[0xA054].source == "meter_b_r_v"
+    assert fields[0xA05A].source == ("meter_b_s_v" if phases == 3 else ZERO)
     assert fields[0xA03C].source == "meter_a_status"
     assert fields[0xA053].source == "meter_b_status"
 
 
+def test_a_single_phase_meter_b_serves_its_status_and_first_phase_readings():
+    fields = by_address(fields=common.meter_fields(phases=1, extended=False))
+
+    first_phase = [fields[address] for address in range(0xA054, 0xA05A)]
+    assert all(field.source.startswith("meter_b_r_") for field in first_phase)
+    assert fields[0xA053].source == "meter_b_status"
+    assert not any(field.address > 0xA065 for field in fields.values())
+
+
 def test_extended_meters_add_the_high_word_and_reactive_registers():
-    plain = by_address(
-        fields=common.meter_fields(phases=3, with_meter_b=True, extended=False)
-    )
-    extended = by_address(
-        fields=common.meter_fields(phases=3, with_meter_b=True, extended=True)
-    )
+    plain = by_address(fields=common.meter_fields(phases=3, extended=False))
+    extended = by_address(fields=common.meter_fields(phases=3, extended=True))
 
     assert 0xA066 not in plain
     assert extended[0xA066].words == 1

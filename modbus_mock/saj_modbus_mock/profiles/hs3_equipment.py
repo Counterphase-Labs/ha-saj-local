@@ -1,4 +1,4 @@
-"""HS3-only blocks: parallel, averages, EV, Ethernet and EMS."""
+"""HS3-only blocks: averages, EV, Ethernet and EMS."""
 
 from typing import TYPE_CHECKING
 
@@ -11,12 +11,10 @@ from .common import BAUD_CODES, ems_combinations
 from .fields import (
     I16,
     I32,
-    U16,
     U32,
     ZERO,
     Shape,
     blob,
-    counter_group,
     fixed,
     live,
     setting,
@@ -26,29 +24,6 @@ from .fields import (
 if TYPE_CHECKING:
     from saj_modbus_mock.scenario import Scenario
 
-PARALLEL_POWER_REGISTERS = (
-    (0x4204, 0x420C, "pv_w", U16),
-    (0x4205, 0x420D, "battery_w", I16),
-    (0x4206, 0x420E, "grid_w", I16),
-    (0x4207, 0x420F, "load_w", U16),
-    (0x4208, 0x4210, "backup_w", I16),
-    (0x420A, 0x4211, "grid_load_w", I16),
-)
-PARALLEL_ENERGY_GROUPS = (
-    (0x4215, "pv", "pv"),
-    (0x421D, "bat_charge", "battery_charge"),
-    (0x4225, "bat_discharge", "battery_discharge"),
-    (0x422D, "sell", "sell_one"),
-    (0x4235, "", "sell_two"),
-    (0x423D, "", "sell_three"),
-    (0x4245, "feed_in", "feed_in_one"),
-    (0x424D, "", "feed_in_two"),
-    (0x4255, "", "feed_in_three"),
-    (0x425D, "load", "load"),
-    (0x4265, "feed_in", "vector_feed_in"),
-    (0x426D, "sell", "vector_sell"),
-    (0x4275, "ext_pv", "pv_meter"),
-)
 AVERAGE_GROUPS = (
     (0x513E, "grid", "avg_grid_w"),
     (0x514F, "inv", "avg_inverter_w"),
@@ -93,44 +68,6 @@ EMS_DEFAULT_TIMEOUT_S = 300
 EMS_DEFAULT_CURRENT = 20.0
 EMS_SHARE_SCALE = 0.0001
 EMS_ENABLE_INITIAL = 0
-
-
-def parallel_fields(*, scenario: Scenario) -> list[Field]:
-    inverters = scenario.parallel.inverters
-    fields = [
-        fixed(address=0x4200, name="parallel_mode", value=0),
-        fixed(address=0x4201, name="parallel_id", value=0),
-        fixed(address=0x4202, name="parallel_count", value=inverters),
-        fixed(address=0x4203, name="parallel_real_count", value=inverters),
-        live(address=0x4209, name="parallel_soc", source="parallel_soc_percent"),
-        live(
-            address=0x420B,
-            name="parallel_total_capacity",
-            source="parallel_capacity_ah",
-        ),
-        live(address=0x4212, name="parallel_meter_b_power", source="ext_pv_w", enc=I32),
-    ]
-    for low, high, key, high_encoding in PARALLEL_POWER_REGISTERS:
-        fields.append(
-            live(address=low, name=f"parallel_{key}_low", source=f"parallel_{key}_low")
-        )
-        fields.append(
-            live(
-                address=high,
-                name=f"parallel_{key}_high",
-                source=f"parallel_{key}_high",
-                enc=high_encoding,
-            )
-        )
-    for start, base, name in PARALLEL_ENERGY_GROUPS:
-        fields += counter_group(
-            start=start,
-            base=base,
-            name=f"parallel_{name}",
-            present=bool(base),
-            parallel=True,
-        )
-    return fields
 
 
 def _average_group(*, start: int, group: str, total_key: str) -> list[Field]:

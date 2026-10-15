@@ -21,7 +21,6 @@ EQUIPMENT_BUILDERS = {
     "ethernet_fields": 0x0F00,
     "ev_settings_fields": 0x4B00,
     "ev_data_fields": 0x3024,
-    "parallel_fields": 0x4200,
     "average_fields": 0x513E,
     "ems_fields": 0x8400,
 }
@@ -49,6 +48,11 @@ def calls(monkeypatch):
     )
     monkeypatch.setattr(hs3, "common", common)
     monkeypatch.setattr(hs3, "hs3_equipment", equipment)
+    monkeypatch.setattr(
+        hs3,
+        "parallel",
+        SimpleNamespace(parallel_fields=stub("parallel_fields", 0x4200)),
+    )
     monkeypatch.setattr(hs3, "fixed", fake_fixed)
     monkeypatch.setattr(hs3, "UNDOCUMENTED_SETTINGS", UNDOCUMENTED)
     return recorded
@@ -61,7 +65,11 @@ def build(*, calls, **changes):
 def test_every_builder_fills_the_block_of_its_address_range(calls):
     blocks = build(calls=calls)
 
-    for name, address in {**COMMON_BUILDERS, **EQUIPMENT_BUILDERS}.items():
+    for name, address in {
+        **COMMON_BUILDERS,
+        **EQUIPMENT_BUILDERS,
+        "parallel_fields": 0x4200,
+    }.items():
         assert any(
             field.name == name
             for field in block_at(blocks=blocks, address=address).fields
@@ -114,7 +122,6 @@ def test_the_common_builders_are_asked_for_the_hs3_layout(calls):
     }
     assert arguments_of(calls=calls, name="meter_fields") == {
         "phases": 3,
-        "with_meter_b": True,
         "extended": True,
     }
     assert arguments_of(calls=calls, name="battery_fields") == {"populated": False}
@@ -128,7 +135,10 @@ def test_the_equipment_builders_receive_the_scenario_where_they_need_it(calls):
     assert arguments_of(calls=calls, name="ev_settings_fields") == {
         "scenario": scenario
     }
-    assert arguments_of(calls=calls, name="parallel_fields") == {"scenario": scenario}
+    assert arguments_of(calls=calls, name="parallel_fields") == {
+        "scenario": scenario,
+        "extended": True,
+    }
     assert arguments_of(calls=calls, name="ethernet_fields") == {}
 
 

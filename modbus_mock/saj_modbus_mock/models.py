@@ -14,8 +14,6 @@ class ModelSpec:
     phases: int
     max_battery_modules: int
     supports_ev_charger: bool
-    supports_parallel: bool
-    supports_meter_b: bool
     battery_pack_voltage_v: float
     battery_protocol_setting: int
     battery_protocol_active: int
@@ -31,8 +29,6 @@ MODELS: dict[str, ModelSpec] = {
         phases=3,
         max_battery_modules=8,
         supports_ev_charger=True,
-        supports_parallel=True,
-        supports_meter_b=True,
         battery_pack_voltage_v=444.0,
         battery_protocol_setting=24,
         battery_protocol_active=24,
@@ -44,10 +40,8 @@ MODELS: dict[str, ModelSpec] = {
         rated_powers_w=(3000, 3680, 4000, 5000, 6000),
         default_rated_power_w=6000,
         phases=1,
-        max_battery_modules=4,
+        max_battery_modules=5,
         supports_ev_charger=False,
-        supports_parallel=False,
-        supports_meter_b=False,
         battery_pack_voltage_v=51.2,
         battery_protocol_setting=22,
         battery_protocol_active=13,

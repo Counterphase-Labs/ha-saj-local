@@ -12,13 +12,9 @@ def test_each_model_exists_under_its_own_name_with_a_rating_it_supports(name):
     assert spec.phases in {1, 3}
 
 
-def test_only_the_three_phase_model_supports_the_optional_equipment():
+def test_only_the_three_phase_model_supports_the_ev_charger():
     assert MODELS[HS3].supports_ev_charger
-    assert MODELS[HS3].supports_parallel
-    assert MODELS[HS3].supports_meter_b
     assert not MODELS[H2].supports_ev_charger
-    assert not MODELS[H2].supports_parallel
-    assert not MODELS[H2].supports_meter_b
 
 
 def test_the_models_have_distinct_device_types_and_serials():
