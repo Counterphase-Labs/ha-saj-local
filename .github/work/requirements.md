@@ -63,6 +63,7 @@ Platform stability and correctness is paramount.
 
 - The different implementations of SAJ systems form an abstraction layer. There is a single unified interface (entities, controls, Lovelace elements) that does the same thing across all models, as closely as each model allows: consistent names, values, units and behaviour. Where models differ, each model's implementation translates to and from the common form.
 - A feature is left out only on a model that lacks the possibility to do it.
+- Controls are shared, not built per model. A control such as a state of charge limit, an export limit or EV charging is defined once and offered by every model that can do it. On a model that cannot do it, or where the equipment is not fitted, the control is not shown.
 
 - option to enable debug logging which will provide clear and helpful debug logs rather than spam that creates log fatigue
 
