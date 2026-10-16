@@ -162,7 +162,8 @@ A stand-in SAJ device that Home Assistant or any Modbus client can connect to, s
 - **Deterministic.** Weather and load depend only on the seed and the simulated time. The same scenario, instant and writes give the same values, however often a client polls.
 - **One energy balance.** Only irradiance and load are generated; everything else is derived, so the registers never contradict each other.
 - **Writes take effect.** Settings are stored, read back and acted on. A write from the panel goes through the same validation and handling as a Modbus write, so the integration cannot tell them apart and the panel cannot put the device in a state a client could not.
-- **The page knows nothing about models.** It builds itself from the device's description, so a new model needs no page. It is a development tool, so it is plain HTML and JavaScript with no libraries and no tests of its own, while the Python behind it is tested like the rest.
+- **The page knows nothing about models.** It builds itself from the device's description, so a new model needs no page. It is a development tool, so it is plain HTML, CSS and JavaScript files served as they are, with no libraries, no build step and no tests of its own, while the Python behind it is tested like the rest.
+- **The module is part of the simulation.** The Modbus server stands for the communication module a client connects to, so the failures field reports describe of those modules (slow or missing answers, odd exception codes, dropped connections, a lockout) are settings of the simulator and not special cases scattered through the device.
 
 ### Finding your way around
 
@@ -175,7 +176,9 @@ A stand-in SAJ device that Home Assistant or any Modbus client can connect to, s
 | Registers | `modbus_mock/saj_modbus_mock/profiles/` |
 | How values evolve | `modbus_mock/saj_modbus_mock/simulation/` |
 | Services and ports | [compose.yaml](../compose.yaml) |
-| Control panel | `panel.py` (routes), `description.py`, `presets.py` and [modbus_mock/static/index.html](../modbus_mock/static/index.html) |
+| Control panel | `panel.py` (routes), `description.py`, `presets.py` and the page in [modbus_mock/static/](../modbus_mock/static/) |
+| Link faults | `modbus_mock/saj_modbus_mock/link.py` (settings, bounds, decisions) and `transport.py` (carrying them out) |
+| Traffic record | `modbus_mock/saj_modbus_mock/traffic.py` |
 | Fault bits per model | `modbus_mock/saj_modbus_mock/profiles/fault_tables.py` |
 | Saved state | `modbus_mock/saj_modbus_mock/persistence.py` |
 
@@ -222,15 +225,83 @@ Writes are kept across restarts when the container has its volume, and reset fro
 
 Each simulator serves a web page at `http://localhost:<panel port>/`: `5080` for the HS3 and `5081` for the H2 started by `make up` (`SAJ_MOCK_PANEL_HOST_PORT` and `SAJ_MOCK_H2_PANEL_HOST_PORT` change them). Inside the container it listens on `server.panel_port`, 8080 by default. There is no authentication: the simulator is a development tool.
 
-The page exists so a developer can put the simulated system in a situation without editing a scenario and restarting. It lists the writable settings with names for the raw values, every fault bit the model reports on the equipment that is fitted (bits the document does not name are listed as reserved, so the integration's unrecognised-fault path can be tried), sliders and number fields for the random variation (the seed, with too many values for a slider, is a number field only), holds for PV, load and line readings, the state of charge, the car, the clock, presets, and reset and export. It polls every 3 seconds, so a change made from Home Assistant shows up, and it does not overwrite a control that has focus. Two clients can change things at once: the last write wins, as on a real device.
+The page exists so a developer can see what the simulated system is doing and put it in a situation without editing a scenario and restarting. It builds every control from the device's description, so it lists only the equipment that is fitted. It polls the state every 3 seconds, so a change made from Home Assistant shows up, and it does not overwrite a control that has focus; the Registers and Traffic views also refresh every second while they are open. Two clients can change things at once: the last write wins, as on a real device. Every change shows a short confirmation and every refusal its reason.
+
+A status bar on every view answers whether the simulator is running as its scenario or has been changed: whether the module is online, the connected clients and their request rate, the simulated time, run and pause, the speed, the active faults and one chip for each kind of change from the scenario that is in force. The same summary (`changes` in the state) marks the changed rows and cards. Pause sets the speed to 0 and play restores the earlier speed, so pausing does not lose it.
+
+The current view is in the URL fragment (`#registers`), so a reload keeps it. Nothing is stored in the browser. The views:
+
+| View | What it is for |
+| --- | --- |
+| Overview | A power-flow diagram of the fitted equipment, coloured and animated by direction, above one card per piece of equipment. A card holds the live reading, the controls that set it and its faults, with a reset to the scenario for that card |
+| Faults | Every fault bit of the fitted equipment, searchable, with what the simulator does when it is set. Bits the document does not name are listed as reserved, so the integration's unrecognised-fault path can be tried |
+| Settings | The writable settings and commands, with names for the raw values and the scenario value of each |
+| Registers | The register inspector, below |
+| Traffic | The traffic log, below |
+| Link | The link faults and the module state, below |
+| Scenario | Presets, the simulated time, the energy counters, reset and export |
+
+Cards keep what a control sets apart from the reading it produces, because the two differ whenever a hold, a fault or the state of charge is in play: a peak scale of 100% does not mean 100% of the PV power. A card's reset returns its variation, holds and fault bits, and leaves the state of charge, the car, the clock and the energy counters alone, for the same reason presets do.
+
+The page derives readable names from field names and rounds each scaled value to its scale's decimals, so a raw 65535 at scale 0.0001 reads 6.5535 instead of showing floating-point noise.
+
+#### Register inspector
+
+`GET /api/registers` lists every block of the device and, for each field of a block that answers, the raw words, the decoded value with its label, the access (read-only, writable or command) and when a client last read it. The Registers view shows it as a table with a filter, a "changed only" switch and a highlight on a value that has just changed, so the effect of a fault or a write on the registers is visible without a Modbus client.
+
+The inspector only shows. It reads the device without its observer, so looking at a register is not a client read: it does not count as a keep-alive, does not touch the field a read would touch and is not recorded in the traffic. A register is written only through the controls that go through the same validation as a Modbus write.
+
+#### Traffic log
+
+The Modbus server reports every connection event and every request, with its answer, to a recorder (`traffic.py`). `GET /api/traffic?after=<sequence>` returns the entries after a sequence number, so the page asks only for what is new, together with the counters and a 30 minute history in 10 second buckets; `POST /api/traffic/reset` clears them. The Traffic view shows the live request rate, a graph of requests over time, the counters per client and the log, which can be filtered and opened for the words read or written.
+
+Counters count requests and registers, because that is how field reports describe module load, and both are shown since it is not known whether request size matters too. The recorder keeps the last 2000 entries in memory and does not save them: the log describes what happened to this run of the simulator, and a restart is a new run.
+
+#### Link faults
+
+The Link view and the `link` section of a scenario set how the simulated module misbehaves. Each setting reproduces a failure that field reports describe of SAJ communication modules, and none is set unless a scenario or the page sets it. `link.latency_ms` replaced `server.response_delay_ms`, which was only a fixed delay.
+
+| Key | Effect |
+| --- | --- |
+| `latency_ms`, `jitter_ms` | Each answer waits the latency plus or minus up to the jitter, 0 to 60000 ms |
+| `no_answer_percent` | The request is read and never answered, and the connection stays open |
+| `busy_percent`, `device_failure_percent` | The answer is exception `0x06` or `0x04` |
+| `dropped_connection_percent` | The module closes the connection instead of answering |
+| `late_duplicate_percent` | After an exception answer, the same frame is sent again just before the next answer on that connection |
+| `refused_blocks` | A list of `start`, `end` and `code` (0 to 255). A request that touches the block is answered with that code, so devices that send non-standard codes, including 0, can be served |
+| `unresponsive` | Connections are accepted and nothing is ever answered |
+| `offline` | The module stops listening and closes every connection |
+| `offline_seconds`, `offline_period_seconds` | Offline for the first `offline_seconds` of every period, which must be at least as long |
+| `lockout_requests`, `lockout_window_seconds`, `lockout_whole_port` | A client that sends more than `lockout_requests` requests within the window has its connection closed and its address refused, or every client when `lockout_whole_port` is set, until the module is reset. A window is required when a threshold is set |
+
+```yaml
+link:
+  latency_ms: 800
+  jitter_ms: 400
+  busy_percent: 10
+  refused_blocks:
+    - {start: 0x4000, end: 0x40FF, code: 0}
+```
+
+Percentages are 0 to 100. A wrong value, or a combination that cannot work, stops the simulator at start and names the key, such as `link.offline_seconds`.
+
+The decisions are made in `link.py` and carried out by the transport, which asks the link before it accepts a connection and before it answers. The first check that applies decides, in this order: offline, unresponsive, lockout, dropped connection, no answer, refused block, device failure, busy. Latency applies to every answer that is sent. Whether a chance applies is drawn from the simulation seed and the request's sequence number, so the same seed and the same requests give the same failures, and a failure found while debugging can be reproduced. Latency, the offline period and the lockout window run on wall time, not simulated time, because they describe the link as the client sees it and the clock speed must not change them.
+
+Link settings and a lockout are kept across restarts and exported with the scenario. A lockout is cleared only by "Reset module", by Reset or by a preset, because field reports describe a lockout that lasted until the module was given a new address; "Reset module" stands for that. "Drop connections now" closes every open connection once. The routes are `POST /api/link`, `/api/link/drop` and `/api/link/reset`.
+
+The traffic recorder shows which fault was applied to each request, so the effect of a setting on the client can be read off the log.
 
 Some faults do more than set their bit, where a real system would: an inverter fault that names a grid, power-stage, temperature or safety condition stops the inverter, grid lost runs it off-grid, meter communication lost silences Meter A, a battery that is too hot to charge stops charging, and an EV charger fault stops the charger. Anything else, such as a communication, display, fan or authorisation fault, and every reserved bit, only sets the bit.
 
-**Presets** return the settings, variation, seed, faults and holds to the scenario first, then apply their changes, so each gives the same conditions however the simulator was left. The simulated time, the clock speed, the energy counters and the battery state of charge carry on unless the preset sets them, so Home Assistant does not see the clock jump back or the lifetime totals fall. **Reset** is the one that rewinds everything. Equipment that is not fitted has no presets, and neither does a model whose tables do not name the fault.
+**Presets** return the settings, variation, seed, faults and holds to the scenario first, then apply their changes, so each gives the same conditions however the simulator was left. The simulated time, the clock speed, the energy counters and the battery state of charge carry on unless the preset sets them, so Home Assistant does not see the clock jump back or the lifetime totals fall. **Reset** is the one that rewinds everything. Equipment that is not fitted has no presets, and neither does a model whose tables do not name the fault. A preset also returns the link to the scenario, then sets its own link changes, and a lockout is cleared. The link presets are offered on every model: Slow link, Flaky link, Busy module, Module offline and Module locked out. No field report gives the load at which a module locks out, so the threshold of Module locked out is a starting point to change on the page, and is not taken from any limit of the integration.
 
-**Saved state.** Changes are kept across restarts in `/data/state.json`, in a named volume per service in [compose.yaml](../compose.yaml). A state saved for a different scenario is ignored, and logged once, because applying it to another system would be wrong. A state that cannot be read is ignored the same way and the file is kept. Only the settings a client can write are saved, so a change to a fixed register in the code is never masked by an old file, and the energy counters are saved with where each day, month and year started, so a restart is not a counter reset. Without a volume mounted the simulator runs as before and logs one line that changes will not be kept. **Reset** deletes the file and returns to the scenario. The Playwright stack has no volume, so each run starts from its scenario.
+**Saved state.** Changes are kept across restarts in `/data/state.json`, in a named volume per service in [compose.yaml](../compose.yaml). Link settings and a lockout are saved with it. A state saved for a different scenario is ignored, and logged once, because applying it to another system would be wrong. A state that cannot be read is ignored the same way and the file is kept. Only the settings a client can write are saved, so a change to a fixed register in the code is never masked by an old file, and the energy counters are saved with where each day, month and year started, so a restart is not a counter reset. Without a volume mounted the simulator runs as before and logs one line that changes will not be kept. **Reset** deletes the file and returns to the scenario. The Playwright stack has no volume, so each run starts from its scenario.
 
-**Export** downloads the running seed, variation, faults and clock as a scenario, so a tuned state can be committed and run again in a fresh simulator with the same variation.
+**Export** downloads the running seed, variation, faults, link and clock as a scenario, so a tuned state can be committed and run again in a fresh simulator with the same variation.
+
+#### Icons
+
+The page's icons are vendored from the Tabler icon set under `modbus_mock/static/vendor/tabler/`, because the simulator must be standalone and load nothing from outside. Only the icons the page uses are kept, as their original SVG files, so the set can be checked against its source. The folder also holds the set's `LICENSE` and a `README.md` naming the release they came from. The page inlines them so they take the text colour; an icon font or an emoji is not used. Any set under the MIT or ISC licence may be vendored this way, with its licence beside it.
 
 ### Configuring a scenario
 
@@ -248,7 +319,7 @@ battery:
 
 `simulation.speed` is simulated seconds per real second, so this runs ten simulated minutes every second from midsummer noon: useful for watching a full day of charge and discharge in a few minutes. `simulation.seed` picks the weather and load.
 
-Two sections shape the random behaviour and the faults at start. `variation` sets the bounds, depth and period of the solar, load and grid generators (the load level stays in `site.load`), and `faults` lists the active fault bits per equipment by register and bit, plus battery pack codes:
+Two sections shape the random behaviour and the faults at start; a third, `link`, is described under [Link faults](#link-faults). `variation` sets the bounds, depth and period of the solar, load and grid generators (the load level stays in `site.load`), and `faults` lists the active fault bits per equipment by register and bit, plus battery pack codes:
 
 ```yaml
 variation:

@@ -1,5 +1,6 @@
 import dataclasses
 import math
+import time
 from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -8,27 +9,56 @@ from .clock import Clock
 from .description import (
     EV_DEFAULT_ENERGY_WH,
     EV_ENERGY_BOUNDS,
+    HOUSEHOLD_LOAD,
     OPERATING_MODES,
     SOC_BOUNDS,
     SPEED_BOUNDS,
+    LastRead,
+    applicable_cards,
     available_fields,
+    card_readings,
+    changed_settings,
+    changed_variation,
+    describe_cards,
     describe_commands,
     describe_faults,
     describe_holds,
+    describe_link,
     describe_model,
+    describe_nodes,
     describe_presets,
     describe_settings,
     describe_variation,
+    fault_counts,
     faults_state,
+    held_names,
     hold_readings,
     hold_values,
     is_setting,
+    never_read,
+    node_readings,
+    register_snapshot,
     rounded,
     settings_state,
     variation_values,
+    with_household_load,
 )
 from .device import Device, initial_settings
 from .exceptions import ControlError
+from .link import (
+    ADDRESS_BOUNDS,
+    CODE_BOUNDS,
+    LINK_PARAMETERS,
+    REFUSED_BLOCKS,
+    Kind,
+    Link,
+    LinkSettings,
+    LockoutState,
+    RefusedBlock,
+    changed_link,
+    check_combination,
+    link_values,
+)
 from .presets import Fitted, Needs, Preset, available_presets
 from .profiles.common import CLEAR_CURRENT_FAULT
 from .registers import EPOCH, Field, FieldValue
@@ -39,6 +69,8 @@ from .simulation.environment import (
     LOAD_PEAK,
     PARAMETERS_BY_NAME,
     SEED,
+    SEED_PARAMETER,
+    VARIATION_PARAMETERS,
     LoadConfig,
     ParameterError,
     Variation,
@@ -59,6 +91,7 @@ from .simulation.telemetry import build_telemetry
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
+    from .device import Block
     from .scenario import BatteryConfig, Scenario
 
 COMMAND_CLEAR_FAULTS = "cmd_clear_faults"
@@ -77,9 +110,14 @@ LEDGER_STARTS = "starts_wh"
 EV_REMAINING = "remaining_wh"
 EV_SUPPRESSED_UNTIL = "suppressed_until_s"
 EPOCH_SECOND_MAXIMUM = 1 << 40
+LINK = "link"
+LOCKOUT = "lockout"
+LOCKOUT_ADDRESSES = "addresses"
+LOCKOUT_WHOLE_PORT = "whole_port"
+BLOCK_KEYS = ("start", "end", "code")
 READINGS = (
     ("PV power", "pv_w", "W", 0, Needs.NOTHING),
-    ("Household load", "load_w", "W", 0, Needs.NOTHING),
+    ("Household load", HOUSEHOLD_LOAD, "W", 0, Needs.NOTHING),
     ("Grid power", "grid_w", "W", 0, Needs.NOTHING),
     ("Battery power", "battery_w", "W", 0, Needs.BATTERY),
     ("Battery state of charge", "soc_percent", "%", 1, Needs.BATTERY),
@@ -137,6 +175,67 @@ def _moment(*, value: object) -> datetime:
     return moment.astimezone(UTC) if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
+def _link_parameter(
+    *, key: str, value: object, kind: Kind, bounds: tuple[int, int]
+) -> float | int:
+    if kind is Kind.PERCENT:
+        return _number(key=key, value=value, bounds=bounds)
+    return _whole(key=key, value=value, bounds=bounds)
+
+
+def _refused_block(*, key: str, value: object) -> RefusedBlock:
+    entry = _mapping(key=key, value=value)
+    _only(request=entry, allowed=BLOCK_KEYS)
+    for name in BLOCK_KEYS:
+        if name not in entry:
+            raise ControlError(key=f"{key}.{name}", reason="is required")
+    start = _whole(key=f"{key}.start", value=entry["start"], bounds=ADDRESS_BOUNDS)
+    end = _whole(key=f"{key}.end", value=entry["end"], bounds=ADDRESS_BOUNDS)
+    if end < start:
+        raise ControlError(key=f"{key}.end", reason="must be >= start")
+    return RefusedBlock(
+        start=start,
+        end=end,
+        code=_whole(key=f"{key}.code", value=entry["code"], bounds=CODE_BOUNDS),
+    )
+
+
+def _refused_blocks(*, key: str, value: object) -> tuple[RefusedBlock, ...]:
+    if not isinstance(value, list):
+        raise ControlError(key=key, reason="must be a list")
+    return tuple(
+        _refused_block(key=f"{key}[{index}]", value=entry)
+        for index, entry in enumerate(value)
+    )
+
+
+def _link_settings(
+    *, current: LinkSettings, values: Mapping[str, object]
+) -> LinkSettings:
+    parameters = {parameter.name: parameter for parameter in LINK_PARAMETERS}
+    changes: dict[str, Any] = {}
+    for name, value in values.items():
+        if name == REFUSED_BLOCKS:
+            changes[name] = _refused_blocks(key=name, value=value)
+        elif name not in parameters:
+            raise ControlError(key=name, reason="unknown key")
+        elif parameters[name].kind is Kind.FLAG:
+            changes[name] = _flag(key=name, value=value)
+        else:
+            parameter = parameters[name]
+            changes[name] = _link_parameter(
+                key=name,
+                value=value,
+                kind=parameter.kind,
+                bounds=(parameter.minimum or 0, parameter.maximum or 0),
+            )
+    settings = dataclasses.replace(current, **changes)
+    problem = check_combination(settings=settings)
+    if problem is not None:
+        raise ControlError(key=problem[0], reason=problem[1])
+    return settings
+
+
 def _saved_setting(*, name: str, saved: object, current: FieldValue) -> FieldValue:
     """A saved setting is text where the field is text, and a number otherwise."""
     if (
@@ -185,6 +284,15 @@ def _parameter(*, name: str, value: object) -> float:
         raise ControlError(key=name, reason=str(error)) from error
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class Wiring:
+    on_change: Callable[[], None] = _no_action
+    on_reset: Callable[[], None] = _no_action
+    last_read: LastRead = never_read
+    link: Link | None = None
+    wall_clock: Callable[[], float] = time.time
+
+
 class Machine:
     """One simulated inverter: clock, physics, settings and the register map."""
 
@@ -193,13 +301,16 @@ class Machine:
         *,
         scenario: Scenario,
         monotonic: Callable[[], float],
-        on_change: Callable[[], None] = _no_action,
-        on_reset: Callable[[], None] = _no_action,
+        wiring: Wiring | None = None,
     ) -> None:
+        wiring = wiring or Wiring()
         self.scenario = scenario
+        self._last_read = wiring.last_read
+        self._wall_clock = wiring.wall_clock
+        self._link = wiring.link or Link(seed=scenario.simulation.seed)
         self._monotonic = monotonic
-        self._on_change = on_change
-        self._on_reset = on_reset
+        self._on_change = wiring.on_change
+        self._on_reset = wiring.on_reset
         self._blocks = profiles.build_blocks(scenario=scenario)
         self._fault_map = profiles.build_fault_map(scenario=scenario)
         self._initial = initial_settings(blocks=self._blocks)
@@ -239,6 +350,12 @@ class Machine:
         self._ems_enable = 0
         self._settings_changes = 0
         self._saved_app_mode: FieldValue = 0
+        self._link.replace_settings(settings=scenario.link)
+        self._link.reset_module()
+        self._follow_seed()
+
+    def _follow_seed(self) -> None:
+        self._link.set_seed(seed=self.plant.seed)
 
     def _setting(self, *, key: str) -> float:
         value = self.settings.get(key, 0)
@@ -320,6 +437,7 @@ class Machine:
         return Fitted(
             battery=bool(scenario.battery.modules),
             meter_a=scenario.meters.meter_a,
+            meter_b=scenario.meters.meter_b,
             ev_charger=scenario.ev_charger.installed,
         )
 
@@ -332,7 +450,7 @@ class Machine:
             "model": describe_model(
                 scenario=scenario, pack_count=self._fault_map.pack_count
             ),
-            "settings": describe_settings(blocks=self._blocks),
+            "settings": describe_settings(blocks=self._blocks, initial=self._initial),
             "commands": describe_commands(blocks=self._blocks),
             "faults": describe_faults(
                 fault_map=self._fault_map,
@@ -346,6 +464,9 @@ class Machine:
             ),
             "holds": describe_holds(),
             "presets": describe_presets(presets=self.presets()),
+            "cards": describe_cards(fitted=self._fitted()),
+            "nodes": describe_nodes(fitted=self._fitted()),
+            LINK: describe_link(scenario=scenario.link),
         }
 
     def _readings(self, *, data: Mapping[str, float]) -> list[dict[str, object]]:
@@ -359,31 +480,78 @@ class Machine:
             for label, key, unit, places, needs in READINGS
             if fitted.has(needs=needs)
         ]
-        operating = int(data["operating_mode"])
-        running = int(data["running_mode"])
-        readings.append(
-            {
-                "label": "Operating mode",
-                "value": f"{operating} {OPERATING_MODES.get(operating, '')}".strip(),
-                "unit": "",
-            }
-        )
-        application = self._application_mode_name(code=running)
-        readings.append(
-            {
-                "label": "Application mode",
-                "value": f"{running} {application}".strip(),
-                "unit": "",
-            }
+        texts = self._texts(data=data)
+        readings.extend(
+            {"label": label, "value": texts[name], "unit": ""}
+            for label, name in (
+                ("Operating mode", "operating_mode"),
+                ("Application mode", "application_mode"),
+            )
         )
         return readings
+
+    def _texts(self, *, data: Mapping[str, float]) -> dict[str, str]:
+        operating = int(data["operating_mode"])
+        running = int(data["running_mode"])
+        application = self._application_mode_name(code=running)
+        plugged = data["ev_state"] != float(ChargerState.IDLE)
+        return {
+            "operating_mode": (
+                f"{operating} {OPERATING_MODES.get(operating, '')}".strip()
+            ),
+            "application_mode": f"{running} {application}".strip(),
+            "car": "Plugged in" if plugged else "Not plugged in",
+        }
 
     def _application_mode_name(self, *, code: int) -> str:
         field = self.device.field_named(name=ctl.APP_MODE)
         return dict(field.labels).get(code, "") if field is not None else ""
 
+    def _scenario_variation(self) -> dict[str, float]:
+        scenario = self.scenario
+        return variation_values(
+            seed=scenario.simulation.seed,
+            variation=scenario.variation,
+            load=scenario.site.load,
+        )
+
+    def _changes(self) -> dict[str, object]:
+        plant = self.plant
+        return {
+            "holds": held_names(holds=plant.holds),
+            "faults": fault_counts(faults=plant.faults),
+            "settings": changed_settings(
+                fields=self._setting_fields,
+                settings=self.settings,
+                initial=self._initial,
+            ),
+            "variation": changed_variation(
+                variation=variation_values(
+                    seed=plant.seed, variation=plant.variation, load=plant.load
+                ),
+                scenario=self._scenario_variation(),
+            ),
+            LINK: changed_link(
+                settings=self._link.settings, scenario=self.scenario.link
+            ),
+        }
+
+    def _link_refusal(self, *, block: Block) -> int | None:
+        return self._link.refused_code(
+            start=block.start, count=block.end - block.start + 1
+        )
+
+    def registers(self) -> dict[str, object]:
+        """Every register as a client would read it, without being a client read."""
+        return register_snapshot(
+            blocks=self._blocks,
+            words=self.device.peek_fields(),
+            last_read=self._last_read,
+            link_refusal=self._link_refusal,
+        )
+
     def state(self) -> dict[str, object]:
-        data = self.telemetry()
+        data = with_household_load(data=self.telemetry())
         plant = self.plant
         return {
             "time": self.clock.now().replace(tzinfo=None).isoformat(timespec="seconds"),
@@ -391,6 +559,9 @@ class Machine:
             "settings": settings_state(
                 fields=self._setting_fields, settings=self.settings
             ),
+            "changes": self._changes(),
+            LINK: link_values(settings=self._link.settings),
+            "module": self._link.module_state(now=self._wall_clock()).to_json(),
             "faults": faults_state(faults=plant.faults),
             "variation": variation_values(
                 seed=plant.seed, variation=plant.variation, load=plant.load
@@ -398,6 +569,10 @@ class Machine:
             "holds": hold_values(holds=plant.holds),
             "hold_readings": hold_readings(data=data),
             "readings": self._readings(data=data),
+            "node_readings": node_readings(fitted=self._fitted(), data=data),
+            "card_readings": card_readings(
+                fitted=self._fitted(), data=data, texts=self._texts(data=data)
+            ),
             "battery": {"soc_percent": data["soc_percent"]},
             "ev_charger": {"plugged": data["ev_state"] != float(ChargerState.IDLE)},
         }
@@ -511,6 +686,20 @@ class Machine:
             variation=Variation(**shape),
             load=LoadConfig(base_w=int(known[LOAD_BASE]), peak_w=int(known[LOAD_PEAK])),
         )
+        self._follow_seed()
+        self._on_change()
+
+    def set_link(self, *, values: Mapping[str, object]) -> None:
+        self._link.replace_settings(
+            settings=_link_settings(current=self._link.settings, values=values)
+        )
+        self._on_change()
+
+    def drop_connections(self) -> None:
+        self._link.drop_connections_now()
+
+    def reset_module(self) -> None:
+        self._link.reset_module()
         self._on_change()
 
     def set_holds(self, *, values: Mapping[str, object]) -> None:
@@ -588,6 +777,8 @@ class Machine:
         if preset is None:
             raise ControlError(key=key, reason="is not a preset of this device")
         self._return_to_scenario_settings()
+        if preset.link:
+            self.set_link(values=preset.link)
         if preset.variation:
             self.set_variation(values=preset.variation)
         if preset.settings:
@@ -600,6 +791,46 @@ class Machine:
             self.set_ev(
                 values={"plugged": True, "energy_needed_wh": preset.ev_energy_wh}
             )
+
+    def reset_card(self, *, key: str) -> None:
+        """Return one card's variation, holds and fault bits to the scenario.
+
+        Settings, the charge, the car, the clock and the energy counters carry on.
+        """
+        card = next(
+            (
+                known
+                for known in applicable_cards(fitted=self._fitted())
+                if known.key == key
+            ),
+            None,
+        )
+        if card is None:
+            raise ControlError(key=key, reason="is not a card of this device")
+        if card.group is not None:
+            scenario_values = self._scenario_variation()
+            self.set_variation(
+                values={
+                    spec.name: scenario_values[spec.name]
+                    for spec in (*VARIATION_PARAMETERS, SEED_PARAMETER)
+                    if spec.group == card.group
+                }
+            )
+        if card.holds:
+            self.set_holds(values=dict.fromkeys(card.holds))
+        if card.equipment is not None:
+            self._reset_faults(equipment=card.equipment)
+
+    def _reset_faults(self, *, equipment: Equipment) -> None:
+        self._sync()
+        scenario_faults = self.scenario.faults
+        faults = self.plant.faults.with_bits(
+            equipment=equipment, bits=scenario_faults.bits(equipment=equipment)
+        )
+        if equipment is Equipment.BATTERY:
+            faults = dataclasses.replace(faults, packs=scenario_faults.packs)
+        self.plant.set_faults(faults=faults)
+        self._on_change()
 
     def _return_to_scenario_settings(self) -> None:
         """Settings, variation, seed, faults and holds as the scenario has them.
@@ -614,8 +845,11 @@ class Machine:
             variation=scenario.variation,
             load=scenario.site.load,
         )
+        self._follow_seed()
         self.plant.set_faults(faults=scenario.faults)
         self.plant.hold(holds={})
+        self._link.replace_settings(settings=scenario.link)
+        self._link.reset_module()
         self._on_change()
 
     def _preset_faults(self, *, preset: Preset) -> dict[str, object]:
@@ -644,6 +878,7 @@ class Machine:
             variation=plant.variation,
             faults=plant.faults,
             battery=self._exported_battery(),
+            link=self._link.settings,
         )
         return dump_scenario(scenario=running)
 
@@ -678,6 +913,15 @@ class Machine:
             },
             EV_HAND: self._ev_snapshot(),
             "clock": {"time": self.clock.now().isoformat(), "speed": self.clock.speed},
+            LINK: link_values(settings=self._link.settings),
+            LOCKOUT: self._lockout_snapshot(),
+        }
+
+    def _lockout_snapshot(self) -> dict[str, object]:
+        state = self._link.lockout_state()
+        return {
+            LOCKOUT_ADDRESSES: list(state.addresses),
+            LOCKOUT_WHOLE_PORT: state.whole_port,
         }
 
     def _ev_snapshot(self) -> dict[str, int | None]:
@@ -714,8 +958,32 @@ class Machine:
             periods=snapshot.get(LEDGER_PERIODS),
         )
         self._restore_ev(values=_mapping(key=EV_HAND, value=snapshot.get(EV_HAND, {})))
+        self._restore_link(
+            values=_mapping(key=LINK, value=snapshot.get(LINK)),
+            lockout=_mapping(key=LOCKOUT, value=snapshot.get(LOCKOUT)),
+        )
         # A restored EMS gets its full timeout from the restored moment.
         self.plant.controller.keepalive(second=self.plant.second)
+
+    def _restore_link(
+        self, *, values: Mapping[str, object], lockout: Mapping[str, object]
+    ) -> None:
+        _only(request=lockout, allowed=(LOCKOUT_ADDRESSES, LOCKOUT_WHOLE_PORT))
+        addresses = lockout.get(LOCKOUT_ADDRESSES)
+        if not isinstance(addresses, list) or not all(
+            isinstance(address, str) for address in addresses
+        ):
+            raise ControlError(
+                key=f"{LOCKOUT}.{LOCKOUT_ADDRESSES}", reason="must be a list of text"
+            )
+        whole_port = _flag(
+            key=f"{LOCKOUT}.{LOCKOUT_WHOLE_PORT}",
+            value=lockout.get(LOCKOUT_WHOLE_PORT),
+        )
+        self.set_link(values=values)
+        self._link.restore_lockout(
+            state=LockoutState(addresses=tuple(addresses), whole_port=whole_port)
+        )
 
     def _restore_settings(
         self, *, values: Mapping[str, object], saved_app_mode: object

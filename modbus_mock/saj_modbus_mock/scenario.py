@@ -6,6 +6,17 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from .link import (
+    ADDRESS_BOUNDS,
+    CODE_BOUNDS,
+    LINK_PARAMETERS,
+    REFUSED_BLOCKS,
+    Kind,
+    LinkSettings,
+    RefusedBlock,
+    check_combination,
+    link_values,
+)
 from .models import MAX_PV_STRINGS, MODELS, ModelSpec
 from .simulation.environment import (
     LOAD_BASE,
@@ -74,7 +85,6 @@ class ServerConfig:
     port: int
     unit_id: int
     max_clients: int
-    response_delay_ms: int
     panel_port: int
 
 
@@ -137,6 +147,7 @@ class Scenario:
     parallel: ParallelConfig
     variation: Variation
     faults: FaultState
+    link: LinkSettings
 
 
 class Section:
@@ -183,10 +194,21 @@ class Section:
             name=name, default=minimum, minimum=minimum, maximum=maximum
         )
 
-    def number(self, *, name: str, default: float, minimum: float) -> float:
+    def number(
+        self,
+        *,
+        name: str,
+        default: float,
+        minimum: float,
+        maximum: float | None = None,
+    ) -> float:
         value = self._raw(name=name, default=default)
         if isinstance(value, bool) or not isinstance(value, int | float):
             raise ScenarioError(key=self.key(name=name), reason="must be a number")
+        if maximum is not None and not minimum <= value <= maximum:
+            raise ScenarioError(
+                key=self.key(name=name), reason=f"must be {minimum}..{maximum}"
+            )
         if value < minimum:
             raise ScenarioError(key=self.key(name=name), reason=f"must be >= {minimum}")
         return float(value)
@@ -274,9 +296,6 @@ def _parse_server(*, root: Section) -> ServerConfig:
         ),
         max_clients=section.integer(
             name="max_clients", default=DEFAULT_MAX_CLIENTS, minimum=1
-        ),
-        response_delay_ms=section.integer(
-            name="response_delay_ms", default=0, minimum=0
         ),
         panel_port=section.integer(
             name="panel_port", default=DEFAULT_PANEL_PORT, minimum=0, maximum=MAX_PORT
@@ -518,6 +537,55 @@ def _parse_faults(
     return state
 
 
+def _parse_refused_blocks(*, section: Section) -> tuple[RefusedBlock, ...]:
+    blocks = []
+    for index, entry in enumerate(section.items(name=REFUSED_BLOCKS, default=[])):
+        item = Section(path=f"{section.key(name=REFUSED_BLOCKS)}[{index}]", data=entry)
+        start = item.required_integer(
+            name="start", minimum=ADDRESS_BOUNDS[0], maximum=ADDRESS_BOUNDS[1]
+        )
+        end = item.required_integer(
+            name="end", minimum=ADDRESS_BOUNDS[0], maximum=ADDRESS_BOUNDS[1]
+        )
+        code = item.required_integer(
+            name="code", minimum=CODE_BOUNDS[0], maximum=CODE_BOUNDS[1]
+        )
+        item.finish()
+        if end < start:
+            raise ScenarioError(key=item.key(name="end"), reason="must be >= start")
+        blocks.append(RefusedBlock(start=start, end=end, code=code))
+    return tuple(blocks)
+
+
+def _parse_link(*, root: Section) -> LinkSettings:
+    section = root.section(name="link")
+    values: dict[str, Any] = {}
+    for parameter in LINK_PARAMETERS:
+        if parameter.kind is Kind.FLAG:
+            values[parameter.name] = section.boolean(name=parameter.name, default=False)
+        elif parameter.kind is Kind.PERCENT:
+            values[parameter.name] = section.number(
+                name=parameter.name,
+                default=0,
+                minimum=parameter.minimum or 0,
+                maximum=parameter.maximum,
+            )
+        else:
+            values[parameter.name] = section.integer(
+                name=parameter.name,
+                default=0,
+                minimum=parameter.minimum or 0,
+                maximum=parameter.maximum,
+            )
+    values[REFUSED_BLOCKS] = _parse_refused_blocks(section=section)
+    section.finish()
+    settings = LinkSettings(**values)
+    problem = check_combination(settings=settings)
+    if problem is not None:
+        raise ScenarioError(key=f"link.{problem[0]}", reason=problem[1])
+    return settings
+
+
 def parse_scenario(*, data: object) -> Scenario:
     root = Section(path="", data=data)
     device = _parse_device(root=root)
@@ -536,6 +604,7 @@ def parse_scenario(*, data: object) -> Scenario:
         faults=_parse_faults(
             root=root, device=device, battery=battery, ev_charger=ev_charger
         ),
+        link=_parse_link(root=root),
     )
     root.finish()
     return scenario
@@ -599,7 +668,6 @@ def _dump_sections(*, scenario: Scenario) -> dict[str, Any]:
             "port": server.port,
             "unit_id": server.unit_id,
             "max_clients": server.max_clients,
-            "response_delay_ms": server.response_delay_ms,
             "panel_port": server.panel_port,
         },
         "simulation": {
@@ -630,6 +698,7 @@ def _dump_sections(*, scenario: Scenario) -> dict[str, Any]:
         "parallel": dataclasses.asdict(scenario.parallel),
         "variation": dataclasses.asdict(scenario.variation),
         "faults": _dump_faults(faults=scenario.faults),
+        "link": link_values(settings=scenario.link),
     }
 
 

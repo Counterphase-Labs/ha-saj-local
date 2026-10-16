@@ -16,6 +16,14 @@ LARGE_SPIKE_SIZE = 0.6
 LONG_SPIKE_DURATION_S = 240
 EV_PRESET_ENERGY_WH = 20_000
 EV_STANDARD_MODE = 1
+SLOW_LATENCY_MS = 800
+SLOW_JITTER_MS = 400
+FLAKY_NO_ANSWER_PERCENT = 5
+FLAKY_DROPPED_PERCENT = 2
+BUSY_PERCENT = 10
+ALWAYS_PERCENT = 100
+LOCKOUT_REQUESTS = 120
+LOCKOUT_WINDOW_S = 60
 
 
 class Needs(enum.Enum):
@@ -24,6 +32,7 @@ class Needs(enum.Enum):
     NOTHING = enum.auto()
     BATTERY = enum.auto()
     METER_A = enum.auto()
+    METER_B = enum.auto()
     EV_CHARGER = enum.auto()
 
 
@@ -31,6 +40,7 @@ class Needs(enum.Enum):
 class Fitted:
     battery: bool
     meter_a: bool
+    meter_b: bool
     ev_charger: bool
 
     def has(self, *, needs: Needs) -> bool:
@@ -38,6 +48,7 @@ class Fitted:
             Needs.NOTHING: True,
             Needs.BATTERY: self.battery,
             Needs.METER_A: self.meter_a,
+            Needs.METER_B: self.meter_b,
             Needs.EV_CHARGER: self.ev_charger,
         }[needs]
 
@@ -60,6 +71,7 @@ class Preset:
     packs: Mapping[str, Mapping[str, int]] = dataclasses.field(default_factory=dict)
     soc_percent: float | None = None
     ev_energy_wh: int | None = None
+    link: Mapping[str, object] = dataclasses.field(default_factory=dict)
 
 
 PRESETS = (
@@ -163,6 +175,46 @@ PRESETS = (
         needs=Needs.EV_CHARGER,
         settings={"ev_mode": EV_STANDARD_MODE},
         ev_energy_wh=EV_PRESET_ENERGY_WH,
+    ),
+    Preset(
+        key="slow-link",
+        name="Slow link",
+        description="Answers take 800 ms, give or take 400 ms",
+        link={"latency_ms": SLOW_LATENCY_MS, "jitter_ms": SLOW_JITTER_MS},
+    ),
+    Preset(
+        key="flaky-link",
+        name="Flaky link",
+        description="5% of requests get no answer and 2% lose the connection",
+        link={
+            "no_answer_percent": FLAKY_NO_ANSWER_PERCENT,
+            "dropped_connection_percent": FLAKY_DROPPED_PERCENT,
+        },
+    ),
+    Preset(
+        key="busy-module",
+        name="Busy module",
+        description="10% of requests get a busy answer and a late duplicate",
+        link={
+            "busy_percent": BUSY_PERCENT,
+            "late_duplicate_percent": ALWAYS_PERCENT,
+        },
+    ),
+    Preset(
+        key="module-offline",
+        name="Module offline",
+        description="The module stops listening and closes every connection",
+        link={"offline": True},
+    ),
+    Preset(
+        key="module-locked-out",
+        name="Module locked out",
+        description="More than 120 requests in 60 seconds lock out the whole port",
+        link={
+            "lockout_requests": LOCKOUT_REQUESTS,
+            "lockout_window_seconds": LOCKOUT_WINDOW_S,
+            "lockout_whole_port": True,
+        },
     ),
 )
 

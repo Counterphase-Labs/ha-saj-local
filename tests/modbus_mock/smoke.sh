@@ -19,6 +19,11 @@ while True:
         description = json.load(
             urllib.request.urlopen(base + "/api/description", timeout=3)
         )
+        registers = json.load(
+            urllib.request.urlopen(base + "/api/registers", timeout=3)
+        )
+        traffic = json.load(urllib.request.urlopen(base + "/api/traffic", timeout=3))
+        stylesheet = urllib.request.urlopen(base + "/static/panel.css", timeout=3)
         break
     except OSError:
         if time.monotonic() > deadline:
@@ -26,6 +31,9 @@ while True:
         time.sleep(0.5)
 assert "<html" in page.lower(), "the page did not load"
 assert description["model"]["name"], "the description names no model"
+assert registers["blocks"], "the register snapshot has no blocks"
+assert "counters" in traffic, "the traffic has no counters"
+assert stylesheet.status == 200, "the stylesheet was not served"
 '
 
 export SAJ_MOCK_HOST_PORT=0

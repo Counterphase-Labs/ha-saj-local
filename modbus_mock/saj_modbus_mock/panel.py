@@ -1,5 +1,6 @@
 """The control panel's HTTP side: routes that turn requests into machine calls."""
 
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -11,11 +12,22 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
 
     from .machine import Machine
+    from .traffic import Recorder
 
-PAGE_PATH = Path(__file__).resolve().parents[1] / "static" / "index.html"
+STATIC_ROOT = Path(__file__).resolve().parents[1] / "static"
+PAGE_PATH = STATIC_ROOT / "index.html"
+STATIC_CONTENT_TYPES = {
+    ".html": "text/html",
+    ".css": "text/css",
+    ".js": "text/javascript",
+    ".svg": "image/svg+xml",
+    ".md": "text/markdown",
+}
+STATIC_CHARSET = "utf-8"
 EXPORT_FILENAME = "scenario.yaml"
 YAML_CONTENT_TYPE = "application/yaml"
 BAD_REQUEST = 400
+FIRST_SEQUENCE = 0
 
 
 def read_page() -> str:
@@ -51,16 +63,81 @@ class Panel:
     """Each route calls one machine operation and answers with the state."""
 
     def __init__(
-        self, *, machine: Machine, read_page: Callable[[], str] = read_page
+        self,
+        *,
+        machine: Machine,
+        recorder: Recorder,
+        read_page: Callable[[], str] = read_page,
+        static_root: Path = STATIC_ROOT,
+        wall_clock: Callable[[], float] = time.time,
     ) -> None:
         self._machine = machine
+        self._recorder = recorder
+        self._wall_clock = wall_clock
         self._read_page = read_page
+        self._static_root = static_root.resolve()
 
     def _state(self) -> web.Response:
         return web.json_response(self._machine.state())
 
     async def page(self, _request: web.Request) -> web.Response:
         return web.Response(text=self._read_page(), content_type="text/html")
+
+    def _static_file(self, *, name: str) -> Path | None:
+        """The file under the static folder, or None for anything outside it."""
+        try:
+            path = (self._static_root / name).resolve()
+            servable = (
+                path.is_relative_to(self._static_root)
+                and path.is_file()
+                and path.suffix in STATIC_CONTENT_TYPES
+            )
+        except ValueError, OSError:
+            return None
+        return path if servable else None
+
+    async def static(self, request: web.Request) -> web.Response:
+        path = self._static_file(name=request.match_info["path"])
+        if path is None:
+            raise web.HTTPNotFound
+        return web.Response(
+            body=path.read_bytes(),
+            content_type=STATIC_CONTENT_TYPES[path.suffix],
+            charset=STATIC_CHARSET,
+        )
+
+    async def registers(self, _request: web.Request) -> web.Response:
+        return web.json_response(self._machine.registers())
+
+    def _traffic(self, *, after: int) -> web.Response:
+        return web.json_response(
+            {
+                **self._recorder.traffic(after=after, now=self._wall_clock()),
+                "now": self._wall_clock(),
+            }
+        )
+
+    async def traffic(self, request: web.Request) -> web.Response:
+        text = request.query.get("after", str(FIRST_SEQUENCE))
+        if not text.isdecimal():
+            raise ControlError(key="after", reason="must be a sequence number")
+        return self._traffic(after=int(text))
+
+    async def reset_traffic(self, _request: web.Request) -> web.Response:
+        self._recorder.reset()
+        return self._traffic(after=FIRST_SEQUENCE)
+
+    async def link(self, request: web.Request) -> web.Response:
+        self._machine.set_link(values=await _body(request=request))
+        return self._state()
+
+    async def drop_connections(self, _request: web.Request) -> web.Response:
+        self._machine.drop_connections()
+        return self._state()
+
+    async def reset_module(self, _request: web.Request) -> web.Response:
+        self._machine.reset_module()
+        return self._state()
 
     async def description(self, _request: web.Request) -> web.Response:
         return web.json_response(self._machine.describe())
@@ -117,6 +194,10 @@ class Panel:
         self._machine.reset()
         return self._state()
 
+    async def reset_card(self, request: web.Request) -> web.Response:
+        self._machine.reset_card(key=request.match_info["card"])
+        return self._state()
+
     async def preset(self, request: web.Request) -> web.Response:
         self._machine.apply_preset(key=request.match_info["name"])
         return self._state()
@@ -125,9 +206,16 @@ class Panel:
 def create_app(*, panel: Panel) -> web.Application:
     app = web.Application(middlewares=[refuse_control_errors])
     app.router.add_get("/", panel.page)
+    app.router.add_get("/static/{path:.+}", panel.static)
     app.router.add_get("/api/description", panel.description)
     app.router.add_get("/api/state", panel.state)
+    app.router.add_get("/api/registers", panel.registers)
+    app.router.add_get("/api/traffic", panel.traffic)
+    app.router.add_post("/api/traffic/reset", panel.reset_traffic)
     app.router.add_get("/api/scenario", panel.scenario)
+    app.router.add_post("/api/link", panel.link)
+    app.router.add_post("/api/link/drop", panel.drop_connections)
+    app.router.add_post("/api/link/reset", panel.reset_module)
     app.router.add_post("/api/settings", panel.settings)
     app.router.add_post("/api/commands", panel.commands)
     app.router.add_post("/api/faults", panel.faults)
@@ -138,6 +226,7 @@ def create_app(*, panel: Panel) -> web.Application:
     app.router.add_post("/api/clock", panel.clock)
     app.router.add_post("/api/ledger/reset", panel.reset_ledger)
     app.router.add_post("/api/reset", panel.reset)
+    app.router.add_post("/api/reset/{card}", panel.reset_card)
     app.router.add_post("/api/presets/{name}", panel.preset)
     return app
 
@@ -149,11 +238,11 @@ class PanelServer:
         self,
         *,
         machine: Machine,
+        recorder: Recorder,
         host: str | None,
         port: int,
-        read_page: Callable[[], str] = read_page,
     ) -> None:
-        self._app = create_app(panel=Panel(machine=machine, read_page=read_page))
+        self._app = create_app(panel=Panel(machine=machine, recorder=recorder))
         self._host = host
         self._port = port
         self._runner: web.AppRunner | None = None

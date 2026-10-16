@@ -5,10 +5,14 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from . import profiles
+from .description import DeviceFieldDecoder
 from .exceptions import ControlError
-from .machine import Machine
+from .link import Link
+from .machine import Machine, Wiring
 from .panel import PanelServer
 from .persistence import DEFAULT_STATE_PATH, Saver, StateStore, scenario_hash
+from .traffic import Recorder
 from .transport import ModbusServer, ServerSettings
 
 if TYPE_CHECKING:
@@ -16,7 +20,6 @@ if TYPE_CHECKING:
 
     from .scenario import Scenario
 
-MILLISECONDS_PER_SECOND = 1000
 LOGGER = logging.getLogger(__name__)
 
 
@@ -38,25 +41,37 @@ class MockService:
         self._saver = Saver(
             store=self._store, snapshot=self._snapshot, monotonic=monotonic
         )
+        self._link = Link(seed=scenario.simulation.seed, settings=scenario.link)
+        self._recorder = Recorder(
+            decoder=DeviceFieldDecoder(blocks=profiles.build_blocks(scenario=scenario))
+        )
         self._machine = Machine(
             scenario=scenario,
             monotonic=monotonic,
-            on_change=self._saver.changed,
-            on_reset=self._store.delete,
+            wiring=Wiring(
+                on_change=self._saver.changed,
+                on_reset=self._store.delete,
+                last_read=self._recorder.last_read,
+                link=self._link,
+            ),
         )
         self._restore_saved_state()
         self._panel = PanelServer(
-            machine=self._machine, host=host, port=server.panel_port
+            machine=self._machine,
+            recorder=self._recorder,
+            host=host,
+            port=server.panel_port,
         )
         self._server = ModbusServer(
             bank=self._machine.device,
             settings=ServerSettings(
                 unit_id=server.unit_id,
                 max_clients=server.max_clients,
-                response_delay_s=server.response_delay_ms / MILLISECONDS_PER_SECOND,
                 host=host,
                 port=server.port,
             ),
+            link=self._link,
+            recorder=self._recorder,
         )
 
     def _snapshot(self) -> dict[str, object]:

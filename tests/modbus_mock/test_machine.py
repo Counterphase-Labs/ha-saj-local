@@ -7,7 +7,8 @@ import pytest
 from saj_modbus_mock import machine as machine_module
 from saj_modbus_mock.device import Block
 from saj_modbus_mock.exceptions import ControlError
-from saj_modbus_mock.machine import Machine
+from saj_modbus_mock.link import Link, LinkSettings, RefusedBlock
+from saj_modbus_mock.machine import Machine, Wiring
 from saj_modbus_mock.profiles.common import CLEAR_CURRENT_FAULT, CLEAR_FAULT_HISTORY
 from saj_modbus_mock.registers import EPOCH, Access, Encoding, Field
 from saj_modbus_mock.simulation import control as ctl
@@ -64,6 +65,7 @@ FAULT_MAP = FaultMap(
 )
 TELEMETRY = {
     "pv_w": 1.0,
+    "ext_pv_w": 7.0,
     "load_w": 2.0,
     "grid_w": 3.0,
     "battery_w": 4.0,
@@ -83,6 +85,9 @@ APP_MODE_FIELD = Field(
     labels=((6, "EMS"),),
 )
 SETTING_FIELD = Field(address=1, name="a_setting", access=Access.READ_WRITE)
+SCALED_FIELD = Field(
+    address=0x20, name="scaled_limit", access=Access.READ_WRITE, scale=0.0001
+)
 BACKUP_RESERVE_FIELD = Field(
     address=0x10, name=ctl.BACKUP_RESERVE, access=Access.READ_WRITE
 )
@@ -103,6 +108,7 @@ BLOCK = Block(
     end=0x4000,
     fields=(
         SETTING_FIELD,
+        SCALED_FIELD,
         BACKUP_RESERVE_FIELD,
         EMS_ENABLE_FIELD,
         FIXED_FIELD,
@@ -238,6 +244,9 @@ class StubDevice:
     def write_named(self, *, values):
         self.written.append(dict(values))
 
+    def peek_fields(self):
+        return {"a_setting": [1], "meter_enable": [3]}
+
     def check_stored(self, *, name, value):
         reason = self.refused_stored.get((name, value))
         if reason is not None:
@@ -255,6 +264,7 @@ def made(monkeypatch):
         "meter_enable": 3,
         "ev_mode": 1,
         "a_setting": 1,
+        "scaled_limit": 0,
     }
     monkeypatch.setattr(
         machine_module,
@@ -286,8 +296,7 @@ def made(monkeypatch):
             model="hs3", ev_charger={"installed": True}, meters={"meter_a": True}
         ),
         monotonic=lambda: 0.0,
-        on_change=changed,
-        on_reset=reset,
+        wiring=Wiring(on_change=changed, on_reset=reset),
     )
     result.initial = initial
     result.events = events
@@ -531,6 +540,9 @@ def test_the_description_covers_the_model_faults_variation_holds_and_presets(mac
         "variation",
         "holds",
         "presets",
+        "cards",
+        "nodes",
+        "link",
     }
     assert description["model"]["name"] == "hs3"
     assert description["faults"]["clear_all"] == {
@@ -539,8 +551,8 @@ def test_the_description_covers_the_model_faults_variation_holds_and_presets(mac
     }
     assert description["faults"]["packs"] == [1, 2]
     variation = {entry["name"]: entry for entry in description["variation"]}
-    assert variation["base_w"]["default"] == 300
-    assert variation["seed"]["default"] == machine.scenario.simulation.seed
+    assert variation["base_w"]["scenario"] == 300
+    assert variation["seed"]["scenario"] == machine.scenario.simulation.seed
     keys = {preset["key"] for preset in description["presets"]}
     assert {
         "grid-lost",
@@ -1349,6 +1361,7 @@ def test_the_state_reports_the_current_value_of_each_reading_a_hold_can_fix(
 ):
     monkeypatch.setitem(TELEMETRY, "pv_w", 1234.4)
     monkeypatch.setitem(TELEMETRY, "load_w", 560.6)
+    monkeypatch.setitem(TELEMETRY, "ev_power_w", 0.0)
     monkeypatch.setitem(TELEMETRY, "grid_r_v", 231.58472)
     monkeypatch.setitem(TELEMETRY, "frequency_hz", 50.034295)
 
@@ -1358,6 +1371,33 @@ def test_the_state_reports_the_current_value_of_each_reading_a_hold_can_fix(
         "voltage_v": 231.6,
         "frequency_hz": 50.03,
     }
+
+
+def test_the_household_load_leaves_out_what_the_charger_draws(machine, monkeypatch):
+    monkeypatch.setitem(TELEMETRY, "load_w", 11_697.0)
+    monkeypatch.setitem(TELEMETRY, "ev_power_w", 11_000.0)
+
+    state = machine.state()
+
+    assert state["card_readings"]["household_load_w"] == 697
+    assert state["hold_readings"]["load_w"] == 697
+    assert state["node_readings"]["ev_power_w"] == 11_000
+    readings = {r["label"]: r["value"] for r in state["readings"]}
+    assert readings["Household load"] == 697
+
+
+def test_the_state_gives_each_card_reading_by_the_name_the_description_gives(machine):
+    names = {
+        reading["name"]
+        for card in machine.describe()["cards"]
+        for reading in card["readings"]
+    }
+
+    state = machine.state()
+
+    assert set(state["card_readings"]) == names
+    assert state["card_readings"]["operating_mode"].startswith("2 ")
+    assert state["card_readings"]["car"] in {"Plugged in", "Not plugged in"}
 
 
 def test_restoring_a_snapshot_brings_back_where_each_energy_period_started(machine):
@@ -1403,6 +1443,7 @@ def test_a_snapshot_holds_only_the_settings_a_client_can_write(machine):
         ctl.BACKUP_RESERVE,
         ctl.EMS_ENABLE,
         "a_setting",
+        "scaled_limit",
     }
 
 
@@ -1424,3 +1465,611 @@ def test_restoring_still_refuses_a_name_that_is_not_a_register(machine):
         "nothing",
         "is not a setting",
     )
+
+
+def test_a_scaled_setting_is_shown_to_the_decimals_of_its_scale(machine):
+    machine.settings["scaled_limit"] = 65535 * 0.0001
+
+    assert machine.state()["settings"]["scaled_limit"] == {
+        "raw": 65535,
+        "value": 6.5535,
+    }
+
+
+def test_the_description_lists_the_cards_and_nodes_of_the_fitted_equipment(machine):
+    description = machine.describe()
+
+    assert [card["key"] for card in description["cards"]] == [
+        "solar",
+        "house",
+        "grid",
+        "battery",
+        "ev_charger",
+        "inverter",
+    ]
+    assert [node["kind"] for node in description["nodes"]] == [
+        "solar",
+        "grid",
+        "house",
+        "battery",
+        "ev_charger",
+    ]
+    settings = {entry["name"]: entry for entry in description["settings"]}
+    assert settings[ctl.BACKUP_RESERVE]["scenario"] == {"raw": 40, "value": 40}
+
+
+def test_a_battery_less_machine_has_no_battery_card_or_node(machine):
+    machine.scenario = make_scenario(model="hs3", battery={"modules": 0})
+
+    description = machine.describe()
+
+    assert "battery" not in [card["key"] for card in description["cards"]]
+    assert "battery" not in [node["kind"] for node in description["nodes"]]
+    assert "battery_w" not in machine.state()["node_readings"]
+
+
+def test_external_pv_is_a_node_with_its_reading_only_when_meter_b_is_fitted(machine):
+    machine.scenario = make_scenario(model="hs3", meters={"meter_b": True})
+    fitted = machine.describe()
+    fitted_state = machine.state()
+    machine.scenario = make_scenario(model="hs3", meters={"meter_b": False})
+    absent = machine.describe()
+
+    assert "external_pv" in [node["kind"] for node in fitted["nodes"]]
+    assert fitted_state["node_readings"]["ext_pv_w"] == 7
+    assert fitted_state["card_readings"]["ext_pv_w"] == 7
+    assert "external_pv" not in [node["kind"] for node in absent["nodes"]]
+    assert "external_pv" not in [card["key"] for card in absent["cards"]]
+    assert "ext_pv_w" not in machine.state()["node_readings"]
+
+
+def test_the_state_gives_each_diagram_reading_by_the_name_the_description_gives(
+    machine,
+):
+    names = {
+        reading["name"]
+        for node in machine.describe()["nodes"]
+        for reading in node["readings"]
+    }
+
+    assert set(machine.state()["node_readings"]) == names
+    assert machine.state()["node_readings"]["pv_w"] == 1
+
+
+def test_nothing_differs_from_the_scenario_at_start(machine):
+    assert machine.state()["changes"] == {
+        "holds": [],
+        "faults": {"inverter": 0, "battery": 0, "ev_charger": 0},
+        "settings": [],
+        "variation": [],
+        "link": [],
+    }
+
+
+def test_the_changes_name_every_hold_fault_setting_and_variation_that_differs(machine):
+    machine.settings[ctl.BACKUP_RESERVE] = 99
+    machine.plant.holds = {"load_w": 10.0, "pv_w": 20.0}
+    machine.plant.faults = FaultState(
+        inverter=frozenset({GRID_LOST, GRID_LOST_B}),
+        packs=(PackCodes(pack=1, fault=1),),
+    )
+    machine.plant.seed = 9
+    machine.plant.variation = Variation(cloud_depth=0.9)
+
+    assert machine.state()["changes"] == {
+        "holds": ["pv_w", "load_w"],
+        "faults": {"inverter": 2, "battery": 1, "ev_charger": 0},
+        "settings": [ctl.BACKUP_RESERVE],
+        "variation": ["cloud_depth", "seed"],
+        "link": [],
+    }
+
+
+def test_the_changes_clear_when_the_machine_is_reset(machine):
+    machine.settings[ctl.BACKUP_RESERVE] = 99
+    machine.plant.holds = {"pv_w": 20.0}
+
+    machine.reset()
+
+    changes = machine.state()["changes"]
+    assert (changes["holds"], changes["settings"]) == ([], [])
+
+
+def changed_system(machine):
+    machine.scenario = make_scenario(
+        model="hs3",
+        ev_charger={"installed": True},
+        faults=FaultState(
+            battery=frozenset({HOT}), packs=(PackCodes(pack=2, warning=1),)
+        ),
+    )
+    machine.plant.seed = 99
+    machine.plant.variation = Variation(
+        cloud_depth=0.9, drift_depth=0.5, voltage_swing_v=10.0
+    )
+    machine.plant.load = LoadConfig(base_w=1, peak_w=2)
+    machine.plant.holds = {
+        "pv_w": 1.0,
+        "load_w": 2.0,
+        "voltage_v": 230.0,
+        "frequency_hz": 50.0,
+    }
+    machine.plant.faults = FaultState(
+        inverter=frozenset({GRID_LOST}),
+        battery=frozenset({HOT, FaultBit(register=0x400B, bit=3)}),
+        ev_charger=frozenset({CHARGER}),
+        packs=(PackCodes(pack=1, fault=3),),
+    )
+
+
+def observed(machine):
+    plant = machine.plant
+    return {
+        "seed": plant.seed,
+        "cloud_depth": plant.variation.cloud_depth,
+        "drift_depth": plant.variation.drift_depth,
+        "voltage_swing_v": plant.variation.voltage_swing_v,
+        "load": (plant.load.base_w, plant.load.peak_w),
+        "holds": set(plant.holds),
+        "inverter": plant.faults.inverter,
+        "battery": plant.faults.battery,
+        "ev_charger": plant.faults.ev_charger,
+        "packs": plant.faults.packs,
+    }
+
+
+ALL_HOLDS = {"pv_w", "load_w", "voltage_v", "frequency_hz"}
+SCENARIO_LOAD = (300, 3000)
+DEFAULT_VARIATION = Variation()
+
+
+@pytest.mark.parametrize(
+    ("card", "returned"),
+    [
+        (
+            "solar",
+            {
+                "cloud_depth": DEFAULT_VARIATION.cloud_depth,
+                "holds": ALL_HOLDS - {"pv_w"},
+            },
+        ),
+        (
+            "house",
+            {
+                "drift_depth": DEFAULT_VARIATION.drift_depth,
+                "load": SCENARIO_LOAD,
+                "holds": ALL_HOLDS - {"load_w"},
+            },
+        ),
+        (
+            "grid",
+            {
+                "voltage_swing_v": DEFAULT_VARIATION.voltage_swing_v,
+                "holds": {"pv_w", "load_w"},
+            },
+        ),
+        ("inverter", {"seed": 7, "inverter": frozenset()}),
+        (
+            "battery",
+            {"battery": frozenset({HOT}), "packs": (PackCodes(pack=2, warning=1),)},
+        ),
+        ("ev_charger", {"ev_charger": frozenset()}),
+    ],
+)
+def test_a_card_reset_returns_only_that_cards_parameters_holds_and_faults(
+    machine, card, returned
+):
+    changed_system(machine)
+    before = observed(machine)
+
+    machine.reset_card(key=card)
+
+    assert observed(machine) == {**before, **returned}
+
+
+def test_a_card_reset_leaves_settings_the_charge_the_car_the_clock_and_the_counters(
+    machine,
+):
+    changed_system(machine)
+    machine.settings[ctl.BACKUP_RESERVE] = 99
+    for card in ("solar", "house", "grid", "battery", "ev_charger", "inverter"):
+        machine.reset_card(key=card)
+
+    assert machine.settings[ctl.BACKUP_RESERVE] == 99
+    assert machine.plant.socs == []
+    assert machine.plant.ev_actions == []
+    assert machine.clock.set_to == []
+    assert machine.plant.jumps == []
+    assert machine.plant.ledger.cleared == 0
+    assert machine.plant.ledger.resets == []
+    assert machine.events.resets == 0
+    assert machine.events.changes > 0
+
+
+@pytest.mark.parametrize("card", ["nope", "", "battery"])
+def test_an_unknown_card_or_one_that_is_not_fitted_is_refused_and_changes_nothing(
+    machine, card
+):
+    changed_system(machine)
+    machine.scenario = make_scenario(
+        model="hs3", battery={"modules": 0}, ev_charger={"installed": True}
+    )
+    before = observed(machine)
+    changes = machine.events.changes
+
+    assert refused(action=lambda: machine.reset_card(key=card)) == (
+        card,
+        "is not a card of this device",
+    )
+
+    assert observed(machine) == before
+    assert machine.events.changes == changes
+
+
+def test_the_register_snapshot_lists_every_block_without_reading_as_a_client(machine):
+    blocks = machine.registers()["blocks"]
+
+    assert [(block["start"], block["end"]) for block in blocks] == [
+        ("0x0000", "0x4000"),
+        ("0x3647", "0x3647"),
+    ]
+    fields = {field["name"]: field for field in blocks[0]["fields"]}
+    assert fields["a_setting"]["words"] == [1]
+    assert fields["a_setting"]["last_read"] is None
+    assert machine.device.written == []
+
+
+def test_the_register_snapshot_takes_when_a_client_last_read_from_the_recorder(
+    machine,
+):
+    times = {1: 12.5}
+    reading = Machine(
+        scenario=machine.scenario,
+        monotonic=lambda: 0.0,
+        wiring=Wiring(last_read=lambda *, address: times.get(address)),
+    )
+
+    fields = {
+        field["name"]: field for field in reading.registers()["blocks"][0]["fields"]
+    }
+
+    assert fields["a_setting"]["last_read"] == 12.5
+    assert fields["meter_enable"]["last_read"] is None
+
+
+WALL_TIME = 100.0
+SCENARIO_LINK = LinkSettings(latency_ms=50, refused_blocks=(RefusedBlock(1, 2, 3),))
+
+
+@pytest.fixture
+def link_machine(made):
+    link = Link(seed=0)
+    result = Machine(
+        scenario=make_scenario(
+            model="hs3",
+            ev_charger={"installed": True},
+            meters={"meter_a": True},
+            link=SCENARIO_LINK,
+        ),
+        monotonic=lambda: 0.0,
+        wiring=Wiring(
+            link=link,
+            wall_clock=lambda: WALL_TIME,
+        ),
+    )
+    result.link = link
+    return result
+
+
+def test_the_link_starts_as_the_scenario_has_it(link_machine):
+    state = link_machine.state()
+
+    assert link_machine.link.settings == SCENARIO_LINK
+    assert state["link"]["latency_ms"] == 50
+    assert state["link"]["refused_blocks"] == [{"start": 1, "end": 2, "code": 3}]
+    assert state["changes"]["link"] == []
+
+
+def test_the_description_gives_each_link_setting_its_bounds_and_scenario_value(
+    link_machine,
+):
+    settings = {
+        setting["name"]: setting
+        for setting in link_machine.describe()["link"]["settings"]
+    }
+
+    assert settings["latency_ms"] == {
+        "name": "latency_ms",
+        "kind": "whole",
+        "minimum": 0,
+        "maximum": 60_000,
+        "unit": "ms",
+        "scenario": 50,
+    }
+    assert settings["busy_percent"]["kind"] == "percent"
+    assert settings["busy_percent"]["maximum"] == 100
+    assert settings["offline"]["kind"] == "flag"
+    assert settings["refused_blocks"] == {
+        "name": "refused_blocks",
+        "kind": "blocks",
+        "address_bounds": [0, 65535],
+        "code_bounds": [0, 255],
+        "scenario": [{"start": 1, "end": 2, "code": 3}],
+    }
+
+
+def test_link_settings_are_applied_to_the_link_and_reported_as_changes(link_machine):
+    link_machine.set_link(
+        values={
+            "latency_ms": 800,
+            "busy_percent": 12.5,
+            "offline": True,
+            "refused_blocks": [{"start": 4, "end": 9, "code": 0}],
+        }
+    )
+
+    settings = link_machine.link.settings
+    assert (settings.latency_ms, settings.busy_percent, settings.offline) == (
+        800,
+        12.5,
+        True,
+    )
+    assert settings.refused_blocks == (RefusedBlock(start=4, end=9, code=0),)
+    assert link_machine.state()["changes"]["link"] == [
+        "latency_ms",
+        "busy_percent",
+        "offline",
+        "refused_blocks",
+    ]
+    assert link_machine.state()["link"]["jitter_ms"] == 0
+
+
+@pytest.mark.parametrize(
+    ("values", "key", "reason"),
+    [
+        ({"nothing": 1}, "nothing", "unknown key"),
+        ({"latency_ms": "x"}, "latency_ms", "must be a number"),
+        ({"latency_ms": True}, "latency_ms", "must be a number"),
+        ({"latency_ms": -1}, "latency_ms", "must be 0..60000"),
+        ({"latency_ms": 1.5}, "latency_ms", "must be an integer"),
+        ({"busy_percent": 101}, "busy_percent", "must be 0..100"),
+        ({"offline": 1}, "offline", "must be true or false"),
+        ({"refused_blocks": 5}, "refused_blocks", "must be a list"),
+        ({"refused_blocks": [5]}, "refused_blocks[0]", "must be a mapping"),
+        (
+            {"refused_blocks": [{"start": 1, "end": 2}]},
+            "refused_blocks[0].code",
+            "is required",
+        ),
+        (
+            {"refused_blocks": [{"start": 1, "end": 2, "code": 1, "x": 1}]},
+            "x",
+            "unknown key",
+        ),
+        (
+            {"refused_blocks": [{"start": 9, "end": 2, "code": 1}]},
+            "refused_blocks[0].end",
+            "must be >= start",
+        ),
+        (
+            {"refused_blocks": [{"start": 1, "end": 2, "code": 256}]},
+            "refused_blocks[0].code",
+            "must be 0..255",
+        ),
+        (
+            {"offline_seconds": 30},
+            "offline_seconds",
+            "must be <= offline_period_seconds",
+        ),
+        (
+            {"lockout_requests": 5},
+            "lockout_window_seconds",
+            "must be >= 1 when lockout_requests is set",
+        ),
+    ],
+)
+def test_a_refused_link_setting_names_its_key_and_changes_nothing(
+    link_machine, values, key, reason
+):
+    assert refused(action=lambda: link_machine.set_link(values=values)) == (key, reason)
+    assert link_machine.link.settings == SCENARIO_LINK
+
+
+def test_a_refused_link_setting_among_valid_ones_changes_none_of_them(link_machine):
+    refused(
+        action=lambda: link_machine.set_link(
+            values={"latency_ms": 9, "busy_percent": 500}
+        )
+    )
+
+    assert link_machine.link.settings == SCENARIO_LINK
+
+
+def test_the_module_state_follows_the_link_and_the_wall_clock(link_machine):
+    assert link_machine.state()["module"]["status"] == "online"
+
+    link_machine.set_link(values={"offline_seconds": 50, "offline_period_seconds": 60})
+
+    assert link_machine.state()["module"]["status"] == "offline"
+
+
+def test_dropping_connections_asks_the_link_to_drop_them(link_machine):
+    before = link_machine.link.drop_generation
+
+    link_machine.drop_connections()
+
+    assert link_machine.link.drop_generation == before + 1
+
+
+def lock_out(*, machine):
+    snapshot = machine.snapshot()
+    snapshot["lockout"] = {"addresses": ["10.0.0.9"], "whole_port": False}
+    machine.restore(snapshot=snapshot)
+
+
+def test_resetting_the_module_clears_a_lockout_and_marks_the_state_changed(
+    link_machine,
+):
+    lock_out(machine=link_machine)
+    assert link_machine.state()["module"]["status"] == "locked_out"
+
+    link_machine.reset_module()
+
+    assert link_machine.state()["module"]["status"] == "online"
+    assert link_machine.link.lockout_state().addresses == ()
+
+
+def test_a_reset_returns_the_link_to_the_scenario_and_clears_a_lockout(link_machine):
+    link_machine.set_link(values={"latency_ms": 9})
+    lock_out(machine=link_machine)
+
+    link_machine.reset()
+
+    assert link_machine.link.settings == SCENARIO_LINK
+    assert link_machine.state()["module"]["status"] == "online"
+
+
+def test_a_preset_returns_the_link_to_the_scenario_then_applies_its_own_changes(
+    link_machine,
+):
+    link_machine.set_link(values={"latency_ms": 9, "busy_percent": 50})
+    lock_out(machine=link_machine)
+
+    link_machine.apply_preset(key="flaky-link")
+
+    settings = link_machine.link.settings
+    assert settings.latency_ms == 50
+    assert settings.busy_percent == 0
+    assert (settings.no_answer_percent, settings.dropped_connection_percent) == (5, 2)
+    assert link_machine.link.lockout_state().addresses == ()
+
+
+@pytest.mark.parametrize("key", ["clear-sky", "high-load"])
+def test_a_preset_without_link_changes_leaves_the_link_as_the_scenario(
+    link_machine, key
+):
+    link_machine.set_link(values={"latency_ms": 9})
+
+    link_machine.apply_preset(key=key)
+
+    assert link_machine.link.settings == SCENARIO_LINK
+
+
+def test_the_locked_out_preset_locks_the_whole_port_above_its_threshold(link_machine):
+    link_machine.apply_preset(key="module-locked-out")
+
+    settings = link_machine.link.settings
+    assert (
+        settings.lockout_requests,
+        settings.lockout_window_seconds,
+        settings.lockout_whole_port,
+    ) == (120, 60, True)
+
+
+def draws(*, machine):
+    return [
+        machine.link.decide_request(
+            client="c", sequence=n, start=0, count=1, now=0.0
+        ).fault
+        for n in range(1, 60)
+    ]
+
+
+def test_the_links_draws_follow_the_simulation_seed_in_force(link_machine):
+    link_machine.set_link(values={"busy_percent": 50})
+
+    link_machine.set_variation(values={"seed": 11})
+    first = draws(machine=link_machine)
+    link_machine.set_variation(values={"seed": 12})
+    second = draws(machine=link_machine)
+    link_machine.set_variation(values={"seed": 11})
+
+    assert first != second
+    assert draws(machine=link_machine) == first
+
+
+def test_a_return_to_the_scenario_puts_the_links_seed_back(link_machine):
+    link_machine.set_variation(values={"seed": 11})
+    link_machine.set_link(values={"busy_percent": 50})
+
+    link_machine.apply_preset(key="clear-sky")
+    link_machine.set_link(values={"busy_percent": 50})
+    after_preset = draws(machine=link_machine)
+    link_machine.reset()
+    link_machine.set_link(values={"busy_percent": 50})
+
+    assert draws(machine=link_machine) == after_preset
+
+
+def test_the_register_snapshot_shows_the_blocks_the_link_refuses(link_machine):
+    link_machine.set_link(
+        values={"refused_blocks": [{"start": 0x3647, "end": 0x3647, "code": 0}]}
+    )
+
+    blocks = link_machine.registers()["blocks"]
+
+    assert [block["refusal"] for block in blocks] == [
+        {"code": 0, "model": False, "link": True}
+    ] * 2
+
+
+def test_the_register_snapshot_leaves_blocks_the_link_does_not_touch_alone(
+    link_machine,
+):
+    link_machine.set_link(
+        values={"refused_blocks": [{"start": 0x5000, "end": 0x5001, "code": 0}]}
+    )
+
+    blocks = link_machine.registers()["blocks"]
+
+    assert [block["refusal"] for block in blocks] == [None, None]
+
+
+def test_the_exported_scenario_carries_the_running_link(link_machine):
+    link_machine.set_link(values={"latency_ms": 9})
+
+    assert link_machine.export_scenario()[1].link.latency_ms == 9
+
+
+def test_a_snapshot_holds_the_link_and_a_lockout_and_restoring_brings_them_back(
+    link_machine,
+):
+    link_machine.set_link(values={"latency_ms": 9, "lockout_whole_port": True})
+    link_machine.restore(
+        snapshot={
+            **link_machine.snapshot(),
+            "lockout": {"addresses": ["10.0.0.9"], "whole_port": True},
+        }
+    )
+    snapshot = link_machine.snapshot()
+    link_machine.reset()
+
+    link_machine.restore(snapshot=snapshot)
+
+    assert snapshot["link"]["latency_ms"] == 9
+    assert snapshot["lockout"] == {"addresses": ["10.0.0.9"], "whole_port": True}
+    assert link_machine.link.settings.latency_ms == 9
+    assert link_machine.link.lockout_state().addresses == ("10.0.0.9",)
+    assert link_machine.link.lockout_state().whole_port is True
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        {"link": None},
+        {"link": {"latency_ms": "x"}},
+        {"lockout": None},
+        {"lockout": {"addresses": "x", "whole_port": False}},
+        {"lockout": {"addresses": [1], "whole_port": False}},
+        {"lockout": {"addresses": [], "whole_port": "x"}},
+        {"lockout": {"addresses": [], "whole_port": False, "extra": 1}},
+    ],
+)
+def test_an_unreadable_saved_link_starts_from_the_scenario(link_machine, damage):
+    snapshot = {**link_machine.snapshot(), **damage}
+    link_machine.set_link(values={"latency_ms": 9})
+
+    with pytest.raises(ControlError):
+        link_machine.restore(snapshot=snapshot)
+
+    assert link_machine.link.settings == SCENARIO_LINK

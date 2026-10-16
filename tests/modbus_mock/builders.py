@@ -3,6 +3,7 @@
 import dataclasses
 from datetime import UTC, datetime
 
+from saj_modbus_mock.link import LinkSettings
 from saj_modbus_mock.models import MODELS
 from saj_modbus_mock.scenario import (
     BatteryConfig,
@@ -29,9 +30,7 @@ def make_scenario(*, model: str = "hs3", **changes: object) -> Scenario:
         device=DeviceConfig(
             model=spec, rated_power_w=spec.default_rated_power_w, serial_number="SN123"
         ),
-        server=ServerConfig(
-            port=0, unit_id=1, max_clients=2, response_delay_ms=0, panel_port=0
-        ),
+        server=ServerConfig(port=0, unit_id=1, max_clients=2, panel_port=0),
         simulation=SimulationConfig(seed=7, start=START, speed=1.0),
         site=SiteConfig(
             grid_connected=True,
@@ -48,6 +47,7 @@ def make_scenario(*, model: str = "hs3", **changes: object) -> Scenario:
         parallel=ParallelConfig(inverters=1),
         variation=Variation(),
         faults=FaultState(),
+        link=LinkSettings(),
     )
     for section, change in changes.items():
         current = getattr(scenario, section)

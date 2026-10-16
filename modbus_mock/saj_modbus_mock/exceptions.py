@@ -5,6 +5,8 @@ class ExceptionCode(enum.IntEnum):
     ILLEGAL_FUNCTION = 0x01
     ILLEGAL_DATA_ADDRESS = 0x02
     ILLEGAL_DATA_VALUE = 0x03
+    DEVICE_FAILURE = 0x04
+    BUSY = 0x06
     BLOCK_OVERRUN = 0x36
     CHARGER_UNAVAILABLE = 0x30
 
@@ -19,6 +21,7 @@ class ControlError(Exception):
 
 
 class ModbusError(Exception):
-    def __init__(self, *, code: ExceptionCode) -> None:
-        super().__init__(code.name)
+    def __init__(self, *, code: int) -> None:
+        name = ExceptionCode(code).name if code in ExceptionCode else f"0x{code:02X}"
+        super().__init__(name)
         self.code = code

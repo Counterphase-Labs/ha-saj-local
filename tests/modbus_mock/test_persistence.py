@@ -6,10 +6,38 @@ import logging
 import pytest
 
 from saj_modbus_mock import persistence
+from saj_modbus_mock.machine import Machine
 from saj_modbus_mock.persistence import Saver, StateStore, scenario_hash
 from tests.modbus_mock.builders import make_scenario
 
 SNAPSHOT = {"settings": {"app_mode": 6}, "soc_percent": 41.5}
+
+
+def new_machine():
+    return Machine(scenario=make_scenario(model="hs3"), monotonic=lambda: 0.0)
+
+
+def test_link_settings_and_a_lockout_survive_a_restart_through_the_state_file(
+    tmp_path,
+):
+    path = tmp_path / "state.json"
+    before = new_machine()
+    before.set_link(values={"latency_ms": 800, "busy_percent": 10})
+    saved = before.snapshot()
+    saved["lockout"] = {"addresses": ["10.0.0.9"], "whole_port": True}
+    store(path=path).save(snapshot=saved)
+    after = new_machine()
+
+    after.restore(snapshot=store(path=path).load())
+
+    state = after.state()
+    assert (state["link"]["latency_ms"], state["link"]["busy_percent"]) == (800, 10)
+    assert state["module"]["status"] == "locked_out"
+    assert state["module"]["whole_port"] is True
+
+
+def test_the_traffic_is_not_part_of_the_saved_state():
+    assert not any("traffic" in key for key in new_machine().snapshot())
 
 
 def mounted(_path):

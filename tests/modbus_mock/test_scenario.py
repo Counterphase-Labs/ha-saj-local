@@ -3,6 +3,7 @@ from datetime import UTC, datetime, time
 import pytest
 import yaml
 
+from saj_modbus_mock.link import LinkSettings, RefusedBlock
 from saj_modbus_mock.scenario import (
     ScenarioError,
     dump_scenario,
@@ -31,6 +32,7 @@ def test_a_scenario_stating_only_the_model_gets_working_defaults():
     assert scenario.server.panel_port == 8080
     assert scenario.variation == Variation()
     assert scenario.faults == FaultState()
+    assert scenario.link == LinkSettings()
 
 
 def test_models_default_to_their_own_rating_and_serial():
@@ -49,7 +51,6 @@ def test_every_section_can_be_stated():
                 "port": 1502,
                 "unit_id": 3,
                 "max_clients": 4,
-                "response_delay_ms": 5,
                 "panel_port": 9090,
             },
             "simulation": {
@@ -102,7 +103,6 @@ def test_every_section_can_be_stated():
     assert scenario.faults.battery == {FaultBit(register=0x400B, bit=10)}
     assert scenario.faults.ev_charger == {FaultBit(register=0x30AD, bit=0)}
     assert scenario.faults.packs == (PackCodes(pack=1, fault=2, warning=5),)
-    assert scenario.server.response_delay_ms == 5
     assert scenario.server.panel_port == 9090
     assert scenario.variation == Variation(cloud_depth=0.9, voltage_period_s=30)
 
@@ -185,7 +185,66 @@ def test_every_section_can_be_stated():
             "ev_charger.sessions[0].unplug",
         ),
         ({**HS3, "parallel": {"inverters": 3}}, "parallel.inverters"),
+        ({**HS3, "server": {"response_delay_ms": 5}}, "server.response_delay_ms"),
         ({**HS3, "server": {"panel_port": 70000}}, "server.panel_port"),
+        ({**HS3, "link": 5}, "link"),
+        ({**HS3, "link": {"latency": 5}}, "link.latency"),
+        ({**HS3, "link": {"latency_ms": -1}}, "link.latency_ms"),
+        ({**HS3, "link": {"latency_ms": 60001}}, "link.latency_ms"),
+        ({**HS3, "link": {"latency_ms": 1.5}}, "link.latency_ms"),
+        ({**HS3, "link": {"jitter_ms": "x"}}, "link.jitter_ms"),
+        ({**HS3, "link": {"busy_percent": 101}}, "link.busy_percent"),
+        ({**HS3, "link": {"no_answer_percent": -0.5}}, "link.no_answer_percent"),
+        (
+            {**HS3, "link": {"late_duplicate_percent": "x"}},
+            "link.late_duplicate_percent",
+        ),
+        ({**HS3, "link": {"offline": 1}}, "link.offline"),
+        ({**HS3, "link": {"unresponsive": "yes"}}, "link.unresponsive"),
+        ({**HS3, "link": {"lockout_whole_port": 0}}, "link.lockout_whole_port"),
+        ({**HS3, "link": {"lockout_requests": 100001}}, "link.lockout_requests"),
+        (
+            {**HS3, "link": {"offline_seconds": 30, "offline_period_seconds": 10}},
+            "link.offline_seconds",
+        ),
+        ({**HS3, "link": {"offline_seconds": 5}}, "link.offline_seconds"),
+        ({**HS3, "link": {"lockout_requests": 5}}, "link.lockout_window_seconds"),
+        ({**HS3, "link": {"refused_blocks": 5}}, "link.refused_blocks"),
+        ({**HS3, "link": {"refused_blocks": [5]}}, "link.refused_blocks[0]"),
+        (
+            {**HS3, "link": {"refused_blocks": [{"end": 2, "code": 1}]}},
+            "link.refused_blocks[0].start",
+        ),
+        (
+            {**HS3, "link": {"refused_blocks": [{"start": 1, "code": 1}]}},
+            "link.refused_blocks[0].end",
+        ),
+        (
+            {**HS3, "link": {"refused_blocks": [{"start": 1, "end": 2}]}},
+            "link.refused_blocks[0].code",
+        ),
+        (
+            {
+                **HS3,
+                "link": {"refused_blocks": [{"start": 1, "end": 70000, "code": 1}]},
+            },
+            "link.refused_blocks[0].end",
+        ),
+        (
+            {**HS3, "link": {"refused_blocks": [{"start": 9, "end": 2, "code": 1}]}},
+            "link.refused_blocks[0].end",
+        ),
+        (
+            {**HS3, "link": {"refused_blocks": [{"start": 1, "end": 2, "code": 256}]}},
+            "link.refused_blocks[0].code",
+        ),
+        (
+            {
+                **HS3,
+                "link": {"refused_blocks": [{"start": 1, "end": 2, "code": 1, "x": 1}]},
+            },
+            "link.refused_blocks[0].x",
+        ),
         ({**HS3, "simulation": {"seed": 1 << 33}}, "simulation.seed"),
         ({**HS3, "variation": {"cloud_dept": 1}}, "variation.cloud_dept"),
         ({**HS3, "variation": {"cloud_depth": 2}}, "variation.cloud_depth"),
@@ -361,7 +420,52 @@ FULL_SCENARIO = {
         "ev_charger": [{"register": 0x30AB, "bit": 2}],
         "packs": [{"pack": 1, "fault": 2, "warning": 3}],
     },
+    "link": {
+        "latency_ms": 800,
+        "jitter_ms": 400,
+        "no_answer_percent": 5,
+        "busy_percent": 10.5,
+        "device_failure_percent": 1,
+        "dropped_connection_percent": 2,
+        "late_duplicate_percent": 100,
+        "refused_blocks": [
+            {"start": 0x4000, "end": 0x40FF, "code": 0},
+            {"start": 0x5000, "end": 0x5000, "code": 255},
+        ],
+        "unresponsive": True,
+        "offline": True,
+        "offline_seconds": 20,
+        "offline_period_seconds": 60,
+        "lockout_requests": 120,
+        "lockout_window_seconds": 60,
+        "lockout_whole_port": True,
+    },
 }
+
+
+def test_the_link_section_states_every_link_setting():
+    link = parse_scenario(data=FULL_SCENARIO).link
+
+    assert link == LinkSettings(
+        latency_ms=800,
+        jitter_ms=400,
+        no_answer_percent=5,
+        busy_percent=10.5,
+        device_failure_percent=1,
+        dropped_connection_percent=2,
+        late_duplicate_percent=100,
+        refused_blocks=(
+            RefusedBlock(start=0x4000, end=0x40FF, code=0),
+            RefusedBlock(start=0x5000, end=0x5000, code=255),
+        ),
+        unresponsive=True,
+        offline=True,
+        offline_seconds=20,
+        offline_period_seconds=60,
+        lockout_requests=120,
+        lockout_window_seconds=60,
+        lockout_whole_port=True,
+    )
 
 
 @pytest.mark.parametrize("data", [HS3, H2, FULL_SCENARIO])

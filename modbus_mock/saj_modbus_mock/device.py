@@ -133,6 +133,22 @@ class Device:
             self._observer.field_read(field=field)
         return words
 
+    def peek_fields(self) -> dict[str, list[int]]:
+        """The words of every readable field of the blocks that answer.
+
+        Not a client read: the observer is not told, so nothing keeps EMS alive.
+        """
+        telemetry = self._telemetry()
+        return {
+            field.name: encode(
+                field=field, value=self._value(field=field, telemetry=telemetry)
+            )
+            for block in self._blocks
+            if block.unavailable is None
+            for field in block.fields
+            if field.readable
+        }
+
     def write(self, *, start: int, words: list[int]) -> None:
         block = self._locate(start=start, count=len(words))
         self._telemetry()

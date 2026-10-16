@@ -516,3 +516,69 @@ def test_a_stored_scaled_setting_is_checked_by_its_raw_value():
     for refused in (10.1, 2.55):
         with pytest.raises(ControlError):
             device.check_stored(name="scaled", value=refused)
+
+
+def test_peeking_gives_the_words_a_client_read_returns_without_telling_the_observer():
+    device, _, recorder = build(unavailable=ExceptionCode.CHARGER_UNAVAILABLE)
+
+    peeked = device.peek_fields()
+
+    assert peeked["pressure"] == device.read(start=0x100, count=1)
+    assert peeked["big"] == device.read(start=0x101, count=2)
+    assert recorder.reads == ["pressure", "big"]
+
+
+def test_peeking_covers_readable_fields_of_answering_blocks_only():
+    device, _, _ = build()
+    refusing, _, _ = build(unavailable=ExceptionCode.CHARGER_UNAVAILABLE)
+    hidden = Device(
+        blocks=(
+            Block(
+                start=0x300,
+                end=0x301,
+                fields=(Field(address=0x300, name="hidden", access=Access.READ_WRITE),),
+                unavailable=ExceptionCode.CHARGER_UNAVAILABLE,
+            ),
+        ),
+        overrun_code=ExceptionCode.BLOCK_OVERRUN,
+        telemetry=lambda: TELEMETRY,
+        settings={"hidden": 0},
+        observer=Recorder(),
+    )
+
+    assert set(device.peek_fields()) == {
+        "pressure",
+        "big",
+        "small",
+        "mode",
+        "label",
+        "clock",
+        "signed",
+    }
+    assert "trigger" not in device.peek_fields()
+    assert hidden.peek_fields() == {}
+    assert set(refusing.peek_fields()) == set(device.peek_fields())
+
+
+def test_peeking_asks_for_telemetry_once():
+    calls = []
+    device = Device(
+        blocks=(
+            Block(
+                start=0,
+                end=1,
+                fields=(
+                    Field(address=0, name="a", source="pressure"),
+                    Field(address=1, name="b", source="pressure"),
+                ),
+            ),
+        ),
+        overrun_code=ExceptionCode.BLOCK_OVERRUN,
+        telemetry=lambda: calls.append(1) or TELEMETRY,
+        settings={},
+        observer=Recorder(),
+    )
+
+    device.peek_fields()
+
+    assert calls == [1]

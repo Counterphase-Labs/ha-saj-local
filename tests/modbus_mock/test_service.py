@@ -5,17 +5,22 @@ from types import SimpleNamespace
 
 import pytest
 
+from saj_modbus_mock import profiles
 from saj_modbus_mock import service as service_module
 from saj_modbus_mock.exceptions import ControlError
+from saj_modbus_mock.link import LinkSettings
 from saj_modbus_mock.service import MockService
+from saj_modbus_mock.traffic import Answer, Client, Operation, RequestRecord
 
 from .builders import make_scenario
 
 
 class FakeServer:
-    def __init__(self, *, bank, settings, events):
+    def __init__(self, *, bank, settings, link, recorder, events):
         self.bank = bank
         self.settings = settings
+        self.link = link
+        self.recorder = recorder
         self.events = events
         self.bound_port = 4321
 
@@ -27,10 +32,10 @@ class FakeServer:
 
 
 class FakePanel:
-    def __init__(self, *, machine, host, port, events, fail=False):
+    def __init__(self, *, machine, recorder, address, events, fail=False):
         self.machine = machine
-        self.host = host
-        self.port = port
+        self.recorder = recorder
+        self.host, self.port = address
         self.events = events
         self.fail = fail
 
@@ -85,11 +90,12 @@ def fakes(monkeypatch):
     made = SimpleNamespace(events=[], saved=None, restore_error=None, panel_fails=False)
 
     class FakeMachine:
-        def __init__(self, *, scenario, monotonic, on_change, on_reset):
+        def __init__(self, *, scenario, monotonic, wiring):
             self.scenario = scenario
             self.monotonic = monotonic
-            self.on_change = on_change
-            self.on_reset = on_reset
+            self.wiring = wiring
+            self.on_change = wiring.on_change
+            self.on_reset = wiring.on_reset
             self.device = "the device"
             self.restored = []
             made.machine = self
@@ -102,15 +108,21 @@ def fakes(monkeypatch):
         def snapshot(self):
             return {"snapshot": "of the machine"}
 
-    def server(*, bank, settings):
-        made.server = FakeServer(bank=bank, settings=settings, events=made.events)
+    def server(*, bank, settings, link, recorder):
+        made.server = FakeServer(
+            bank=bank,
+            settings=settings,
+            link=link,
+            recorder=recorder,
+            events=made.events,
+        )
         return made.server
 
-    def panel(*, machine, host, port):
+    def panel(*, machine, recorder, host, port):
         made.panel = FakePanel(
             machine=machine,
-            host=host,
-            port=port,
+            recorder=recorder,
+            address=(host, port),
             events=made.events,
             fail=made.panel_fails,
         )
@@ -144,9 +156,9 @@ def test_building_the_service_wires_the_device_into_a_server_from_the_scenario(f
             "port": 1502,
             "unit_id": 7,
             "max_clients": 3,
-            "response_delay_ms": 250,
             "panel_port": 8081,
         },
+        link=LinkSettings(latency_ms=250),
     )
 
     def clock():
@@ -164,9 +176,49 @@ def test_building_the_service_wires_the_device_into_a_server_from_the_scenario(f
         1502,
         "10.0.0.2",
     )
-    assert settings.response_delay_s == 0.25
+    assert fakes.server.link.settings.latency_ms == 250
+    assert fakes.server.link.is_offline(now=0) is False
+    assert fakes.server.link is fakes.machine.wiring.link
+    assert fakes.server.recorder is fakes.panel.recorder
     assert fakes.panel.machine is fakes.machine
     assert (fakes.panel.host, fakes.panel.port) == ("10.0.0.2", 8081)
+
+
+def test_the_recorder_decodes_requests_into_the_fields_of_the_device(fakes):
+    scenario = make_scenario(model="hs3")
+    MockService(scenario=scenario)
+    field = next(
+        field
+        for block in profiles.build_blocks(scenario=scenario)
+        if block.unavailable is None
+        for field in block.fields
+        if field.readable
+    )
+    recorder = fakes.server.recorder
+
+    recorder.record_request(
+        record=RequestRecord(
+            at=5.0,
+            client=Client(address="10.0.0.1", port=1),
+            connection=1,
+            transaction_id=1,
+            unit_id=1,
+            function=3,
+            start=field.address,
+            count=field.words,
+            operation=Operation.READ,
+            answer=Answer.ANSWERED,
+            exception_code=None,
+            fault=None,
+            late_duplicate=False,
+            duration_ms=1.0,
+            words=(0,) * field.words,
+        )
+    )
+
+    (entry,) = recorder.traffic(after=0, now=6.0)["entries"]
+    assert [covered["name"] for covered in entry["detail"]["fields"]] == [field.name]
+    assert fakes.machine.wiring.last_read(address=field.address) == 5.0
 
 
 def test_the_machines_changes_and_resets_reach_the_saver_and_the_store(fakes):

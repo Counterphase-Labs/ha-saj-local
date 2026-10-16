@@ -10,6 +10,7 @@ from saj_modbus_mock.exceptions import ControlError
 from saj_modbus_mock.panel import Panel, PanelServer, create_app, refuse_control_errors
 
 STATE = {"time": "now"}
+WALL_TIME = 1234.5
 
 
 class FakeMachine:
@@ -63,18 +64,49 @@ class FakeMachine:
     def reset(self):
         self._record("reset")
 
+    def reset_card(self, *, key):
+        self._record("reset_card", key=key)
+
+    def registers(self):
+        return {"blocks": []}
+
+    def set_link(self, *, values):
+        self._record("link", values=values)
+
+    def drop_connections(self):
+        self._record("drop")
+
+    def reset_module(self):
+        self._record("module")
+
     def apply_preset(self, *, key):
         self._record("preset", key=key)
 
 
-def request(*, body=None, name=None, invalid=False):
+class FakeRecorder:
+    def __init__(self):
+        self.calls = []
+
+    def traffic(self, *, after, now):
+        self.calls.append(("traffic", after, now))
+        return {"entries": [], "latest": 0, "counters": {}, "history": {}}
+
+    def reset(self):
+        self.calls.append(("reset",))
+
+
+def request(*, body=None, name=None, invalid=False, query=None):
     async def json_body():
         if invalid:
             message = "not json"
             raise ValueError(message)
         return body
 
-    return SimpleNamespace(json=json_body, match_info={"name": name})
+    return SimpleNamespace(
+        json=json_body,
+        match_info={"name": name, "card": name, "path": name},
+        query=query or {},
+    )
 
 
 @pytest.fixture
@@ -83,8 +115,34 @@ def machine():
 
 
 @pytest.fixture
-def panel(machine):
-    return Panel(machine=machine, read_page=lambda: "<html>the page</html>")
+def recorder():
+    return FakeRecorder()
+
+
+@pytest.fixture
+def static_root(tmp_path):
+    root = tmp_path / "static"
+    (root / "vendor").mkdir(parents=True)
+    (root / "panel.css").write_text("body{}", encoding="utf-8")
+    (root / "vendor" / "icon.svg").write_text("<svg/>", encoding="utf-8")
+    (root / "notes.md").write_text("# notes", encoding="utf-8")
+    (root / "view.js").write_text("export {}", encoding="utf-8")
+    (root / "other.html").write_text("<p>other</p>", encoding="utf-8")
+    (root / "data.bin").write_bytes(b"\x00")
+    (tmp_path / "secret.css").write_text("secret", encoding="utf-8")
+    (root / "escape.css").symlink_to(tmp_path / "secret.css")
+    return root
+
+
+@pytest.fixture
+def panel(machine, recorder, static_root):
+    return Panel(
+        machine=machine,
+        recorder=recorder,
+        wall_clock=lambda: WALL_TIME,
+        read_page=lambda: "<html>the page</html>",
+        static_root=static_root,
+    )
 
 
 def answer(*, response):
@@ -146,6 +204,133 @@ async def test_a_reset_takes_no_body(panel, machine, route, operation):
 
     assert machine.calls == [(operation, {})]
     assert answer(response=response) == STATE
+
+
+async def test_a_card_is_reset_by_the_name_in_the_path_and_the_state_answers(
+    panel, machine
+):
+    response = await panel.reset_card(request(name="solar"))
+
+    assert machine.calls == [("reset_card", {"key": "solar"})]
+    assert answer(response=response) == STATE
+
+
+async def test_a_refused_card_reset_answers_400_and_changes_nothing(panel, machine):
+    machine.refusal = ControlError(key="nope", reason="is not a card of this device")
+    response = await refuse_control_errors(request(name="nope"), panel.reset_card)
+
+    assert response.status == 400
+    assert answer(response=response)["key"] == "nope"
+
+
+@pytest.mark.parametrize(
+    ("route", "operation", "body"),
+    [
+        ("link", "link", {"latency_ms": 5}),
+        ("drop_connections", "drop", None),
+        ("reset_module", "module", None),
+    ],
+)
+async def test_a_link_route_asks_the_machine_and_answers_with_the_state(
+    panel, machine, route, operation, body
+):
+    response = await getattr(panel, route)(request(body=body))
+
+    expected = {"values": body} if body else {}
+    assert machine.calls == [(operation, expected)]
+    assert answer(response=response) == STATE
+
+
+async def test_a_refused_link_setting_answers_400_with_its_key(panel, machine):
+    machine.refusal = ControlError(key="busy_percent", reason="must be 0..100")
+
+    response = await refuse_control_errors(
+        request(body={"busy_percent": 500}), panel.link
+    )
+
+    assert response.status == 400
+    assert answer(response=response)["key"] == "busy_percent"
+
+
+@pytest.mark.parametrize(
+    ("query", "after"), [({}, 0), ({"after": "0"}, 0), ({"after": "42"}, 42)]
+)
+async def test_the_traffic_is_the_recorders_after_a_sequence_with_the_wall_time(
+    panel, recorder, query, after
+):
+    response = await panel.traffic(request(query=query))
+
+    assert recorder.calls == [("traffic", after, WALL_TIME)]
+    assert answer(response=response) == {
+        "entries": [],
+        "latest": 0,
+        "counters": {},
+        "history": {},
+        "now": WALL_TIME,
+    }
+
+
+@pytest.mark.parametrize("after", ["-1", "x", "1.5", ""])
+async def test_a_sequence_that_is_not_a_number_is_refused(panel, recorder, after):
+    response = await refuse_control_errors(
+        request(query={"after": after}), panel.traffic
+    )
+
+    assert response.status == 400
+    assert answer(response=response)["key"] == "after"
+    assert recorder.calls == []
+
+
+async def test_resetting_the_traffic_clears_the_recorder_and_answers_with_nothing(
+    panel, recorder
+):
+    response = await panel.reset_traffic(request())
+
+    assert recorder.calls == [("reset",), ("traffic", 0, WALL_TIME)]
+    assert answer(response=response)["entries"] == []
+
+
+async def test_the_register_snapshot_is_the_machines(panel):
+    assert answer(response=await panel.registers(request())) == {"blocks": []}
+
+
+@pytest.mark.parametrize(
+    ("path", "content_type", "text"),
+    [
+        ("panel.css", "text/css", "body{}"),
+        ("view.js", "text/javascript", "export {}"),
+        ("vendor/icon.svg", "image/svg+xml", "<svg/>"),
+        ("notes.md", "text/markdown", "# notes"),
+        ("other.html", "text/html", "<p>other</p>"),
+    ],
+)
+async def test_a_static_file_is_served_with_its_content_type(
+    panel, path, content_type, text
+):
+    response = await panel.static(request(name=path))
+
+    assert response.content_type == content_type
+    assert response.charset == "utf-8"
+    assert response.text == text
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "../secret.css",
+        "vendor/../../secret.css",
+        "escape.css",
+        "data.bin",
+        "vendor",
+        "missing.css",
+        "bad\x00name.css",
+    ],
+)
+async def test_a_static_path_outside_the_folder_or_of_another_kind_is_not_found(
+    panel, path
+):
+    with pytest.raises(web.HTTPNotFound):
+        await panel.static(request(name=path))
 
 
 async def test_a_preset_is_applied_by_the_name_in_the_path(panel, machine):
@@ -222,6 +407,13 @@ def test_the_app_routes_each_endpoint_to_the_panel_and_refuses_through_the_middl
         ("GET", "/api/description"),
         ("GET", "/api/state"),
         ("GET", "/api/scenario"),
+        ("GET", "/api/registers"),
+        ("GET", "/api/traffic"),
+        ("POST", "/api/traffic/reset"),
+        ("POST", "/api/link"),
+        ("POST", "/api/link/drop"),
+        ("POST", "/api/link/reset"),
+        ("GET", "/static/{path}"),
         ("POST", "/api/settings"),
         ("POST", "/api/commands"),
         ("POST", "/api/faults"),
@@ -232,6 +424,7 @@ def test_the_app_routes_each_endpoint_to_the_panel_and_refuses_through_the_middl
         ("POST", "/api/clock"),
         ("POST", "/api/ledger/reset"),
         ("POST", "/api/reset"),
+        ("POST", "/api/reset/{card}"),
         ("POST", "/api/presets/{name}"),
     }
     assert list(app.middlewares) == [refuse_control_errors]
@@ -283,9 +476,9 @@ def fake_web(monkeypatch):
 
 
 async def test_the_server_serves_the_app_on_its_host_and_port_without_an_access_log(
-    machine, fake_web
+    machine, recorder, fake_web
 ):
-    server = PanelServer(machine=machine, host="10.0.0.1", port=8081)
+    server = PanelServer(machine=machine, recorder=recorder, host="10.0.0.1", port=8081)
 
     await server.start()
 
@@ -300,9 +493,9 @@ async def test_the_server_serves_the_app_on_its_host_and_port_without_an_access_
 
 
 async def test_closing_cleans_up_the_runner_and_is_harmless_before_starting(
-    machine, fake_web
+    machine, recorder, fake_web
 ):
-    server = PanelServer(machine=machine, host=None, port=0)
+    server = PanelServer(machine=machine, recorder=recorder, host=None, port=0)
     await server.close()
     await server.start()
 
