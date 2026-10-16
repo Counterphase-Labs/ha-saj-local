@@ -3,7 +3,7 @@ import pytest
 from saj_modbus_mock.models import MODELS
 from saj_modbus_mock.profiles import common
 from saj_modbus_mock.profiles.fields import ZERO
-from saj_modbus_mock.registers import Access, Encoding
+from saj_modbus_mock.registers import Access, Encoding, raw_range
 from saj_modbus_mock.simulation import control as ctl
 from tests.modbus_mock.builders import by_address, by_name, make_scenario
 from tests.modbus_mock.profiles.fakes import isolate
@@ -15,12 +15,42 @@ def stubbed_helpers(monkeypatch):
 
 
 def test_ems_enable_values_are_every_combination_of_the_four_enable_bits():
-    values = common.ems_combinations()
+    labels = common.ems_labels()
 
-    assert 0 in values
-    assert 1 | 2 | 8 | 32 in values
-    assert 4 not in values
-    assert len(values) == 16
+    assert 0 in labels
+    assert 1 | 2 | 8 | 32 in labels
+    assert 4 not in labels
+    assert len(labels) == 16
+
+
+@pytest.mark.parametrize(
+    ("code", "label"),
+    [
+        (0, "Off"),
+        (ctl.EMS_STANDARD_BIT, "Inverter"),
+        (ctl.EMS_BATTERY_BIT, "Battery"),
+        (ctl.EMS_EXIT_BIT, "Inverter timeout exit"),
+        (ctl.EMS_GRID_BIT, "Grid"),
+        (ctl.EMS_STANDARD_BIT | ctl.EMS_BATTERY_BIT, "Inverter + Battery"),
+        (
+            ctl.EMS_BATTERY_BIT | ctl.EMS_EXIT_BIT | ctl.EMS_GRID_BIT,
+            "Battery + Inverter timeout exit + Grid",
+        ),
+    ],
+)
+def test_an_ems_enable_value_is_named_by_the_bits_it_sets(code, label):
+    assert common.ems_labels()[code] == label
+
+
+def test_every_scaled_information_value_fits_its_register_once_unscaled():
+    scenario = make_scenario(model="hs3")
+
+    fields = common.information_fields(scenario=scenario, spec=MODELS["hs3"])
+
+    for field in fields:
+        if not field.is_text:
+            low, high = raw_range(field=field)
+            assert low <= round(field.initial / field.scale) <= high, field.name
 
 
 def test_information_identifies_the_device_and_its_rating():
@@ -45,6 +75,25 @@ def test_factory_commands_are_write_only_and_restrict_their_values():
     assert fields["cmd_clear_faults"].options == {1, 2}
     assert fields["cmd_restart"].options == {1}
     assert fields["cmd_set_clock"].words == 4
+
+
+@pytest.mark.parametrize(
+    ("name", "labels"),
+    [
+        (
+            "cmd_clear_faults",
+            ((1, "Clear fault history"), (2, "Clear current fault")),
+        ),
+        ("cmd_restart", ((1, "Restart"),)),
+        ("cmd_clear_power_history", ((1, "Clear energy history"),)),
+        ("cmd_factory_reset", ((1, "Factory reset"),)),
+    ],
+)
+def test_factory_commands_name_each_of_their_values(name, labels):
+    fields = by_name(fields=common.factory_command_fields())
+
+    assert fields[name].labels == labels
+    assert fields[name].options == {raw for raw, _ in labels}
 
 
 @pytest.mark.parametrize("phases", [3, 1])
@@ -133,7 +182,7 @@ def test_schedule_registers_are_consecutive_writable_words():
 def test_every_setting_the_controller_reads_is_a_writable_field():
     names = by_name(
         fields=common.settings_fields(
-            scenario=make_scenario(model="hs3"), modes=frozenset({0, 1}), extended=False
+            scenario=make_scenario(model="hs3"), modes={0: "A", 1: "B"}, extended=False
         )
     )
 
@@ -151,14 +200,17 @@ def test_every_setting_the_controller_reads_is_a_writable_field():
         assert names[key].writable
 
 
-def test_the_application_modes_offered_are_those_of_the_model():
+def test_the_application_modes_offered_are_those_of_the_model_and_carry_their_names():
     fields = by_name(
         fields=common.settings_fields(
-            scenario=make_scenario(model="hs3"), modes=frozenset({0, 6}), extended=False
+            scenario=make_scenario(model="hs3"),
+            modes={0: "Self-use", 6: "EMS"},
+            extended=False,
         )
     )
 
     assert fields[ctl.APP_MODE].options == {0, 6}
+    assert dict(fields[ctl.APP_MODE].labels) == {0: "Self-use", 6: "EMS"}
 
 
 @pytest.mark.parametrize(("meter_a", "mode"), [(True, 3), (False, 0)])
@@ -166,9 +218,7 @@ def test_the_meter_mode_follows_the_installed_meter(meter_a, mode):
     scenario = make_scenario(model="hs3", meters={"meter_a": meter_a})
 
     fields = by_name(
-        fields=common.settings_fields(
-            scenario=scenario, modes=frozenset({0}), extended=False
-        )
+        fields=common.settings_fields(scenario=scenario, modes={0: "A"}, extended=False)
     )
 
     assert fields["meter_enable"].initial == mode
@@ -177,14 +227,10 @@ def test_the_meter_mode_follows_the_installed_meter(meter_a, mode):
 def test_extended_settings_add_the_protocol_header_and_slave_port():
     scenario = make_scenario(model="hs3")
     plain = by_address(
-        fields=common.settings_fields(
-            scenario=scenario, modes=frozenset({0}), extended=False
-        )
+        fields=common.settings_fields(scenario=scenario, modes={0: "A"}, extended=False)
     )
     extended = by_address(
-        fields=common.settings_fields(
-            scenario=scenario, modes=frozenset({0}), extended=True
-        )
+        fields=common.settings_fields(scenario=scenario, modes={0: "A"}, extended=True)
     )
 
     assert 0x3680 not in plain
@@ -195,7 +241,7 @@ def test_extended_settings_add_the_protocol_header_and_slave_port():
 def test_percent_settings_carry_one_decimal_and_a_ceiling_above_full_power():
     fields = by_address(
         fields=common.settings_fields(
-            scenario=make_scenario(model="hs3"), modes=frozenset({0}), extended=False
+            scenario=make_scenario(model="hs3"), modes={0: "A"}, extended=False
         )
     )
 
@@ -235,10 +281,26 @@ def test_extended_meters_add_the_high_word_and_reactive_registers():
     assert extended[0xA072].words == 2
 
 
-def test_an_unpopulated_battery_block_reads_zero_everywhere():
+def test_an_unpopulated_battery_block_reads_zero_everywhere_but_the_pack_codes():
     fields = common.battery_fields(populated=False)
 
-    assert {field.source for field in fields if field.source} == {ZERO}
+    sources = {field.source for field in fields if field.source}
+    assert sources - {ZERO} == {
+        f"pack{pack}_{kind}" for pack in range(1, 5) for kind in ("fault", "warning")
+    }
+    assert ZERO in sources
+
+
+@pytest.mark.parametrize("populated", [True, False])
+def test_each_packs_fault_and_warning_words_follow_the_pack_codes(populated):
+    fields = by_name(fields=common.battery_fields(populated=populated))
+
+    for pack in range(1, 5):
+        assert fields[f"battery{pack}_fault"].address == 0xA002 + 2 * (pack - 1)
+        assert fields[f"battery{pack}_fault"].source == f"pack{pack}_fault"
+        assert fields[f"battery{pack}_warning"].address == 0xA003 + 2 * (pack - 1)
+        assert fields[f"battery{pack}_warning"].source == f"pack{pack}_warning"
+        assert not fields[f"battery{pack}_fault"].writable
 
 
 def test_a_populated_battery_block_reads_the_module_quantities():
@@ -280,9 +342,7 @@ def test_both_battery_protocol_registers_read_not_in_use_without_battery_modules
         )
     )
     settings = by_name(
-        fields=common.settings_fields(
-            scenario=scenario, modes=frozenset({0}), extended=False
-        )
+        fields=common.settings_fields(scenario=scenario, modes={0: "A"}, extended=False)
     )
 
     expected = (
@@ -292,3 +352,46 @@ def test_both_battery_protocol_registers_read_not_in_use_without_battery_modules
     )
     assert (realtime[0x4028].initial, settings["battery_protocol"].initial) == expected
     assert settings["battery_protocol"].options == {0, spec.battery_protocol_setting}
+    assert {code for code, _name in settings["battery_protocol"].labels} == {
+        0,
+        spec.battery_protocol_setting,
+    }
+
+
+@pytest.mark.parametrize("address", [0x4005, 0x4007, 0x4009, 0x400B])
+def test_the_fault_registers_are_two_word_readings_of_the_fault_words(address):
+    fields = by_address(
+        fields=common.realtime_energy_fields(
+            scenario=make_scenario(model="hs3"), phases=3, extended=True
+        )
+    )
+
+    assert fields[address].source == f"fault_{address:04x}"
+    assert fields[address].words == 2
+    assert not fields[address].writable
+
+
+@pytest.mark.parametrize("model", ["hs3", "h2"])
+def test_a_named_choice_labels_exactly_the_values_it_accepts(model):
+    spec = MODELS[model]
+    modes = {0: "Self-use", 1: "Time"}
+    fields = common.settings_fields(
+        scenario=make_scenario(model=model), modes=modes, extended=True
+    )
+
+    labelled = [field for field in fields if field.labels]
+    assert {field.name for field in labelled} >= {
+        ctl.APP_MODE,
+        "meter_enable",
+        "led_switch",
+        ctl.ANTI_REFLUX_MODE,
+        ctl.TOU_OUTSIDE_MODE,
+        "master_rs485_baud",
+        "slave_rs485_baud",
+        "battery_protocol",
+    }
+    for field in labelled:
+        assert {code for code, _name in field.labels} == field.options
+        assert all(name for _code, name in field.labels)
+    protocol = next(f for f in labelled if f.name == "battery_protocol")
+    assert dict(protocol.labels)[spec.battery_protocol_setting]

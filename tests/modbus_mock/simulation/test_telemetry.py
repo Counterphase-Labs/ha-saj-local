@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from saj_modbus_mock.simulation.ev_charger import ChargerReadout, ChargerState
+from saj_modbus_mock.simulation.faults import FaultBit, FaultState, PackCodes
 from saj_modbus_mock.simulation.plant import ENERGY_FLOWS
 from saj_modbus_mock.simulation.telemetry import build_telemetry, operating_mode
 from tests.modbus_mock.builders import make_scenario
@@ -82,7 +83,10 @@ PLANT_OPTIONS = {
     "sample",
     "averaged",
     "modules",
-    "fault_bits",
+    "faults",
+    "stopped",
+    "grid_connected",
+    "meter_a_online",
     "online",
     "restart",
     "ev",
@@ -93,6 +97,7 @@ def make_plant(*, model="hs3", **options):
     plant_options = {key: options.pop(key) for key in PLANT_OPTIONS & set(options)}
     scenario = make_scenario(model=model, **options)
     weights = (0.5, 0.25, 0.25) if scenario.device.model.phases == 3 else (1.0,)
+    grid_connected = plant_options.get("grid_connected", scenario.site.grid_connected)
     return SimpleNamespace(
         scenario=scenario,
         battery=StubBattery(modules=plant_options.get("modules", 2)),
@@ -101,7 +106,12 @@ def make_plant(*, model="hs3", **options):
         weights=weights,
         ledger=StubLedger(),
         ev=plant_options.get("ev") or StubEv(),
-        fault_bits=plant_options.get("fault_bits", ()),
+        faults=plant_options.get("faults", FaultState()),
+        stopped=plant_options.get("stopped", False),
+        grid_connected=grid_connected,
+        meter_a_online=plant_options.get(
+            "meter_a_online", scenario.meters.meter_a and grid_connected
+        ),
         online=plant_options.get("online", True),
         restart_remaining_s=plant_options.get("restart", 0),
         second=12345,
@@ -191,12 +201,21 @@ def test_meter_a_reads_the_grid_only_when_installed_and_connected(
 ):
     out = telemetry(
         meters={"meter_a": meter_a, "meter_b": False},
-        site={"grid_connected": grid_connected},
+        grid_connected=grid_connected,
     )
 
     assert out["meter_a_status"] == float(present)
     assert (out["meter_a_r_w"] != 0.0) is present
     assert (out["ct_grid_w"] != 0.0) is present
+
+
+@pytest.mark.parametrize("online", [True, False])
+def test_meter_a_follows_whether_the_plant_reports_it_online(online):
+    out = telemetry(meters={"meter_a": True, "meter_b": False}, meter_a_online=online)
+
+    assert out["meter_a_status"] == float(online)
+    assert (out["meter_a_r_w"] != 0.0) is online
+    assert (out["ct_grid_w"] != 0.0) is online
 
 
 def test_meter_b_reads_external_generation_only_when_installed():
@@ -332,30 +351,70 @@ def test_charger_installation_and_limits_come_from_the_scenario():
 
 
 @pytest.mark.parametrize(
-    ("fault_bits", "online", "grid", "expected"),
+    ("stopped", "online", "grid", "expected"),
     [
-        ((1,), True, True, 5.0),
-        ((), False, True, 1.0),
-        ((), True, False, 3.0),
-        ((), True, True, 2.0),
+        (True, False, True, 5.0),
+        (True, True, False, 5.0),
+        (False, False, True, 1.0),
+        (False, True, False, 3.0),
+        (False, True, True, 2.0),
     ],
 )
 def test_the_operating_mode_reports_fault_waiting_off_grid_or_running(
-    fault_bits, online, grid, expected
+    stopped, online, grid, expected
 ):
-    plant = make_plant(
-        fault_bits=fault_bits, online=online, site={"grid_connected": grid}
-    )
+    plant = make_plant(stopped=stopped, online=online, grid_connected=grid)
 
     assert operating_mode(plant=plant) == expected
 
 
-def test_fault_bits_become_the_fault_word_and_count():
-    out = telemetry(fault_bits=(0, 4), online=False, restart=12)
+INVERTER_BITS = (
+    FaultBit(register=0x4005, bit=0),
+    FaultBit(register=0x4005, bit=23),
+    FaultBit(register=0x4007, bit=4),
+    FaultBit(register=0x4009, bit=31),
+)
 
-    assert out["fault_word"] == 0b10001
-    assert out["fault_count"] == 2.0
+
+def test_every_fault_register_reflects_the_bits_set_on_its_equipment():
+    faults = FaultState(
+        inverter=frozenset(INVERTER_BITS),
+        battery=frozenset({FaultBit(register=0x400B, bit=10)}),
+        ev_charger=frozenset(
+            {FaultBit(register=0x30AB, bit=2), FaultBit(register=0x30AD, bit=0)}
+        ),
+    )
+
+    out = telemetry(faults=faults, online=False, restart=12)
+
+    assert out["fault_4005"] == float((1 << 23) | 1)
+    assert out["fault_4007"] == float(1 << 4)
+    assert out["fault_4009"] == float(1 << 31)
+    assert out["fault_400b"] == float(1 << 10)
+    assert out["fault_30ab"] == float(1 << 2)
+    assert out["fault_30ad"] == 1.0
+    assert out["fault_count"] == 4.0
     assert out["conn_time_s"] == 12.0
+
+
+def test_without_faults_every_fault_word_and_pack_code_reads_zero():
+    out = telemetry()
+
+    words = [out[key] for key in out if key.startswith(("fault_", "pack"))]
+    assert words
+    assert set(words) == {0.0}
+
+
+def test_pack_fault_and_warning_codes_are_served_per_pack():
+    faults = FaultState(
+        packs=(PackCodes(pack=1, fault=7), PackCodes(pack=3, warning=9))
+    )
+
+    out = telemetry(faults=faults)
+
+    assert (out["pack1_fault"], out["pack1_warning"]) == (7.0, 0.0)
+    assert (out["pack2_fault"], out["pack2_warning"]) == (0.0, 0.0)
+    assert (out["pack3_fault"], out["pack3_warning"]) == (0.0, 9.0)
 
 
 def test_a_zero_source_exists_for_registers_without_a_quantity():
@@ -370,7 +429,7 @@ def test_off_grid_every_grid_side_value_reads_zero_while_the_output_carries_the_
     prefix,
 ):
     out = telemetry(
-        site={"grid_connected": False},
+        grid_connected=False,
         sample=make_sample(grid_w=0.0, backup_w=1000.0, load_w=1000.0),
         averaged=make_sample(grid_w=0.0, backup_w=1000.0, load_w=1000.0),
     )

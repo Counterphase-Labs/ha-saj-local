@@ -41,3 +41,16 @@ def test_setting_the_clock_moves_time_and_restarts_counting_from_there():
     time.now += 10
 
     assert clock.now() == target + timedelta(seconds=10)
+
+
+def test_changing_the_speed_keeps_the_time_reached_and_counts_faster_from_there():
+    time = FakeTime()
+    clock = Clock(start=START, speed=1, monotonic=time)
+    time.now += 50
+
+    clock.set_speed(speed=60)
+
+    assert clock.speed == 60
+    assert clock.now() == START + timedelta(seconds=50)
+    time.now += 2
+    assert clock.now() == START + timedelta(seconds=50 + 120)

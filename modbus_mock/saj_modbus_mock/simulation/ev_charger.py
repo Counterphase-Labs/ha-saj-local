@@ -1,16 +1,19 @@
 import dataclasses
 import enum
+import math
 from datetime import datetime, time, timedelta
 from typing import TYPE_CHECKING
 
 from saj_modbus_mock.registers import EPOCH
+from saj_modbus_mock.scenario import EvSession
 
 if TYPE_CHECKING:
-    from saj_modbus_mock.scenario import EvChargerConfig, EvSession
+    from saj_modbus_mock.scenario import EvChargerConfig
 
     from .control import Settings
 
 SECONDS_PER_HOUR = 3_600
+SECONDS_PER_DAY = 86_400
 SECONDS_PER_MINUTE = 60
 BYTE_BITS = 8
 BYTE_MASK = 0xFF
@@ -67,6 +70,15 @@ class ChargerReadout:
     max_power_w: int
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class HandState:
+    """A car plugged in by hand (None for no car, 0 for one that is complete), and
+    the end of a scenario window kept shut."""
+
+    remaining_wh: int | None
+    suppressed_until_s: int
+
+
 def _number(*, settings: Settings, key: str) -> int:
     value = settings.get(key, 0)
     return 0 if isinstance(value, str) else int(value)
@@ -78,12 +90,16 @@ def _within(*, now: time, start: time, end: time) -> bool:
     return now >= start or now < end
 
 
+def _epoch_second(*, moment: datetime) -> int:
+    return int((moment - EPOCH).total_seconds())
+
+
 def _latest_occurrence(*, moment: datetime, at: time) -> int:
     """Epoch second of the most recent time of day `at` that is not after `moment`."""
     candidate = moment.replace(hour=at.hour, minute=at.minute, second=0, microsecond=0)
     if candidate > moment:
         candidate -= timedelta(days=1)
-    return int((candidate - EPOCH).total_seconds())
+    return _epoch_second(moment=candidate)
 
 
 def _slot_power_w(*, settings: Settings, moment: datetime) -> float:
@@ -116,6 +132,9 @@ class EvCharger:
         self._settings = settings
         self._plugged = False
         self._session: EvSession | None = None
+        self._manual: EvSession | None = None
+        self._suppressed_until_s = 0
+        self._manual_start_s = 0
         self._state = ChargerState.IDLE
         self._power_w = 0.0
         self._session_energy_wh = 0.0
@@ -124,11 +143,58 @@ class EvCharger:
         self._session_end_s = 0
         self._charging_seconds = 0
 
-    def _active_session(self, *, moment: datetime) -> EvSession | None:
+    def plug_in(self, *, energy_needed_wh: int, moment: datetime) -> None:
+        """Plug a car in by hand. It stays until unplugged, complete or not."""
+        plugged_at = moment.time().replace(second=0, microsecond=0)
+        self._manual = EvSession(
+            plug_in=plugged_at, unplug=plugged_at, energy_needed_wh=energy_needed_wh
+        )
+        self._manual_start_s = _epoch_second(moment=moment.replace(second=0))
+        self._suppressed_until_s = 0
+        self._plugged = False
+
+    def unplug(self, *, moment: datetime) -> None:
+        """End the current session; an open scenario window stays shut until it ends."""
+        self._manual = None
+        self._session = None
+        window = self._scenario_session(moment=moment)
+        if window is not None:
+            self._suppressed_until_s = (
+                _latest_occurrence(moment=moment, at=window.unplug) + SECONDS_PER_DAY
+            )
+        if self._plugged:
+            self._session_end_s = _epoch_second(moment=moment)
+
+    def hand_state(self) -> HandState:
+        remaining = (
+            None
+            if self._manual is None
+            else max(
+                0, math.ceil(self._manual.energy_needed_wh - self._session_energy_wh)
+            )
+        )
+        return HandState(
+            remaining_wh=remaining, suppressed_until_s=self._suppressed_until_s
+        )
+
+    def restore_hand_state(self, *, state: HandState, moment: datetime) -> None:
+        self._manual = None
+        if state.remaining_wh is not None:
+            self.plug_in(energy_needed_wh=state.remaining_wh, moment=moment)
+        self._suppressed_until_s = state.suppressed_until_s
+
+    def _scenario_session(self, *, moment: datetime) -> EvSession | None:
         for session in self._config.sessions:
             if _within(now=moment.time(), start=session.plug_in, end=session.unplug):
                 return session
         return None
+
+    def _active_session(self, *, moment: datetime) -> EvSession | None:
+        if self._manual is not None:
+            return self._manual
+        if _epoch_second(moment=moment) < self._suppressed_until_s:
+            return None
+        return self._scenario_session(moment=moment)
 
     def _requested_power_w(self, *, moment: datetime, surplus_w: float) -> float:
         cap = float(self._config.max_power_w)
@@ -174,7 +240,11 @@ class EvCharger:
         """Apply plug-in and unplug at their scheduled seconds, idempotently."""
         session = self._active_session(moment=moment)
         if session is not None:
-            started = _latest_occurrence(moment=moment, at=session.plug_in)
+            started = (
+                self._manual_start_s
+                if session is self._manual
+                else _latest_occurrence(moment=moment, at=session.plug_in)
+            )
             if not self._plugged or started != self._session_start_s:
                 self._session_energy_wh = 0.0
                 self._charging_seconds = 0
@@ -193,6 +263,7 @@ class EvCharger:
         moment: datetime,
         surplus_w: float,
         step_s: float,
+        stopped: bool,
     ) -> float:
         """Power the charger draws at this instant; nothing is integrated."""
         self._power_w = 0.0
@@ -205,6 +276,9 @@ class EvCharger:
         remaining_wh = self._session.energy_needed_wh - self._session_energy_wh
         if remaining_wh <= 0:
             self._state = ChargerState.COMPLETE
+            return 0.0
+        if stopped:
+            self._state = ChargerState.CHARGER_SUSPENDED
             return 0.0
         requested = self._requested_power_w(moment=moment, surplus_w=surplus_w)
         if requested <= 0:

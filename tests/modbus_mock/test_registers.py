@@ -7,6 +7,7 @@ from saj_modbus_mock.registers import (
     decode,
     decode_raw,
     encode,
+    raw_range,
 )
 
 
@@ -115,3 +116,16 @@ def test_a_field_reports_its_last_address_from_its_width():
     field = Field(address=0x10, name="x", encoding=Encoding.U32)
 
     assert field.last_address == 0x11
+
+
+@pytest.mark.parametrize(
+    ("encoding", "expected"),
+    [
+        (Encoding.U16, (0, 65535)),
+        (Encoding.I16, (-32768, 32767)),
+        (Encoding.U32, (0, 4294967295)),
+        (Encoding.I32, (-2147483648, 2147483647)),
+    ],
+)
+def test_the_raw_range_is_what_the_registers_hold(encoding, expected):
+    assert raw_range(field=Field(address=0, name="x", encoding=encoding)) == expected

@@ -6,8 +6,9 @@ from saj_modbus_mock.models import MAX_PV_STRINGS
 from saj_modbus_mock.registers import Encoding, Field
 from saj_modbus_mock.simulation import control as ctl
 from saj_modbus_mock.simulation import ev_charger as ev
+from saj_modbus_mock.simulation.faults import fault_word_key
 
-from .common import BAUD_CODES, ems_combinations
+from .common import BAUD_RATES, PROTOCOL_VERSION, ems_labels
 from .fields import (
     I16,
     I32,
@@ -16,6 +17,7 @@ from .fields import (
     Shape,
     blob,
     fixed,
+    labelled,
     live,
     setting,
     text,
@@ -60,10 +62,15 @@ EV_TEXT = (
     (0x303C, "ev_software", 5, "1.0.0"),
     (0x3041, "ev_hardware", 5, "A1"),
 )
-EV_MODES = frozenset(range(5))
-EV_BAUD = BAUD_CODES
-PORT_MODES = frozenset({0, 1, 2})
-NET_MODES = frozenset({0, 1})
+EV_MODES = {
+    ev.MODE_DISABLED: "Disabled",
+    ev.MODE_FORCED: "Standard",
+    ev.MODE_TIME_BASED: "Time-based",
+    ev.MODE_PV_SURPLUS: "PV surplus",
+    ev.MODE_EMS: "EMS",
+}
+PORT_MODES = {0: "Invalid", 1: "Host", 2: "Modbus slave"}
+NET_MODES = {0: "Manual", 1: "Automatic (DHCP)"}
 EMS_DEFAULT_TIMEOUT_S = 300
 EMS_DEFAULT_CURRENT = 20.0
 EMS_SHARE_SCALE = 0.0001
@@ -199,14 +206,17 @@ def ethernet_fields() -> list[Field]:
         fixed(address=0x0F01, name="ethernet_block_length", value=0x30),
         fixed(address=0x0F02, name="ethernet_sequence", value=1),
         fixed(
-            address=0x0F03, name="ethernet_protocol_version", value=1000, scale=0.001
+            address=0x0F03,
+            name="ethernet_protocol_version",
+            value=PROTOCOL_VERSION,
+            scale=0.001,
         ),
         blob(address=0x0F04, name="ethernet_mac", value=MAC_ADDRESS, length=MAC_WORDS),
         setting(
             address=0x0F07,
             name="ethernet_net_mode",
             value=1,
-            shape=Shape(options=NET_MODES),
+            shape=labelled(labels=NET_MODES),
         ),
     ]
     for address, name, value in ETHERNET_FIELDS:
@@ -238,7 +248,12 @@ def ev_settings_fields(*, scenario: Scenario) -> list[Field]:
             value=1,
             shape=Shape(minimum=1, maximum=127),
         ),
-        setting(address=0x4B06, name="ev_baud", value=4, shape=Shape(options=EV_BAUD)),
+        setting(
+            address=0x4B06,
+            name="ev_baud",
+            value=4,
+            shape=labelled(labels=BAUD_RATES),
+        ),
         setting(
             address=0x4B07,
             name="ev_device_count",
@@ -255,7 +270,7 @@ def ev_settings_fields(*, scenario: Scenario) -> list[Field]:
             address=0x4B09,
             name="ev_port_mode",
             value=1,
-            shape=Shape(options=PORT_MODES),
+            shape=labelled(labels=PORT_MODES),
         ),
         setting(
             address=0x4B0A,
@@ -267,7 +282,7 @@ def ev_settings_fields(*, scenario: Scenario) -> list[Field]:
             address=0x4B12,
             name=ev.EV_MODE,
             value=ev.MODE_FORCED,
-            shape=Shape(options=EV_MODES),
+            shape=labelled(labels=EV_MODES),
         ),
         setting(
             address=0x4B14,
@@ -324,8 +339,18 @@ def ev_data_fields() -> list[Field]:
         live(address=0x30A6, name="ev_charge_minutes", source="ev_session_minutes"),
         live(address=0x30A7, name="ev_session_energy", source="ev_session_wh", enc=U32),
         live(address=0x30A9, name="ev_total_energy", source="ev_total_wh", enc=U32),
-        fixed(address=0x30AB, name="ev_error_one", value=0, enc=U32),
-        fixed(address=0x30AD, name="ev_error_two", value=0, enc=U32),
+        live(
+            address=0x30AB,
+            name="ev_error_one",
+            source=fault_word_key(register=0x30AB),
+            enc=U32,
+        ),
+        live(
+            address=0x30AD,
+            name="ev_error_two",
+            source=fault_word_key(register=0x30AD),
+            enc=U32,
+        ),
         live(address=0x30AF, name="ev_control_pilot_voltage", source="ev_cp_v"),
         live(address=0x30B0, name="ev_duty", source="ev_duty_percent", scale=0.001),
         live(address=0x30B6, name="ev_power_state", source="ev_on"),
@@ -364,7 +389,7 @@ def ems_fields() -> list[Field]:
             address=0x8400,
             name=ctl.EMS_ENABLE,
             value=EMS_ENABLE_INITIAL,
-            shape=Shape(options=ems_combinations()),
+            shape=labelled(labels=ems_labels()),
         ),
         setting(address=0x8401, name=ctl.EMS_TIMEOUT, value=EMS_DEFAULT_TIMEOUT_S),
         setting(

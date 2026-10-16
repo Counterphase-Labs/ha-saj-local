@@ -65,11 +65,17 @@ def blob(*, address: int, name: str, value: int, length: int) -> Field:
 class Shape:
     enc: Encoding = U16
     scale: float = 1.0
+    labels: tuple[tuple[int, str], ...] = ()
     length: int = 0
     minimum: int | None = None
     maximum: int | None = None
     options: frozenset[int] | None = None
     keepalive_bit: int = 0
+
+
+def labelled(*, labels: dict[int, str]) -> Shape:
+    """A choice limited to the named raw values."""
+    return Shape(options=frozenset(labels), labels=tuple(labels.items()))
 
 
 def setting(
@@ -92,6 +98,7 @@ def setting(
         maximum=shape.maximum,
         options=shape.options,
         keepalive_bit=shape.keepalive_bit,
+        labels=shape.labels,
     )
 
 
@@ -99,15 +106,18 @@ def command(
     *,
     address: int,
     name: str,
-    options: frozenset[int] | None = None,
+    labels: dict[int, str] | None = None,
     enc: Encoding = U16,
 ) -> Field:
+    """A write-only trigger; its labels, when given, also define its options."""
+    shape = Shape() if labels is None else labelled(labels=labels)
     return Field(
         address=address,
         name=name,
         encoding=enc,
         access=Access.WRITE_ONLY,
-        options=options,
+        options=shape.options,
+        labels=shape.labels,
     )
 
 

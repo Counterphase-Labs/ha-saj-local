@@ -30,8 +30,10 @@ services:
       context: ./modbus_mock
     volumes:
       - ./modbus_mock/scenarios/hs3-battery.yaml:/config/config.yaml:ro
+      - modbus-mock-state:/data
     ports:
       - "${SAJ_MOCK_HOST_PORT:-5020}:502"
+      - "${SAJ_MOCK_PANEL_HOST_PORT:-5080}:8080"
     restart: unless-stopped
 
   modbus-mock-h2:
@@ -39,6 +41,12 @@ services:
       context: ./modbus_mock
     volumes:
       - ./modbus_mock/scenarios/h2-battery.yaml:/config/config.yaml:ro
+      - modbus-mock-h2-state:/data
     ports:
       - "${SAJ_MOCK_H2_HOST_PORT:-5021}:502"
+      - "${SAJ_MOCK_H2_PANEL_HOST_PORT:-5081}:8080"
     restart: unless-stopped
+
+volumes:
+  modbus-mock-state:
+  modbus-mock-h2-state:

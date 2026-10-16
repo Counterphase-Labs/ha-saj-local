@@ -8,7 +8,6 @@ from saj_modbus_mock.scenario import (
     BatteryConfig,
     DeviceConfig,
     EvChargerConfig,
-    FaultsConfig,
     LoadConfig,
     MetersConfig,
     ParallelConfig,
@@ -17,6 +16,8 @@ from saj_modbus_mock.scenario import (
     SimulationConfig,
     SiteConfig,
 )
+from saj_modbus_mock.simulation.environment import Variation
+from saj_modbus_mock.simulation.faults import FaultState
 
 START = datetime(2026, 6, 21, 5, 0, tzinfo=UTC)
 
@@ -28,7 +29,9 @@ def make_scenario(*, model: str = "hs3", **changes: object) -> Scenario:
         device=DeviceConfig(
             model=spec, rated_power_w=spec.default_rated_power_w, serial_number="SN123"
         ),
-        server=ServerConfig(port=0, unit_id=1, max_clients=2, response_delay_ms=0),
+        server=ServerConfig(
+            port=0, unit_id=1, max_clients=2, response_delay_ms=0, panel_port=0
+        ),
         simulation=SimulationConfig(seed=7, start=START, speed=1.0),
         site=SiteConfig(
             grid_connected=True,
@@ -43,7 +46,8 @@ def make_scenario(*, model: str = "hs3", **changes: object) -> Scenario:
             installed=False, phases=3, max_power_w=11000, sessions=()
         ),
         parallel=ParallelConfig(inverters=1),
-        faults=FaultsConfig(inverter_fault_bits=()),
+        variation=Variation(),
+        faults=FaultState(),
     )
     for section, change in changes.items():
         current = getattr(scenario, section)

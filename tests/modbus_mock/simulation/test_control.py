@@ -26,8 +26,6 @@ def hhmm(*, hour, minute=0):
 def context(**changes):
     values = {
         "rated_power_w": RATED,
-        "grid_connected": True,
-        "has_meter_a": True,
         "inverters": 1,
     }
     values.update(changes)
@@ -40,8 +38,15 @@ def controller(*, settings=None, **changes):
     )
 
 
-def command(*, ctrl, moment=SUNDAY_NIGHT, second=1000, soc=0.5):
-    return ctrl.command(moment=moment, second=second, soc=soc)
+def command(*, ctrl, **changes):
+    arguments = {
+        "moment": SUNDAY_NIGHT,
+        "second": 1000,
+        "soc": 0.5,
+        "grid_connected": True,
+        "meter_a_online": True,
+    }
+    return ctrl.command(**{**arguments, **changes})
 
 
 def slot_settings(*, kind, window, **options):
@@ -167,7 +172,7 @@ def test_backup_mode_tops_up_to_the_reserve_and_never_discharges(
 def test_soc_bounds_come_from_the_grid_state(grid_connected, floor_key):
     settings = {floor_key: 25, ctl.CHARGE_CEILING: 90}
 
-    result = command(ctrl=controller(settings=settings, grid_connected=grid_connected))
+    result = command(ctrl=controller(settings=settings), grid_connected=grid_connected)
 
     assert result.floor_soc == 0.25
     assert result.ceiling_soc == 0.9
@@ -230,13 +235,18 @@ def test_the_unrestricted_pv_limit_is_no_limit():
 
 
 @pytest.mark.parametrize(
-    "changes",
-    [{"has_meter_a": False}, {"inverters": 2}],
+    ("inverters", "meter_a_online"),
+    [(1, False), (2, True)],
 )
-def test_the_grid_point_target_needs_meter_a_and_a_single_inverter(changes):
+def test_the_grid_point_target_needs_an_online_meter_a_and_a_single_inverter(
+    inverters, meter_a_online
+):
     settings = {ctl.EMS_ENABLE: 0b100000, ctl.EMS_GRID_TARGET: -0.05}
 
-    result = command(ctrl=controller(settings=settings, **changes))
+    result = command(
+        ctrl=controller(settings=settings, inverters=inverters),
+        meter_a_online=meter_a_online,
+    )
 
     assert result.request is None
 

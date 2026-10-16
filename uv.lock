@@ -1355,6 +1355,7 @@ source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
+    { name = "aiohttp" },
     { name = "homeassistant" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -1372,6 +1373,7 @@ lint = [
     { name = "types-pyyaml" },
 ]
 test = [
+    { name = "aiohttp" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -1382,6 +1384,7 @@ test = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "aiohttp", specifier = "==3.14.3" },
     { name = "homeassistant", specifier = "==2026.9.3" },
     { name = "pre-commit", specifier = "==4.6.2" },
     { name = "pytest", specifier = "==9.0.3" },
@@ -1399,6 +1402,7 @@ lint = [
     { name = "types-pyyaml", specifier = "==6.0.12.20260906" },
 ]
 test = [
+    { name = "aiohttp", specifier = "==3.14.3" },
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = "==1.4.0" },
     { name = "pytest-cov", specifier = "==7.1.0" },

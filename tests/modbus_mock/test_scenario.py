@@ -1,8 +1,16 @@
 from datetime import UTC, datetime, time
 
 import pytest
+import yaml
 
-from saj_modbus_mock.scenario import ScenarioError, load_scenario, parse_scenario
+from saj_modbus_mock.scenario import (
+    ScenarioError,
+    dump_scenario,
+    load_scenario,
+    parse_scenario,
+)
+from saj_modbus_mock.simulation.environment import Variation
+from saj_modbus_mock.simulation.faults import FaultBit, FaultState, PackCodes
 
 HS3 = {"device": {"model": "hs3"}}
 H2 = {"device": {"model": "h2"}}
@@ -20,6 +28,9 @@ def test_a_scenario_stating_only_the_model_gets_working_defaults():
     assert scenario.meters.meter_a
     assert not scenario.ev_charger.installed
     assert scenario.parallel.inverters == 1
+    assert scenario.server.panel_port == 8080
+    assert scenario.variation == Variation()
+    assert scenario.faults == FaultState()
 
 
 def test_models_default_to_their_own_rating_and_serial():
@@ -39,6 +50,7 @@ def test_every_section_can_be_stated():
                 "unit_id": 3,
                 "max_clients": 4,
                 "response_delay_ms": 5,
+                "panel_port": 9090,
             },
             "simulation": {
                 "seed": 9,
@@ -52,20 +64,30 @@ def test_every_section_can_be_stated():
             },
             "battery": {
                 "modules": 3,
-                "module_capacity_ah": 50,
-                "initial_soc_percent": 80,
+                "module_capacity_ah": 60,
+                "initial_soc_percent": 70,
             },
-            "meters": {"meter_a": False, "meter_b": True},
+            "meters": {"meter_a": False, "meter_b": False},
             "ev_charger": {
                 "installed": True,
-                "phases": 1,
-                "max_power_w": 7000,
+                "phases": 3,
+                "max_power_w": 9000,
                 "sessions": [
-                    {"plug_in": "08:15", "unplug": "17:00", "energy_needed_wh": 5000}
+                    {"plug_in": "08:15", "unplug": "17:00", "energy_needed_wh": 6000}
                 ],
             },
             "parallel": {"inverters": 2},
-            "faults": {"inverter_fault_bits": [3, 1, 3]},
+            "variation": {"cloud_depth": 0.9, "voltage_period_s": 30},
+            "faults": {
+                "inverter": [
+                    {"register": 0x4009, "bit": 23},
+                    {"register": 0x4005, "bit": 23},
+                    {"register": 0x4005, "bit": 23},
+                ],
+                "battery": [{"register": 0x400B, "bit": 10}],
+                "ev_charger": [{"register": 0x30AD, "bit": 0}],
+                "packs": [{"pack": 1, "fault": 2, "warning": 5}],
+            },
         },
     )
 
@@ -73,8 +95,16 @@ def test_every_section_can_be_stated():
     assert scenario.site.pv_strings == (1000,)
     assert not scenario.site.grid_connected
     assert scenario.ev_charger.sessions[0].plug_in == time(8, 15)
-    assert scenario.faults.inverter_fault_bits == (1, 3)
+    assert scenario.faults.inverter == {
+        FaultBit(register=0x4005, bit=23),
+        FaultBit(register=0x4009, bit=23),
+    }
+    assert scenario.faults.battery == {FaultBit(register=0x400B, bit=10)}
+    assert scenario.faults.ev_charger == {FaultBit(register=0x30AD, bit=0)}
+    assert scenario.faults.packs == (PackCodes(pack=1, fault=2, warning=5),)
     assert scenario.server.response_delay_ms == 5
+    assert scenario.server.panel_port == 9090
+    assert scenario.variation == Variation(cloud_depth=0.9, voltage_period_s=30)
 
 
 @pytest.mark.parametrize(
@@ -155,17 +185,82 @@ def test_every_section_can_be_stated():
             "ev_charger.sessions[0].unplug",
         ),
         ({**HS3, "parallel": {"inverters": 3}}, "parallel.inverters"),
+        ({**HS3, "server": {"panel_port": 70000}}, "server.panel_port"),
+        ({**HS3, "simulation": {"seed": 1 << 33}}, "simulation.seed"),
+        ({**HS3, "variation": {"cloud_dept": 1}}, "variation.cloud_dept"),
+        ({**HS3, "variation": {"cloud_depth": 2}}, "variation.cloud_depth"),
+        ({**HS3, "variation": {"cloud_depth": "x"}}, "variation.cloud_depth"),
+        ({**HS3, "variation": {"cloud_period_s": 90.5}}, "variation.cloud_period_s"),
+        ({**HS3, "variation": {"cloud_period_s": 1}}, "variation.cloud_period_s"),
+        ({**HS3, "variation": {"base_w": 100}}, "variation.base_w"),
+        ({**HS3, "variation": 5}, "variation"),
+        ({**HS3, "faults": {"inverter_fault_bits": [1]}}, "faults.inverter_fault_bits"),
+        ({**HS3, "faults": {"inverter": 5}}, "faults.inverter"),
+        ({**HS3, "faults": {"inverter": [5]}}, "faults.inverter[0]"),
         (
-            {**HS3, "faults": {"inverter_fault_bits": [32]}},
-            "faults.inverter_fault_bits[0]",
+            {**HS3, "faults": {"inverter": [{"bit": 1}]}},
+            "faults.inverter[0].register",
         ),
         (
-            {**HS3, "faults": {"inverter_fault_bits": ["a"]}},
-            "faults.inverter_fault_bits[0]",
+            {**HS3, "faults": {"inverter": [{"register": 0x4005}]}},
+            "faults.inverter[0].bit",
         ),
         (
-            {**HS3, "faults": {"inverter_fault_bits": [True]}},
-            "faults.inverter_fault_bits[0]",
+            {**HS3, "faults": {"inverter": [{"register": 0x400B, "bit": 1}]}},
+            "faults.inverter[0].register",
+        ),
+        (
+            {**HS3, "faults": {"inverter": [{"register": 0x4005, "bit": 32}]}},
+            "faults.inverter[0].bit",
+        ),
+        (
+            {**HS3, "faults": {"inverter": [{"register": 0x4005, "bit": True}]}},
+            "faults.inverter[0].bit",
+        ),
+        (
+            {**HS3, "faults": {"inverter": [{"register": 0x4005, "bit": 1, "x": 1}]}},
+            "faults.inverter[0].x",
+        ),
+        (
+            {
+                **HS3,
+                "battery": {"modules": 0},
+                "faults": {"battery": [{"register": 0x400B, "bit": 1}]},
+            },
+            "faults.battery",
+        ),
+        (
+            {**HS3, "faults": {"ev_charger": [{"register": 0x30AB, "bit": 1}]}},
+            "faults.ev_charger",
+        ),
+        (
+            {
+                **HS3,
+                "ev_charger": {"installed": True},
+                "faults": {"ev_charger": [{"register": 0x4005, "bit": 1}]},
+            },
+            "faults.ev_charger[0].register",
+        ),
+        (
+            {**HS3, "faults": {"packs": [{"pack": 2, "fault": 1}]}},
+            "faults.packs[0].pack",
+        ),
+        (
+            {**H2, "battery": {"modules": 5}, "faults": {"packs": [{"pack": 5}]}},
+            "faults.packs[0].pack",
+        ),
+        ({**HS3, "faults": {"packs": [{"fault": 1}]}}, "faults.packs[0].pack"),
+        (
+            {**HS3, "faults": {"packs": [{"pack": 1, "fault": 70000}]}},
+            "faults.packs[0].fault",
+        ),
+        (
+            {**HS3, "faults": {"packs": [{"pack": 1, "warning": -1}]}},
+            "faults.packs[0].warning",
+        ),
+        (
+            {**HS3, "battery": {"modules": 0}, "faults": {"packs": [{"pack": 1}]}},
+            "faults.packs",
         ),
     ],
 )
@@ -227,3 +322,60 @@ def test_an_h2_scenario_can_fit_a_meter_b():
     scenario = parse_scenario(data={**H2, "meters": {"meter_b": True}})
 
     assert scenario.meters.meter_b
+
+
+def test_the_pack_faults_of_an_h2_are_limited_by_its_battery_count():
+    scenario = parse_scenario(
+        data={
+            **H2,
+            "battery": {"modules": 5},
+            "faults": {"packs": [{"pack": 4, "fault": 9}]},
+        }
+    )
+
+    assert scenario.faults.packs == (PackCodes(pack=4, fault=9),)
+
+
+FULL_SCENARIO = {
+    "device": {"model": "hs3", "rated_power_w": 10000, "serial_number": "ABC"},
+    "server": {"port": 1502, "unit_id": 3, "panel_port": 9090},
+    "simulation": {"seed": 9, "start": "2026-01-02T03:04:05", "speed": 60},
+    "site": {
+        "grid_connected": False,
+        "pv_strings": [{"peak_power_w": 1000}, {"peak_power_w": 2000}],
+        "load": {"base_w": 100, "peak_w": 200},
+    },
+    "battery": {"modules": 3, "module_capacity_ah": 50, "initial_soc_percent": 80},
+    "meters": {"meter_a": False, "meter_b": True},
+    "ev_charger": {
+        "installed": True,
+        "phases": 1,
+        "max_power_w": 7000,
+        "sessions": [{"plug_in": "08:15", "unplug": "17:00", "energy_needed_wh": 5000}],
+    },
+    "parallel": {"inverters": 2},
+    "variation": {"cloud_depth": 0.9, "voltage_period_s": 30, "phase_imbalance": 0},
+    "faults": {
+        "inverter": [{"register": 0x4005, "bit": 23}],
+        "battery": [{"register": 0x400B, "bit": 10}],
+        "ev_charger": [{"register": 0x30AB, "bit": 2}],
+        "packs": [{"pack": 1, "fault": 2, "warning": 3}],
+    },
+}
+
+
+@pytest.mark.parametrize("data", [HS3, H2, FULL_SCENARIO])
+def test_an_exported_scenario_parses_back_to_the_same_scenario(data):
+    scenario = parse_scenario(data=data)
+
+    exported = dump_scenario(scenario=scenario)
+
+    assert parse_scenario(data=yaml.safe_load(exported)) == scenario
+
+
+def test_an_exported_scenario_writes_registers_in_hex_like_the_fault_tables():
+    exported = dump_scenario(scenario=parse_scenario(data=FULL_SCENARIO))
+
+    assert "register: 0x4005" in exported
+    assert "register: 0x400B" in exported
+    assert "register: 0x30AB" in exported

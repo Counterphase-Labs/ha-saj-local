@@ -61,6 +61,7 @@ class Field:
     maximum: int | None = None
     options: frozenset[int] | None = None
     keepalive_bit: int = 0
+    labels: tuple[tuple[int, str], ...] = ()
 
     @property
     def words(self) -> int:
@@ -91,7 +92,7 @@ def _bit_width(*, field: Field) -> int:
     return field.words * WORD_BITS
 
 
-def _raw_range(*, field: Field) -> tuple[int, int]:
+def raw_range(*, field: Field) -> tuple[int, int]:
     width = _bit_width(field=field)
     if field.encoding in _SIGNED:
         return -(1 << (width - 1)), (1 << (width - 1)) - 1
@@ -156,7 +157,7 @@ def encode(*, field: Field, value: FieldValue) -> list[int]:
         return _encode_text(field=field, text=str(value))
     if field.is_clock:
         return _encode_clock(epoch_seconds=float(value))
-    low, high = _raw_range(field=field)
+    low, high = raw_range(field=field)
     raw = min(max(round(float(value) / field.scale), low), high)
     return _split_words(raw=raw, count=field.words)
 

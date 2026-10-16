@@ -7,7 +7,18 @@ from saj_modbus_mock.simulation import control as ctl
 from saj_modbus_mock.simulation import plant as plant_module
 from saj_modbus_mock.simulation.balance import BalanceResult
 from saj_modbus_mock.simulation.control import Command
-from saj_modbus_mock.simulation.environment import EnvironmentSample
+from saj_modbus_mock.simulation.environment import (
+    EnvironmentSample,
+    LoadConfig,
+    Variation,
+)
+from saj_modbus_mock.simulation.ev_charger import HandState
+from saj_modbus_mock.simulation.faults import (
+    Effect,
+    FaultBit,
+    FaultState,
+    PackCodes,
+)
 from tests.modbus_mock.builders import START, make_scenario
 
 STEP = plant_module.INTEGRATION_STEP_S
@@ -54,9 +65,13 @@ class StubController:
     def __init__(self, *, command):
         self.command_to_give = command
         self.calls = []
+        self.grid_states = []
+        self.meter_states = []
 
-    def command(self, *, second, soc, **_unused):
+    def command(self, *, second, soc, grid_connected, meter_a_online, **_unused):
         self.calls.append((second, soc))
+        self.grid_states.append(grid_connected)
+        self.meter_states.append(meter_a_online)
         return self.command_to_give
 
 
@@ -65,10 +80,22 @@ class StubEv:
         self.power = power
         self.evaluated = []
         self.integrated = []
+        self.plugged = []
 
-    def evaluate(self, *, surplus_w, step_s, **_unused):
-        self.evaluated.append({"surplus": surplus_w, "step": step_s})
+    def evaluate(self, *, surplus_w, step_s, stopped, **_unused):
+        self.evaluated.append(
+            {"surplus": surplus_w, "step": step_s, "stopped": stopped}
+        )
         return self.power
+
+    def plug_in(self, *, energy_needed_wh, moment):
+        self.plugged.append(("in", energy_needed_wh, moment))
+
+    def unplug(self, *, moment):
+        self.plugged.append(("out", moment))
+
+    def restore_hand_state(self, *, state, moment):
+        self.plugged.append(("restore", state, moment))
 
     def integrate(self, *, power_w, step_s):
         self.integrated.append((power_w, step_s))
@@ -123,7 +150,19 @@ class Rig:
                 shed_w=0.0,
             )
 
-        monkeypatch.setattr(plant_module, "Environment", lambda **_arguments: self.env)
+        self.environments = []
+
+        def make_environment(**arguments):
+            self.environments.append(arguments)
+            return self.env
+
+        self.weight_arguments = []
+
+        def make_weights(**arguments):
+            self.weight_arguments.append(arguments)
+            return (0.5, 0.25, 0.25)
+
+        monkeypatch.setattr(plant_module, "Environment", make_environment)
         monkeypatch.setattr(plant_module, "BatteryBank", make_battery)
         monkeypatch.setattr(
             plant_module, "Controller", lambda **_arguments: self.controller
@@ -131,9 +170,7 @@ class Rig:
         monkeypatch.setattr(plant_module, "EvCharger", lambda **_arguments: self.ev)
         monkeypatch.setattr(plant_module, "EnergyLedger", make_ledger)
         monkeypatch.setattr(plant_module, "solve_balance", solve)
-        monkeypatch.setattr(
-            plant_module, "phase_weights", lambda **_arguments: (0.5, 0.25, 0.25)
-        )
+        monkeypatch.setattr(plant_module, "phase_weights", make_weights)
         monkeypatch.setattr(
             plant_module, "grid_frequency_hz", lambda **_arguments: 50.5
         )
@@ -143,7 +180,11 @@ class Rig:
             lambda **arguments: 230.0 + arguments["phase"],
         )
         self.settings = options.get("settings", {})
-        self.plant = plant_module.Plant(scenario=self.scenario, settings=self.settings)
+        self.plant = plant_module.Plant(
+            scenario=self.scenario,
+            settings=self.settings,
+            fault_effects=options.get("effects", {}),
+        )
 
     def advance(self, *, seconds):
         self.plant.advance(moment=START + timedelta(seconds=seconds))
@@ -479,18 +520,184 @@ def test_grid_connected_plants_never_shed(monkeypatch):
     assert rig.balance_inputs[-1].shedding is False
 
 
-def test_faults_keep_the_inverter_offline_until_they_are_cleared(monkeypatch):
-    rig = Rig(
-        monkeypatch=monkeypatch,
-        scenario=make_scenario(model="hs3", faults={"inverter_fault_bits": (3,)}),
+STOPPING = FaultBit(register=0x4007, bit=3)
+GRID_LOST = FaultBit(register=0x4005, bit=23)
+METER_LOST = FaultBit(register=0x4005, bit=1)
+NO_CHARGE_BIT = FaultBit(register=0x400B, bit=10)
+NO_DISCHARGE_BIT = FaultBit(register=0x400B, bit=11)
+CHARGER_BIT = FaultBit(register=0x30AB, bit=2)
+RESERVED_BIT = FaultBit(register=0x4005, bit=22)
+EFFECTS = {
+    STOPPING: frozenset({Effect.INVERTER_STOP}),
+    GRID_LOST: frozenset({Effect.GRID_LOST}),
+    METER_LOST: frozenset({Effect.METER_A_LOST}),
+    NO_CHARGE_BIT: frozenset({Effect.NO_CHARGE}),
+    NO_DISCHARGE_BIT: frozenset({Effect.NO_DISCHARGE}),
+    CHARGER_BIT: frozenset({Effect.EV_STOP}),
+    RESERVED_BIT: frozenset(),
+}
+
+
+def faulted_rig(monkeypatch, *, inverter=(), battery=(), ev=(), packs=(), **options):
+    faults = FaultState(
+        inverter=frozenset(inverter),
+        battery=frozenset(battery),
+        ev_charger=frozenset(ev),
+        packs=tuple(packs),
     )
+    scenario = options.pop("scenario", None) or make_scenario(model="hs3")
+    return Rig(
+        monkeypatch=monkeypatch,
+        scenario=scenario,
+        effects=EFFECTS,
+        **options,
+    ), faults
+
+
+def test_a_stopping_fault_keeps_the_inverter_offline_until_it_is_cleared(monkeypatch):
+    rig, faults = faulted_rig(monkeypatch, inverter=(STOPPING,))
+    rig.plant.set_faults(faults=faults)
     rig.advance(seconds=0)
     assert rig.balance_inputs[-1].online is False
+    assert rig.plant.stopped
+    assert not rig.plant.online
 
-    rig.plant.fault_bits = ()
+    rig.plant.set_faults(faults=FaultState())
     rig.advance(seconds=1)
 
     assert rig.balance_inputs[-1].online is True
+    assert not rig.plant.stopped
+
+
+def test_the_scenarios_faults_are_active_from_the_start(monkeypatch):
+    scenario = make_scenario(
+        model="hs3", faults=FaultState(inverter=frozenset({STOPPING}))
+    )
+    rig = Rig(monkeypatch=monkeypatch, scenario=scenario, effects=EFFECTS)
+
+    rig.advance(seconds=0)
+
+    assert rig.balance_inputs[-1].online is False
+
+
+@pytest.mark.parametrize(
+    ("bits", "stopped", "grid_connected"),
+    [
+        ((RESERVED_BIT,), False, True),
+        ((GRID_LOST,), False, False),
+        ((STOPPING,), True, True),
+        ((GRID_LOST, STOPPING), True, False),
+    ],
+)
+def test_grid_lost_runs_the_inverter_off_grid_while_other_faults_stop_it(
+    monkeypatch, bits, stopped, grid_connected
+):
+    rig, faults = faulted_rig(monkeypatch, inverter=bits)
+    rig.plant.set_faults(faults=faults)
+
+    rig.advance(seconds=0)
+
+    inputs = rig.balance_inputs[-1]
+    assert inputs.grid_connected is grid_connected
+    assert inputs.online is not stopped
+    assert rig.plant.grid_connected is grid_connected
+    assert rig.controller.grid_states[-1] is grid_connected
+    assert rig.plant.sample["backup_w"] == (0.0 if grid_connected else 800.0)
+
+
+@pytest.mark.parametrize(
+    ("meter_a", "bits", "online"),
+    [
+        (True, (), True),
+        (True, (METER_LOST,), False),
+        (True, (GRID_LOST,), False),
+        (False, (), False),
+    ],
+)
+def test_meter_a_is_online_only_when_fitted_connected_and_not_lost(
+    monkeypatch, meter_a, bits, online
+):
+    rig, faults = faulted_rig(
+        monkeypatch,
+        inverter=bits,
+        scenario=make_scenario(model="hs3", meters={"meter_a": meter_a}),
+    )
+    rig.plant.set_faults(faults=faults)
+
+    rig.advance(seconds=0)
+
+    assert rig.plant.meter_a_online is online
+    assert rig.controller.meter_states[-1] is online
+    assert rig.plant.stopped is False
+
+
+def test_a_scenario_that_is_off_grid_stays_off_grid_without_a_fault(monkeypatch):
+    rig = Rig(
+        monkeypatch=monkeypatch,
+        scenario=make_scenario(model="hs3", site={"grid_connected": False}),
+        effects=EFFECTS,
+    )
+
+    assert not rig.plant.grid_connected
+
+
+def test_losing_the_grid_takes_the_second_meters_pv_out_of_the_balance(monkeypatch):
+    rig, faults = faulted_rig(
+        monkeypatch,
+        inverter=(GRID_LOST,),
+        scenario=make_scenario(model="hs3", meters={"meter_b": True}),
+    )
+    rig.plant.set_faults(faults=faults)
+
+    rig.advance(seconds=0)
+
+    assert rig.balance_inputs[-1].external_pv_w == 0.0
+
+
+@pytest.mark.parametrize(
+    ("battery", "packs", "charge", "discharge"),
+    [
+        ((), (), 111.0, 222.0),
+        ((NO_CHARGE_BIT,), (), 0.0, 222.0),
+        ((NO_DISCHARGE_BIT,), (), 111.0, 0.0),
+        ((NO_CHARGE_BIT, NO_DISCHARGE_BIT), (), 0.0, 0.0),
+        ((), (PackCodes(pack=1, fault=2),), 0.0, 0.0),
+        ((), (PackCodes(pack=1, warning=2),), 111.0, 222.0),
+    ],
+)
+def test_battery_faults_and_pack_codes_block_charging_or_discharging(
+    monkeypatch, battery, packs, charge, discharge
+):
+    rig, faults = faulted_rig(monkeypatch, battery=battery, packs=packs)
+    rig.plant.set_faults(faults=faults)
+
+    rig.advance(seconds=0)
+
+    inputs = rig.balance_inputs[-1]
+    assert (inputs.max_charge_w, inputs.max_discharge_w) == (charge, discharge)
+
+
+@pytest.mark.parametrize(("ev", "stopped"), [((), False), ((CHARGER_BIT,), True)])
+def test_a_charger_fault_stops_the_charger(monkeypatch, ev, stopped):
+    rig, faults = faulted_rig(monkeypatch, ev=ev)
+    rig.plant.set_faults(faults=faults)
+
+    rig.advance(seconds=0)
+
+    assert rig.ev.evaluated[-1]["stopped"] is stopped
+
+
+def test_a_changed_fault_state_is_evaluated_again_from_the_current_second(monkeypatch):
+    rig, faults = faulted_rig(monkeypatch, inverter=(STOPPING,))
+    rig.advance(seconds=3)
+    before = len(rig.balance_inputs)
+
+    rig.plant.set_faults(faults=faults)
+    rig.advance(seconds=3)
+
+    assert len(rig.balance_inputs) > before
+    assert rig.balance_inputs[-1].online is False
+    assert rig.battery.applied == []
 
 
 def test_a_restart_countdown_is_second_accurate_between_boundaries(monkeypatch):
@@ -585,3 +792,153 @@ def test_a_jump_restarts_the_averaging_window(monkeypatch):
     rig.plant.advance(moment=START)
 
     assert rig.plant.averaged["load_w"] == pytest.approx(rig.plant.sample["load_w"])
+
+
+HELD = {"pv_w": 6000.0}
+
+
+def test_a_held_pv_power_replaces_the_generated_one_in_the_proportions_of_the_strings(
+    monkeypatch,
+):
+    rig = Rig(monkeypatch=monkeypatch)
+    rig.plant.hold(holds=HELD)
+
+    rig.advance(seconds=0)
+
+    assert rig.balance_inputs[-1].pv_available_w == 6000.0
+    assert rig.plant.sample["pv1_w"] == pytest.approx(4000.0)
+    assert rig.plant.sample["pv2_w"] == pytest.approx(2000.0)
+
+
+def test_a_held_pv_power_is_shared_equally_when_the_strings_produce_nothing(
+    monkeypatch,
+):
+    rig = Rig(monkeypatch=monkeypatch, env=StubEnvironment(strings=(0.0, 0.0)))
+    rig.plant.hold(holds=HELD)
+
+    rig.advance(seconds=0)
+
+    assert rig.plant.sample["pv1_w"] == pytest.approx(3000.0)
+    assert rig.plant.sample["pv2_w"] == pytest.approx(3000.0)
+
+
+def test_a_held_pv_power_with_no_strings_changes_nothing(monkeypatch):
+    rig = Rig(monkeypatch=monkeypatch, env=StubEnvironment(strings=()))
+    rig.plant.hold(holds=HELD)
+
+    rig.advance(seconds=0)
+
+    assert rig.balance_inputs[-1].pv_available_w == 0.0
+
+
+def test_a_held_load_feeds_the_balance_and_the_charger_surplus(monkeypatch):
+    rig = Rig(monkeypatch=monkeypatch)
+    rig.plant.hold(holds={"load_w": 1200.0})
+
+    rig.advance(seconds=0)
+
+    assert rig.balance_inputs[-1].demand_w == 1200.0
+    assert rig.ev.evaluated[-1]["surplus"] == 1800.0
+
+
+def test_held_voltage_and_frequency_replace_every_phase_and_the_line_frequency(
+    monkeypatch,
+):
+    rig = Rig(monkeypatch=monkeypatch)
+    rig.plant.hold(holds={"voltage_v": 245.0, "frequency_hz": 48.5})
+
+    rig.advance(seconds=0)
+
+    sample = rig.plant.sample
+    assert [sample[f"voltage_{phase}_v"] for phase in range(3)] == [245.0] * 3
+    assert sample["frequency_hz"] == 48.5
+
+
+def test_releasing_the_holds_returns_the_generated_values(monkeypatch):
+    rig = Rig(monkeypatch=monkeypatch)
+    rig.plant.hold(holds={"voltage_v": 245.0, "pv_w": 6000.0, "load_w": 1.0})
+    rig.advance(seconds=0)
+
+    rig.plant.hold(holds={})
+    rig.advance(seconds=1)
+
+    assert rig.plant.sample["voltage_0_v"] == 230.0
+    assert rig.balance_inputs[-1].pv_available_w == 3000.0
+    assert rig.balance_inputs[-1].demand_w == 800.0
+
+
+def test_tuning_rebuilds_the_generators_but_the_battery_counters_and_clock_carry_on(
+    monkeypatch,
+):
+    rig = Rig(monkeypatch=monkeypatch)
+    rig.advance(seconds=2 * STEP + 5)
+    ledger, battery = rig.plant.ledger, rig.plant.battery
+    applied = list(battery.applied)
+    second = rig.plant.second
+    variation = Variation(cloud_depth=0.9)
+    load = LoadConfig(base_w=10, peak_w=20)
+
+    rig.plant.tune(seed=99, variation=variation, load=load)
+
+    assert rig.environments[-1]["seed"] == 99
+    assert rig.environments[-1]["variation"] is variation
+    assert rig.environments[-1]["load"] is load
+    assert rig.weight_arguments[-1]["seed"] == 99
+    assert rig.weight_arguments[-1]["variation"] is variation
+    assert (rig.plant.seed, rig.plant.variation, rig.plant.load) == (
+        99,
+        variation,
+        load,
+    )
+    assert rig.plant.ledger is ledger
+    assert rig.plant.battery is battery
+    assert battery.applied == applied
+    assert rig.plant.second == second
+
+
+def test_the_first_environment_comes_from_the_scenarios_site_and_variation(
+    monkeypatch,
+):
+    rig = Rig(monkeypatch=monkeypatch)
+
+    arguments = rig.environments[0]
+    assert arguments["seed"] == rig.scenario.simulation.seed
+    assert arguments["string_peaks_w"] == rig.scenario.site.pv_strings
+    assert arguments["load"] == rig.scenario.site.load
+    assert arguments["variation"] == rig.scenario.variation
+
+
+def test_setting_the_charge_moves_the_battery_and_is_evaluated_from_now(monkeypatch):
+    rig = Rig(monkeypatch=monkeypatch)
+    rig.advance(seconds=3)
+    before = len(rig.controller.calls)
+
+    rig.plant.set_soc(soc=0.9)
+    rig.advance(seconds=3)
+
+    assert rig.battery.soc == 0.9
+    assert len(rig.controller.calls) > before
+    assert rig.controller.calls[-1][1] == 0.9
+
+
+def test_plugging_a_car_in_or_out_by_hand_is_passed_to_the_charger_at_the_current_time(
+    monkeypatch,
+):
+    rig = Rig(monkeypatch=monkeypatch)
+    rig.advance(seconds=3)
+
+    rig.plant.plug_ev(energy_needed_wh=5000)
+    rig.plant.unplug_ev()
+
+    moment = rig.plant.moment()
+    assert rig.ev.plugged == [("in", 5000, moment), ("out", moment)]
+
+
+def test_a_saved_hand_state_is_passed_to_the_charger_at_the_current_time(monkeypatch):
+    rig = Rig(monkeypatch=monkeypatch)
+    rig.advance(seconds=3)
+    state = HandState(remaining_wh=400, suppressed_until_s=9)
+
+    rig.plant.restore_ev(state=state)
+
+    assert rig.ev.plugged == [("restore", state, rig.plant.moment())]

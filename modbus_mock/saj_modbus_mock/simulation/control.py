@@ -90,8 +90,6 @@ class Command:
 @dataclasses.dataclass(frozen=True, slots=True)
 class SiteContext:
     rated_power_w: float
-    grid_connected: bool
-    has_meter_a: bool
     inverters: int
 
 
@@ -207,7 +205,7 @@ class Controller:
             ),
         )
 
-    def _target_request(self) -> BatteryRequest | None:
+    def _target_request(self, *, meter_a_online: bool) -> BatteryRequest | None:
         rated = self._context.rated_power_w
         bits = self.ems_active_bits()
         if bits & EMS_INVERTER_BITS:
@@ -216,15 +214,16 @@ class Controller:
         if bits & EMS_BATTERY_BIT:
             share = _number(settings=self._settings, key=EMS_BATTERY_TARGET)
             return BatteryRequest(kind=RequestKind.BATTERY, power_w=share * rated)
-        grid_capable = self._context.has_meter_a and self._context.inverters == 1
+        grid_capable = meter_a_online and self._context.inverters == 1
         if bits & EMS_GRID_BIT and grid_capable:
             share = _number(settings=self._settings, key=EMS_GRID_TARGET)
             return BatteryRequest(kind=RequestKind.GRID, power_w=share * rated)
         return None
 
-    def _bounds(self, *, command: Command) -> Command:
-        off_grid = not self._context.grid_connected
-        floor_key = DISCHARGE_FLOOR_OFF_GRID if off_grid else DISCHARGE_FLOOR_ON_GRID
+    def _bounds(self, *, command: Command, grid_connected: bool) -> Command:
+        floor_key = (
+            DISCHARGE_FLOOR_ON_GRID if grid_connected else DISCHARGE_FLOOR_OFF_GRID
+        )
         floor = _number(settings=self._settings, key=floor_key) / PERCENT
         ceiling = (
             _number(settings=self._settings, key=CHARGE_CEILING, default=PERCENT)
@@ -300,11 +299,19 @@ class Controller:
             )
         return Command()
 
-    def command(self, *, moment: datetime, second: int, soc: float) -> Command:
+    def command(
+        self,
+        *,
+        moment: datetime,
+        second: int,
+        soc: float,
+        grid_connected: bool,
+        meter_a_online: bool,
+    ) -> Command:
         self._expire_ems(second=second)
-        target = self._target_request()
+        target = self._target_request(meter_a_online=meter_a_online)
         if target is not None:
             base = self._limits(command=Command(request=target))
         else:
             base = self._mode_command(moment=moment, soc=soc)
-        return self._bounds(command=base)
+        return self._bounds(command=base, grid_connected=grid_connected)

@@ -55,6 +55,12 @@ Platform stability and correctness is paramount.
 - It must be able to be configured in various ways like an actual system (eg: HS3 can have optional EV charger, different size battery banks, dual inverters, off-grid mode etc.)
 - We do not need to completely replicate every detail of the actual hardware, but it's behaviour should be believable and consistent.
 - Deterministic randomised behaviour to simulate real world conditions (eg: fluctuating solar output that uses known seed values that are reproducible and predictable)
+- Each running simulator offers a simple web page, served by the simulator itself, that changes the simulated system while it runs, without editing its scenario or restarting it.
+- The page can set every setting a client can write, put the device into and out of every fault the model reports, shape the random variation (its bounds, depth, speed and seed), force readings such as power, state of charge and line voltage, and reset counters and the clock.
+- The page builds every control from the simulated model's own description, so a new model needs no page of its own. Each raw value is shown with a short name, so the page can be used without the protocol document at hand.
+- The page shows the current value of everything it controls, refreshed every few seconds, so a change made from Home Assistant is visible on it.
+- Changes made on the page are kept across restarts. The page can reset the simulator to its scenario, apply ready-made presets for quick smoke testing, and export the running state as a scenario.
+- The page is a development tool: plain HTML and JavaScript with no libraries, no build step and no tests of its own. The simulator code behind it is held to the same test rules as the rest of the project.
 
 ## Non Functional
 

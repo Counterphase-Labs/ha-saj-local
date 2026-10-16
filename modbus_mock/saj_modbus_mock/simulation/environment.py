@@ -48,20 +48,12 @@ STREAM_VOLTAGE = 7
 STREAM_FREQUENCY = 8
 STREAM_PHASE_WEIGHT = 9
 
-CLOUD_SLOW_PERIOD_S = 3_600
-CLOUD_FAST_PERIOD_S = 90
-CLOUD_SLOW_DEPTH = 0.35
-CLOUD_FAST_DEPTH = 0.5
 CLOUD_FAST_EXPONENT = 3
 STRING_JITTER_PERIOD_S = 45
-STRING_JITTER_DEPTH = 0.06
+PERCENT = 100.0
+SEED_MAXIMUM = 65_535
 
-LOAD_SLOW_PERIOD_S = 600
-LOAD_SLOW_DEPTH = 0.08
 LOAD_SPIKE_BUCKET_S = 300
-LOAD_SPIKE_DURATION_S = 120
-LOAD_SPIKE_CHANCE = 0.1
-LOAD_SPIKE_SHARE = 0.3
 MORNING_PEAK_HOUR = 7.5
 MORNING_WIDTH_H = 1.0
 MORNING_SHARE = 0.2
@@ -73,14 +65,251 @@ DAYTIME_PEAK_HOUR = 13.0
 DAYTIME_WIDTH_H = 3.0
 
 EXTERNAL_PV_PEAK_W = 3_000.0
-NOMINAL_VOLTAGE_V = 230.0
-VOLTAGE_SWING_V = 4.0
-VOLTAGE_PERIOD_S = 300
-NOMINAL_FREQUENCY_HZ = 50.0
-FREQUENCY_SWING_HZ = 0.08
-FREQUENCY_PERIOD_S = 120
-PHASE_IMBALANCE = 0.2
 CENTRE = 0.5
+
+GROUP_SOLAR = "Solar"
+GROUP_LOAD = "Load"
+GROUP_GRID = "Grid"
+LOAD_BASE = "base_w"
+LOAD_PEAK = "peak_w"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class LoadConfig:
+    base_w: int
+    peak_w: int
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ParameterSpec:
+    name: str
+    label: str
+    group: str
+    minimum: float
+    maximum: float
+    step: float
+    unit: str
+    integer: bool = False
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Variation:
+    """Shape, bounds and speed of the random generators; defaults are the baseline."""
+
+    peak_scale_percent: float = 100.0
+    cloud_depth: float = 0.35
+    cloud_period_s: int = 3_600
+    passing_cloud_depth: float = 0.5
+    passing_cloud_period_s: int = 90
+    string_jitter_depth: float = 0.06
+    drift_depth: float = 0.08
+    drift_period_s: int = 600
+    spike_chance: float = 0.1
+    spike_size: float = 0.3
+    spike_duration_s: int = 120
+    nominal_voltage_v: float = 230.0
+    voltage_swing_v: float = 4.0
+    voltage_period_s: int = 300
+    nominal_frequency_hz: float = 50.0
+    frequency_swing_hz: float = 0.08
+    frequency_period_s: int = 120
+    phase_imbalance: float = 0.2
+
+
+def _real(
+    *,
+    name: str,
+    label: str,
+    group: str,
+    limits: tuple[float, float, float],
+    unit: str = "",
+) -> ParameterSpec:
+    minimum, maximum, step = limits
+    return ParameterSpec(
+        name=name,
+        label=label,
+        group=group,
+        minimum=minimum,
+        maximum=maximum,
+        step=step,
+        unit=unit,
+    )
+
+
+def _whole(
+    *,
+    name: str,
+    label: str,
+    group: str,
+    limits: tuple[int, int, int],
+    unit: str,
+) -> ParameterSpec:
+    spec = _real(name=name, label=label, group=group, limits=limits, unit=unit)
+    return dataclasses.replace(spec, integer=True)
+
+
+FRACTION = (0, 1)
+PERIOD_BOUNDS = (5, 3_600)
+VARIATION_PARAMETERS = (
+    _real(
+        name="peak_scale_percent",
+        label="Peak scale",
+        group=GROUP_SOLAR,
+        limits=(0, 200, 1),
+        unit="%",
+    ),
+    _real(
+        name="cloud_depth",
+        label="Cloud cover depth",
+        group=GROUP_SOLAR,
+        limits=(*FRACTION, 0.01),
+    ),
+    _whole(
+        name="cloud_period_s",
+        label="Cloud cover period",
+        group=GROUP_SOLAR,
+        limits=(10, 14_400, 10),
+        unit="s",
+    ),
+    _real(
+        name="passing_cloud_depth",
+        label="Passing cloud depth",
+        group=GROUP_SOLAR,
+        limits=(*FRACTION, 0.01),
+    ),
+    _whole(
+        name="passing_cloud_period_s",
+        label="Passing cloud period",
+        group=GROUP_SOLAR,
+        limits=(*PERIOD_BOUNDS, 5),
+        unit="s",
+    ),
+    _real(
+        name="string_jitter_depth",
+        label="String jitter depth",
+        group=GROUP_SOLAR,
+        limits=(*FRACTION, 0.01),
+    ),
+    _whole(
+        name=LOAD_BASE,
+        label="Base load",
+        group=GROUP_LOAD,
+        limits=(0, 30_000, 50),
+        unit="W",
+    ),
+    _whole(
+        name=LOAD_PEAK,
+        label="Peak load",
+        group=GROUP_LOAD,
+        limits=(0, 50_000, 100),
+        unit="W",
+    ),
+    _real(
+        name="drift_depth",
+        label="Drift depth",
+        group=GROUP_LOAD,
+        limits=(*FRACTION, 0.01),
+    ),
+    _whole(
+        name="drift_period_s",
+        label="Drift period",
+        group=GROUP_LOAD,
+        limits=(10, 7_200, 10),
+        unit="s",
+    ),
+    _real(
+        name="spike_chance",
+        label="Spike chance",
+        group=GROUP_LOAD,
+        limits=(*FRACTION, 0.01),
+    ),
+    _real(
+        name="spike_size",
+        label="Spike size",
+        group=GROUP_LOAD,
+        limits=(*FRACTION, 0.01),
+    ),
+    _whole(
+        name="spike_duration_s",
+        label="Spike duration",
+        group=GROUP_LOAD,
+        limits=(10, LOAD_SPIKE_BUCKET_S, 10),
+        unit="s",
+    ),
+    _real(
+        name="nominal_voltage_v",
+        label="Nominal voltage",
+        group=GROUP_GRID,
+        limits=(100, 300, 1),
+        unit="V",
+    ),
+    _real(
+        name="voltage_swing_v",
+        label="Voltage swing",
+        group=GROUP_GRID,
+        limits=(0, 50, 0.5),
+        unit="V",
+    ),
+    _whole(
+        name="voltage_period_s",
+        label="Voltage period",
+        group=GROUP_GRID,
+        limits=(*PERIOD_BOUNDS, 5),
+        unit="s",
+    ),
+    _real(
+        name="nominal_frequency_hz",
+        label="Nominal frequency",
+        group=GROUP_GRID,
+        limits=(45, 65, 0.1),
+        unit="Hz",
+    ),
+    _real(
+        name="frequency_swing_hz",
+        label="Frequency swing",
+        group=GROUP_GRID,
+        limits=(0, 5, 0.01),
+        unit="Hz",
+    ),
+    _whole(
+        name="frequency_period_s",
+        label="Frequency period",
+        group=GROUP_GRID,
+        limits=(*PERIOD_BOUNDS, 5),
+        unit="s",
+    ),
+    _real(
+        name="phase_imbalance",
+        label="Phase imbalance",
+        group=GROUP_GRID,
+        limits=(*FRACTION, 0.01),
+    ),
+)
+SEED = "seed"
+SEED_PARAMETER = _whole(
+    name=SEED, label="Seed", group="Seed", limits=(0, SEED_MAXIMUM, 1), unit=""
+)
+PARAMETERS_BY_NAME = {
+    spec.name: spec for spec in (*VARIATION_PARAMETERS, SEED_PARAMETER)
+}
+
+
+class ParameterError(Exception):
+    """A parameter value that is not a number inside its bounds."""
+
+
+def checked_parameter(*, spec: ParameterSpec, value: object) -> float:
+    """The value as a number inside the parameter's bounds, else the reason."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        message = "must be a number"
+        raise ParameterError(message)
+    if spec.integer and value != int(value):
+        message = "must be an integer"
+        raise ParameterError(message)
+    if not spec.minimum <= value <= spec.maximum:
+        message = f"must be {spec.minimum:g}..{spec.maximum:g}"
+        raise ParameterError(message)
+    return int(value) if spec.integer else float(value)
 
 
 def mix(*, seed: int, stream: int, bucket: int) -> int:
@@ -133,21 +362,21 @@ def daylight_fraction(*, moment: datetime) -> float:
     return math.sin(math.pi * position) ** DAYLIGHT_SHAPE
 
 
-def cloud_factor(*, seed: int, second: int) -> float:
+def cloud_factor(*, seed: int, second: int, variation: Variation) -> float:
     slow = smooth_noise(
         seed=seed,
         stream=STREAM_CLOUD_SLOW,
         second=second,
-        period_s=CLOUD_SLOW_PERIOD_S,
+        period_s=variation.cloud_period_s,
     )
     fast = smooth_noise(
         seed=seed,
         stream=STREAM_CLOUD_FAST,
         second=second,
-        period_s=CLOUD_FAST_PERIOD_S,
+        period_s=variation.passing_cloud_period_s,
     )
-    return (1 - CLOUD_SLOW_DEPTH * slow) * (
-        1 - CLOUD_FAST_DEPTH * fast**CLOUD_FAST_EXPONENT
+    return (1 - variation.cloud_depth * slow) * (
+        1 - variation.passing_cloud_depth * fast**CLOUD_FAST_EXPONENT
     )
 
 
@@ -156,8 +385,14 @@ def _gauss(*, hour: float, centre: float, width: float) -> float:
 
 
 def household_load_w(
-    *, seed: int, moment: datetime, second: int, base_w: float, peak_w: float
+    *,
+    seed: int,
+    moment: datetime,
+    second: int,
+    load: LoadConfig,
+    variation: Variation,
 ) -> float:
+    base_w, peak_w = load.base_w, load.peak_w
     hour = seconds_of_day(moment=moment) / SECONDS_PER_HOUR
     span = peak_w - base_w
     shape = (
@@ -168,46 +403,54 @@ def household_load_w(
         + DAYTIME_SHARE
         * _gauss(hour=hour, centre=DAYTIME_PEAK_HOUR, width=DAYTIME_WIDTH_H)
     )
-    drift = LOAD_SLOW_DEPTH * smooth_noise(
+    drift = variation.drift_depth * smooth_noise(
         seed=seed,
         stream=STREAM_LOAD_SLOW,
         second=second,
-        period_s=LOAD_SLOW_PERIOD_S,
+        period_s=variation.drift_period_s,
     )
     bucket, offset = divmod(second, LOAD_SPIKE_BUCKET_S)
     spike_draw = unit_noise(seed=seed, stream=STREAM_LOAD_SPIKE, bucket=bucket)
-    spiking = spike_draw < LOAD_SPIKE_CHANCE and offset < LOAD_SPIKE_DURATION_S
-    spike = LOAD_SPIKE_SHARE if spiking else 0.0
+    spiking = (
+        spike_draw < variation.spike_chance and offset < variation.spike_duration_s
+    )
+    spike = variation.spike_size if spiking else 0.0
     return min(peak_w, base_w + span * (shape + drift + spike))
 
 
-def grid_voltage_v(*, seed: int, second: int, phase: int) -> float:
+def grid_voltage_v(
+    *, seed: int, second: int, phase: int, variation: Variation
+) -> float:
     swing = smooth_noise(
         seed=seed,
         stream=STREAM_VOLTAGE + phase * STREAM_PHASE_STRIDE,
         second=second,
-        period_s=VOLTAGE_PERIOD_S,
+        period_s=variation.voltage_period_s,
     )
-    return NOMINAL_VOLTAGE_V + (swing - CENTRE) * SWING_SPAN_FACTOR * VOLTAGE_SWING_V
+    return (
+        variation.nominal_voltage_v
+        + (swing - CENTRE) * SWING_SPAN_FACTOR * variation.voltage_swing_v
+    )
 
 
-def grid_frequency_hz(*, seed: int, second: int) -> float:
+def grid_frequency_hz(*, seed: int, second: int, variation: Variation) -> float:
     swing = smooth_noise(
         seed=seed,
         stream=STREAM_FREQUENCY,
         second=second,
-        period_s=FREQUENCY_PERIOD_S,
+        period_s=variation.frequency_period_s,
     )
     return (
-        NOMINAL_FREQUENCY_HZ + (swing - CENTRE) * SWING_SPAN_FACTOR * FREQUENCY_SWING_HZ
+        variation.nominal_frequency_hz
+        + (swing - CENTRE) * SWING_SPAN_FACTOR * variation.frequency_swing_hz
     )
 
 
-def phase_weights(*, seed: int, phases: int) -> tuple[float, ...]:
+def phase_weights(*, seed: int, phases: int, variation: Variation) -> tuple[float, ...]:
     raw = [
         1
         + (unit_noise(seed=seed, stream=STREAM_PHASE_WEIGHT, bucket=index) - CENTRE)
-        * PHASE_IMBALANCE
+        * variation.phase_imbalance
         for index in range(phases)
     ]
     total = sum(raw)
@@ -229,27 +472,32 @@ class Environment:
         *,
         seed: int,
         string_peaks_w: tuple[int, ...],
-        load_base_w: int,
-        load_peak_w: int,
+        load: LoadConfig,
+        variation: Variation,
     ) -> None:
         self._seed = seed
         self._string_peaks_w = string_peaks_w
-        self._load_base_w = load_base_w
-        self._load_peak_w = load_peak_w
+        self._load = load
+        self._variation = variation
 
     def _string_power(self, *, index: int, second: int, sky: float) -> float:
+        variation = self._variation
         jitter = smooth_noise(
             seed=self._seed,
             stream=STREAM_STRING_JITTER + index * STREAM_STRING_STRIDE,
             second=second,
             period_s=STRING_JITTER_PERIOD_S,
         )
-        factor = 1 - STRING_JITTER_DEPTH * jitter
-        return self._string_peaks_w[index] * sky * factor
+        factor = 1 - variation.string_jitter_depth * jitter
+        peak_w = self._string_peaks_w[index] * variation.peak_scale_percent / PERCENT
+        return peak_w * sky * factor
 
     def sample(self, *, moment: datetime, second: int) -> EnvironmentSample:
+        variation = self._variation
         daylight = daylight_fraction(moment=moment)
-        sky = daylight * cloud_factor(seed=self._seed, second=second)
+        sky = daylight * cloud_factor(
+            seed=self._seed, second=second, variation=variation
+        )
         strings = tuple(
             self._string_power(index=index, second=second, sky=sky)
             for index in range(len(self._string_peaks_w))
@@ -257,7 +505,7 @@ class Environment:
         external_noise = unit_noise(
             seed=self._seed,
             stream=STREAM_EXTERNAL_PV,
-            bucket=second // CLOUD_FAST_PERIOD_S,
+            bucket=second // variation.passing_cloud_period_s,
         )
         return EnvironmentSample(
             string_powers_w=strings,
@@ -265,10 +513,10 @@ class Environment:
                 seed=self._seed,
                 moment=moment,
                 second=second,
-                base_w=self._load_base_w,
-                peak_w=self._load_peak_w,
+                load=self._load,
+                variation=variation,
             ),
             external_pv_w=EXTERNAL_PV_PEAK_W
             * sky
-            * (1 - STRING_JITTER_DEPTH * external_noise),
+            * (1 - variation.string_jitter_depth * external_noise),
         )

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -94,3 +94,81 @@ def test_periods_inside_the_same_year_keep_the_year_running(later, today, month)
     assert ledger_.kwh(flow="pv", period="today") == pytest.approx(today)
     assert ledger_.kwh(flow="pv", period="month") == pytest.approx(month)
     assert ledger_.kwh(flow="pv", period="year") == pytest.approx(2.0)
+
+
+def test_the_totals_can_be_read_and_taken_back_for_the_flows_the_ledger_counts():
+    source = ledger(initial=0.0)
+    source.add(flows_w={"pv": 3_600_000.0, "load": 7_200_000.0}, dt_s=1, moment=START)
+    target = ledger(initial=5.0)
+
+    target.restore(
+        totals_wh={**source.totals_wh(), "unknown_flow": 9.0}, moment=NEXT_DAY
+    )
+
+    assert target.totals_wh() == {"pv": 1000.0, "load": 2000.0}
+    assert target.kwh(flow="pv", period="today") == 0.0
+    assert target.kwh(flow="pv", period="total") == pytest.approx(1.0)
+
+
+def test_restoring_leaves_a_flow_the_snapshot_lacks_as_it_was():
+    target = ledger(initial=5.0)
+
+    target.restore(totals_wh={"pv": 7.0}, moment=START)
+
+    assert target.totals_wh() == {"pv": 7.0, "load": 0.0}
+
+
+def test_a_reset_goes_back_to_the_start_values_and_restarts_the_periods():
+    ledger_ = ledger(initial=1000.0)
+    ledger_.add(flows_w={"pv": 3_600_000.0}, dt_s=1, moment=START)
+
+    ledger_.reset(moment=NEXT_DAY)
+
+    assert ledger_.totals_wh() == {"pv": 1000.0, "load": 0.0}
+    assert ledger_.kwh(flow="pv", period="today") == 0.0
+    assert ledger_.kwh(flow="pv", period="total") == pytest.approx(1.0)
+
+
+def test_the_period_starts_and_day_can_be_read_and_taken_back():
+    source = ledger(initial=0.0)
+    source.add(flows_w={"pv": 3_600_000.0}, dt_s=1, moment=START)
+    source.add(flows_w={"pv": 3_600_000.0}, dt_s=1, moment=NEXT_DAY)
+    target = ledger(initial=0.0)
+
+    target.restore(
+        totals_wh=source.totals_wh(),
+        moment=NEXT_YEAR,
+        starts_wh=source.starts_wh(),
+        day=source.day,
+    )
+
+    assert source.day == date(2026, 7, 1)
+    assert target.day == source.day
+    assert target.starts_wh() == source.starts_wh()
+    assert target.kwh(flow="pv", period="today") == pytest.approx(1.0)
+    assert target.kwh(flow="pv", period="month") == pytest.approx(1.0)
+    assert target.kwh(flow="pv", period="year") == pytest.approx(2.0)
+
+
+def test_a_flow_without_a_saved_start_starts_at_its_total():
+    target = ledger(initial=0.0)
+    saved = {"today": {"pv": 1.0}, "month": {"pv": 1.0}, "year": {"pv": 1.0}}
+
+    target.restore(
+        totals_wh={"pv": 5.0, "load": 8.0},
+        moment=START,
+        starts_wh=saved,
+        day=START.date(),
+    )
+
+    assert target.kwh(flow="load", period="today") == 0.0
+    assert target.kwh(flow="pv", period="today") == pytest.approx(0.004)
+
+
+def test_the_starts_that_are_read_are_a_copy():
+    ledger_ = ledger()
+
+    ledger_.starts_wh()["today"]["pv"] = 0.0
+
+    assert ledger_.kwh(flow="pv", period="today") == 0.0
+    assert ledger_.starts_wh()["today"]["pv"] == 1000.0

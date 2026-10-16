@@ -10,6 +10,14 @@ from .ev_charger import (
     ChargerReadout,
     ChargerState,
 )
+from .faults import (
+    MAX_PACKS,
+    REGISTERS,
+    Equipment,
+    FaultState,
+    fault_word_key,
+    pack_key,
+)
 from .ledger import PERIODS, EnergyLedger
 from .plant import ENERGY_FLOWS, MAX_STRINGS, Plant
 
@@ -202,13 +210,26 @@ def _silence_absent_meters(
 
 
 def operating_mode(*, plant: Plant) -> float:
-    if plant.fault_bits:
+    if plant.stopped:
         return float(MODE_FAULT)
     if not plant.online:
         return float(MODE_WAITING)
-    return float(
-        MODE_OFF_GRID if not plant.scenario.site.grid_connected else MODE_RUNNING
-    )
+    return float(MODE_RUNNING if plant.grid_connected else MODE_OFF_GRID)
+
+
+def _fault_words(*, faults: FaultState) -> dict[str, float]:
+    """Every fault register and pack word, from the equipment's fault state."""
+    out = {
+        fault_word_key(register=register): float(faults.word(register=register))
+        for registers in REGISTERS.values()
+        for register in registers
+    }
+    for number in range(1, MAX_PACKS + 1):
+        codes = faults.pack(number=number)
+        out[pack_key(pack=number, kind="fault")] = float(codes.fault)
+        out[pack_key(pack=number, kind="warning")] = float(codes.warning)
+    out["fault_count"] = float(len(faults.bits(equipment=Equipment.INVERTER)))
+    return out
 
 
 def build_telemetry(*, plant: Plant) -> dict[str, float]:
@@ -218,7 +239,7 @@ def build_telemetry(*, plant: Plant) -> dict[str, float]:
     pack_v = plant.battery.pack_voltage_v() if plant.battery.modules else 0.0
     sample = plant.sample
     out = _totals(prefix="", sample=sample, soc=soc, pack_v=pack_v, rated=rated)
-    grid_connected = scenario.site.grid_connected
+    grid_connected = plant.grid_connected
     out.update(
         _phase_values(
             prefix="",
@@ -244,7 +265,7 @@ def build_telemetry(*, plant: Plant) -> dict[str, float]:
             rated=rated,
         )
     )
-    meter_a = scenario.meters.meter_a and scenario.site.grid_connected
+    meter_a = plant.meter_a_online
     _silence_absent_meters(out=out, meter_a=meter_a, meter_b=scenario.meters.meter_b)
     out["meter_a_status"] = float(meter_a)
     out["meter_b_status"] = float(scenario.meters.meter_b)
@@ -276,7 +297,7 @@ def build_telemetry(*, plant: Plant) -> dict[str, float]:
     )
     out["ambient_temp_c"] = AMBIENT_TEMP_C
     out["bus_v"] = BUS_VOLTAGE_V
-    out["fault_word"] = float(sum(1 << bit for bit in plant.fault_bits))
+    out.update(_fault_words(faults=plant.faults))
     out["frequency_hz"] = sample["frequency_hz"]
     out["ac_phase_count"] = float(len(plant.weights))
     out["zero"] = 0.0
@@ -305,7 +326,6 @@ def _derived_keys(*, plant: Plant, out: Mapping[str, float]) -> dict[str, float]
     rated = float(plant.scenario.device.rated_power_w)
     derived["battery_modules"] = float(bank.modules)
     derived["battery_half_a"] = out["battery_a"] / BATTERY_CONTROLLERS
-    derived["fault_count"] = float(len(plant.fault_bits))
     derived["battery_user_capacity_ah"] = bank.capacity_ah * USABLE_RATIO
     derived["battery_online_mask"] = float((1 << bank.modules) - 1)
     derived["battery_protect_high_v"] = nominal * PROTECT_HIGH_RATIO

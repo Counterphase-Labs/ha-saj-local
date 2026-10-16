@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from saj_modbus_mock.models import MAX_PV_STRINGS, ModelSpec
 from saj_modbus_mock.registers import Encoding, Field
 from saj_modbus_mock.simulation import control as ctl
+from saj_modbus_mock.simulation.faults import fault_word_key, pack_key
 
 from .fields import (
     I16,
@@ -16,6 +17,7 @@ from .fields import (
     command,
     counter_group,
     fixed,
+    labelled,
     live,
     phase_key,
     setting,
@@ -36,16 +38,51 @@ ANTI_REFLUX_RAW_MAX = 1000
 FULL_SHARE_PERCENT = 100.0
 BACKUP_CHARGE_PERCENT = 4.2
 ISO_OPEN = 32767
-SOFTWARE_VERSION = 1002
-COMMAND_ONE = frozenset({1})
-CLEAR_FAULT_COMMANDS = frozenset({1, 2})
-METER_MODES = frozenset({0, 1, 2, 3, 10, 11, 12, 13, 15, 20, 21, 42})
-BAUD_CODE_COUNT = 8
-LED_MODE_COUNT = 4
-ANTI_REFLUX_MODE_COUNT = 4
-BAUD_CODES = frozenset(range(BAUD_CODE_COUNT))
-LED_MODES = frozenset(range(LED_MODE_COUNT))
-ANTI_REFLUX_MODES = frozenset(range(ANTI_REFLUX_MODE_COUNT))
+SOFTWARE_VERSION = 1.002
+PROTOCOL_VERSION = 1.0
+VERSION_STEP = 0.001
+CLEAR_FAULT_HISTORY = 1
+CLEAR_CURRENT_FAULT = 2
+CLEAR_FAULT_LABELS = {
+    CLEAR_FAULT_HISTORY: "Clear fault history",
+    CLEAR_CURRENT_FAULT: "Clear current fault",
+}
+RESTART_LABELS = {1: "Restart"}
+CLEAR_POWER_HISTORY_LABELS = {1: "Clear energy history"}
+FACTORY_RESET_LABELS = {1: "Factory reset"}
+METER_MODES = {
+    0: "No meter or CT",
+    1: "Single-phase meter",
+    2: "Three-phase three-wire meter",
+    3: "Three-phase four-wire meter",
+    10: "Three-phase four-wire meter, grid and PV",
+    11: "Two three-phase three-wire meters",
+    12: "Two three-phase four-wire meters",
+    13: "Two single-phase meters",
+    15: "Single-phase meter with two CT channels",
+    20: "Grid CT",
+    21: "Grid and PV CTs",
+    42: "Dual-circuit three-phase four-wire meter",
+}
+BAUD_RATES = {
+    0: "115200",
+    1: "57600",
+    2: "38400",
+    3: "19200",
+    4: "9600",
+    5: "4800",
+    6: "2400",
+    7: "1200",
+}
+LED_MODES = {0: "All off", 1: "Outer ring on", 2: "Inner ring on", 3: "All on"}
+ANTI_REFLUX_MODES = {
+    0: "Off",
+    1: "Total power",
+    2: "Phase current",
+    3: "Phase power",
+}
+TOU_OUTSIDE_MODES = {0: "Standby", 1: "Self-use"}
+BATTERY_PROTOCOLS = {0: "Not in use", 22: "B2 CAN", 24: "SAJ-BU3"}
 METER_MODE_THREE_PHASE_FOUR_WIRE = 3
 # Registers each phase occupies in its group, so the next phase starts after them.
 GRID_PORT_PHASE_REGISTERS = 7
@@ -62,25 +99,43 @@ THIRD_PHASE = 2
 NO_BATTERY_PROTOCOL = 0
 FACTORY_BLOCK_START = 0x8015
 FACTORY_BLOCK_END = 0x8023
-EMS_ENABLE_BITS = (1, 2, 8, 32)
+EMS_ENABLE_BIT_NAMES = (
+    (ctl.EMS_STANDARD_BIT, "Inverter"),
+    (ctl.EMS_BATTERY_BIT, "Battery"),
+    (ctl.EMS_EXIT_BIT, "Inverter timeout exit"),
+    (ctl.EMS_GRID_BIT, "Grid"),
+)
+EMS_ENABLE_OFF_LABEL = "Off"
+EMS_ENABLE_LABEL_SEPARATOR = " + "
 
 
 def _battery_protocol(*, scenario: Scenario, code: int) -> int:
     return code if scenario.battery.modules else NO_BATTERY_PROTOCOL
 
 
-def ems_combinations() -> frozenset[int]:
-    values = {0}
-    for bit in EMS_ENABLE_BITS:
-        values |= {value | bit for value in values}
-    return frozenset(values)
+def ems_labels() -> dict[int, str]:
+    """Every combination of the enable bits, named by the bits it sets."""
+    labels = {0: EMS_ENABLE_OFF_LABEL}
+    for bit, name in EMS_ENABLE_BIT_NAMES:
+        labels |= {
+            value | bit: (
+                name if value == 0 else f"{label}{EMS_ENABLE_LABEL_SEPARATOR}{name}"
+            )
+            for value, label in labels.items()
+        }
+    return dict(sorted(labels.items()))
 
 
 def information_fields(*, scenario: Scenario, spec: ModelSpec) -> list[Field]:
     fields = [
         fixed(address=0x8F00, name="device_type", value=spec.device_type),
         fixed(address=0x8F01, name="rated_power", value=scenario.device.rated_power_w),
-        fixed(address=0x8F02, name="comms_protocol_version", value=1000, scale=0.001),
+        fixed(
+            address=0x8F02,
+            name="comms_protocol_version",
+            value=PROTOCOL_VERSION,
+            scale=0.001,
+        ),
         text(
             address=0x8F03,
             name="serial_number",
@@ -106,7 +161,7 @@ def information_fields(*, scenario: Scenario, spec: ModelSpec) -> list[Field]:
         fixed(
             address=0x8F17 + index,
             name=name,
-            value=SOFTWARE_VERSION + index,
+            value=SOFTWARE_VERSION + index * VERSION_STEP,
             scale=0.001,
         )
         for index, name in enumerate(names)
@@ -116,10 +171,14 @@ def information_fields(*, scenario: Scenario, spec: ModelSpec) -> list[Field]:
 
 def factory_command_fields() -> list[Field]:
     return [
-        command(address=0x8015, name="cmd_clear_faults", options=CLEAR_FAULT_COMMANDS),
-        command(address=0x801A, name="cmd_restart", options=COMMAND_ONE),
-        command(address=0x801B, name="cmd_clear_power_history", options=COMMAND_ONE),
-        command(address=0x801C, name="cmd_factory_reset", options=COMMAND_ONE),
+        command(address=0x8015, name="cmd_clear_faults", labels=CLEAR_FAULT_LABELS),
+        command(address=0x801A, name="cmd_restart", labels=RESTART_LABELS),
+        command(
+            address=0x801B,
+            name="cmd_clear_power_history",
+            labels=CLEAR_POWER_HISTORY_LABELS,
+        ),
+        command(address=0x801C, name="cmd_factory_reset", labels=FACTORY_RESET_LABELS),
         command(address=0x8020, name="cmd_set_clock", enc=Encoding.CLOCK),
     ]
 
@@ -321,15 +380,24 @@ def _strings() -> list[Field]:
     return fields
 
 
+def _fault_register(*, address: int, name: str) -> Field:
+    return live(
+        address=address,
+        name=name,
+        source=fault_word_key(register=address),
+        enc=U32,
+    )
+
+
 def _status_and_mirrors(*, scenario: Scenario) -> list[Field]:
     rated = scenario.device.rated_power_w
     return [
         live(address=0x4000, name="device_clock", source="clock_s", enc=Encoding.CLOCK),
         live(address=0x4004, name="operating_mode", source="operating_mode"),
-        fixed(address=0x4005, name="main_fault_one", value=0, enc=U32),
-        live(address=0x4007, name="main_fault_two", source="fault_word", enc=U32),
-        fixed(address=0x4009, name="main_fault_three", value=0, enc=U32),
-        fixed(address=0x400B, name="battery_fault", value=0, enc=U32),
+        _fault_register(address=0x4005, name="main_fault_one"),
+        _fault_register(address=0x4007, name="main_fault_two"),
+        _fault_register(address=0x4009, name="main_fault_three"),
+        _fault_register(address=0x400B, name="battery_fault"),
         live(
             address=0x4010,
             name="sink_temperature",
@@ -571,7 +639,7 @@ def _power_share_fields() -> list[Field]:
 
 
 def settings_fields(
-    *, scenario: Scenario, modes: frozenset[int], extended: bool
+    *, scenario: Scenario, modes: dict[int, str], extended: bool
 ) -> list[Field]:
     meter_mode = METER_MODE_THREE_PHASE_FOUR_WIRE if scenario.meters.meter_a else 0
     percent = Shape(maximum=PERCENT_MAX)
@@ -582,7 +650,7 @@ def settings_fields(
             address=0x3630,
             name="meter_enable",
             value=meter_mode,
-            shape=Shape(options=METER_MODES),
+            shape=labelled(labels=METER_MODES),
         ),
         setting(
             address=0x3631,
@@ -600,7 +668,7 @@ def settings_fields(
             address=0x3634,
             name="master_rs485_baud",
             value=0,
-            shape=Shape(options=BAUD_CODES),
+            shape=labelled(labels=BAUD_RATES),
         ),
         setting(
             address=0x3636,
@@ -615,13 +683,14 @@ def settings_fields(
                 scenario=scenario,
                 code=scenario.device.model.battery_protocol_setting,
             ),
-            shape=Shape(
-                options=frozenset(
-                    {
+            shape=labelled(
+                labels={
+                    code: BATTERY_PROTOCOLS[code]
+                    for code in (
                         NO_BATTERY_PROTOCOL,
                         scenario.device.model.battery_protocol_setting,
-                    }
-                )
+                    )
+                }
             ),
         ),
         setting(
@@ -636,7 +705,12 @@ def settings_fields(
         setting(
             address=0x3646, name=ctl.CHARGE_CEILING, value=PERCENT_MAX, shape=percent
         ),
-        setting(address=0x3647, name=ctl.APP_MODE, value=0, shape=Shape(options=modes)),
+        setting(
+            address=0x3647,
+            name=ctl.APP_MODE,
+            value=0,
+            shape=labelled(labels=modes),
+        ),
         setting(address=0x3651, name=ctl.BACKUP_RESERVE, value=50, shape=percent),
         setting(
             address=0x365A,
@@ -654,10 +728,13 @@ def settings_fields(
             address=0x365C,
             name=ctl.ANTI_REFLUX_MODE,
             value=0,
-            shape=Shape(options=ANTI_REFLUX_MODES),
+            shape=labelled(labels=ANTI_REFLUX_MODES),
         ),
         setting(
-            address=0x365F, name=ctl.TOU_OUTSIDE_MODE, value=1, shape=Shape(maximum=1)
+            address=0x365F,
+            name=ctl.TOU_OUTSIDE_MODE,
+            value=1,
+            shape=labelled(labels=TOU_OUTSIDE_MODES),
         ),
         setting(
             address=0x3660,
@@ -666,7 +743,10 @@ def settings_fields(
             shape=Shape(maximum=1),
         ),
         setting(
-            address=0x3675, name="led_switch", value=3, shape=Shape(options=LED_MODES)
+            address=0x3675,
+            name="led_switch",
+            value=3,
+            shape=labelled(labels=LED_MODES),
         ),
     ]
     if extended:
@@ -688,7 +768,7 @@ def settings_fields(
                 address=0x3681,
                 name="slave_rs485_baud",
                 value=4,
-                shape=Shape(options=BAUD_CODES),
+                shape=labelled(labels=BAUD_RATES),
             ),
         ]
     return fields
@@ -857,15 +937,15 @@ def battery_fields(*, populated: bool) -> list[Field]:
         base = 0xA00C + MODULE_STATE_REGISTERS * module
         prefix = f"module{number}"
         fields += [
-            fixed(
+            live(
                 address=0xA002 + MODULE_ALARM_REGISTERS * module,
                 name=f"battery{number}_fault",
-                value=0,
+                source=pack_key(pack=number, kind="fault"),
             ),
-            fixed(
+            live(
                 address=0xA003 + MODULE_ALARM_REGISTERS * module,
                 name=f"battery{number}_warning",
-                value=0,
+                source=pack_key(pack=number, kind="warning"),
             ),
             reading(
                 address=base,

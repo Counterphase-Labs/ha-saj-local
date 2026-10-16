@@ -6,9 +6,32 @@ smoke_image="saj-modbus-mock-smoke-$$"
 smoke_project_name="saj-modbus-mock-smoke-$$"
 smoke_container=""
 smoke_wait_seconds=60
+smoke_panel_check='
+import json
+import time
+import urllib.request
+
+base = "http://127.0.0.1:8080"
+deadline = time.monotonic() + 15
+while True:
+    try:
+        page = urllib.request.urlopen(base + "/", timeout=3).read().decode()
+        description = json.load(
+            urllib.request.urlopen(base + "/api/description", timeout=3)
+        )
+        break
+    except OSError:
+        if time.monotonic() > deadline:
+            raise
+        time.sleep(0.5)
+assert "<html" in page.lower(), "the page did not load"
+assert description["model"]["name"], "the description names no model"
+'
 
 export SAJ_MOCK_HOST_PORT=0
 export SAJ_MOCK_H2_HOST_PORT=0
+export SAJ_MOCK_PANEL_HOST_PORT=0
+export SAJ_MOCK_H2_PANEL_HOST_PORT=0
 
 smoke_cleanup() {
     smoke_exit_status=$?
@@ -48,6 +71,7 @@ for smoke_scenario in "$smoke_repository_root"/modbus_mock/scenarios/*.yaml; do
         --health-interval 1s --health-start-period 1s \
         --volume "$smoke_scenario:/config/config.yaml:ro" "$smoke_image")
     smoke_wait_until_healthy "$smoke_container"
+    docker exec "$smoke_container" python -c "$smoke_panel_check"
     docker rm --force "$smoke_container" >/dev/null
     smoke_container=""
 done
@@ -60,4 +84,7 @@ for smoke_service in modbus-mock modbus-mock-h2; do
     docker compose --project-name "$smoke_project_name" \
         --file "$smoke_repository_root/compose.yaml" exec -T "$smoke_service" \
         python -m saj_modbus_mock healthcheck
+    docker compose --project-name "$smoke_project_name" \
+        --file "$smoke_repository_root/compose.yaml" exec -T "$smoke_service" \
+        python -c "$smoke_panel_check"
 done

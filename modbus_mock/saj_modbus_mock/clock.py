@@ -24,6 +24,15 @@ class Clock:
         elapsed = self._monotonic() - self._anchor_monotonic
         return self._anchor_time + timedelta(seconds=elapsed * self._speed)
 
+    @property
+    def speed(self) -> float:
+        return self._speed
+
+    def set_speed(self, *, speed: float) -> None:
+        """Change the speed without moving the simulated time."""
+        self.set(moment=self.now())
+        self._speed = speed
+
     def set(self, *, moment: datetime) -> None:
         self._anchor_time = moment
         self._anchor_monotonic = self._monotonic()

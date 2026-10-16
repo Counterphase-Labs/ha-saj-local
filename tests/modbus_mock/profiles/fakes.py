@@ -55,16 +55,18 @@ def fake_setting(*, address, name, value=0, shape=None):
         maximum=shape.maximum if shape else None,
         options=shape.options if shape else None,
         keepalive_bit=shape.keepalive_bit if shape else 0,
+        labels=shape.labels if shape else (),
     )
 
 
-def fake_command(*, address, name, options=None, enc=Encoding.U16):
+def fake_command(*, address, name, labels=None, enc=Encoding.U16):
     return Field(
         address=address,
         name=name,
         encoding=enc,
         access=Access.WRITE_ONLY,
-        options=options,
+        options=frozenset(labels) if labels else None,
+        labels=tuple(labels.items()) if labels else (),
     )
 
 

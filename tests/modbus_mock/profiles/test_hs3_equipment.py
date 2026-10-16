@@ -12,7 +12,7 @@ from tests.modbus_mock.profiles.fakes import isolate
 @pytest.fixture(autouse=True)
 def stubbed_helpers(monkeypatch):
     isolate(monkeypatch, eq)
-    monkeypatch.setattr(eq, "ems_combinations", lambda: frozenset({0, 99}))
+    monkeypatch.setattr(eq, "ems_labels", lambda: {0: "Off", 99: "Ninety-nine"})
 
 
 def test_average_registers_read_the_five_minute_mean_of_their_quantity():
@@ -112,6 +112,7 @@ def test_ems_starts_disabled_with_documented_defaults():
 
     assert fields[ctl.EMS_ENABLE].initial == 0
     assert fields[ctl.EMS_ENABLE].options == {0, 99}
+    assert dict(fields[ctl.EMS_ENABLE].labels) == {0: "Off", 99: "Ninety-nine"}
     assert fields[ctl.EMS_TIMEOUT].initial == 300
     assert fields[ctl.EMS_PV_LIMIT].initial == ctl.EMS_NO_PV_LIMIT
     assert (
@@ -129,3 +130,27 @@ def test_ems_targets_are_signed_fractions_of_rated_power(key):
 
     assert field.encoding is Encoding.I16
     assert field.scale == 0.0001
+
+
+@pytest.mark.parametrize(
+    ("address", "source"), [(0x30AB, "fault_30ab"), (0x30AD, "fault_30ad")]
+)
+def test_the_charger_error_registers_are_two_word_readings_of_the_fault_words(
+    address, source
+):
+    fields = by_address(fields=eq.ev_data_fields())
+
+    assert fields[address].source == source
+    assert fields[address].words == 2
+    assert not fields[address].writable
+
+
+def test_the_charger_choices_name_the_values_they_accept():
+    scenario = make_scenario(model="hs3", ev_charger={"installed": True})
+    fields = by_name(fields=eq.ev_settings_fields(scenario=scenario))
+
+    for name in (ev.EV_MODE, "ev_baud", "ev_port_mode"):
+        assert {code for code, _label in fields[name].labels} == fields[name].options
+    assert dict(fields[ev.EV_MODE].labels)[ev.MODE_FORCED]
+    ethernet = by_name(fields=eq.ethernet_fields())["ethernet_net_mode"]
+    assert {code for code, _label in ethernet.labels} == ethernet.options

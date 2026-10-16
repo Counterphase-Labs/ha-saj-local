@@ -94,7 +94,7 @@ def test_the_common_builders_are_asked_for_the_single_phase_layout(calls):
     }
     assert arguments_of(calls=calls, name="common.settings_fields") == {
         "scenario": scenario,
-        "modes": frozenset({0, 1, 2, 3, 10, 14}),
+        "modes": h2.APP_MODES,
         "extended": False,
     }
     assert arguments_of(calls=calls, name="common.meter_fields") == {

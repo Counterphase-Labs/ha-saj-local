@@ -9,6 +9,15 @@ class ExceptionCode(enum.IntEnum):
     CHARGER_UNAVAILABLE = 0x30
 
 
+class ControlError(Exception):
+    """A change from the control panel that was refused, and why."""
+
+    def __init__(self, *, key: str, reason: str) -> None:
+        super().__init__(f"{key}: {reason}")
+        self.key = key
+        self.reason = reason
+
+
 class ModbusError(Exception):
     def __init__(self, *, code: ExceptionCode) -> None:
         super().__init__(code.name)

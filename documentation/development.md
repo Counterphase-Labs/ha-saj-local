@@ -157,11 +157,12 @@ A stand-in SAJ device that Home Assistant or any Modbus client can connect to, s
 
 - **Standalone.** It shares no code with the integration. If both sides used the same register definitions, a mistake in them would be invisible.
 - **Its own Modbus layer.** Real SAJ devices break the standard: odd exception codes, blocks that reject reads across their end, a low client limit. These are what the integration has to cope with, so they are built in.
-- **One container, one device.** No state outside the process, so instances never affect each other.
-- **Fixed at start.** No runtime control. The scenario file and incoming requests are the only inputs.
+- **One container, one device.** Each instance keeps its own state, in its own volume, so instances never affect each other.
+- **Changeable while running.** The scenario is the starting point, not the only input. The control panel and incoming requests change the running system, and the scenario stays the known state to return to.
 - **Deterministic.** Weather and load depend only on the seed and the simulated time. The same scenario, instant and writes give the same values, however often a client polls.
 - **One energy balance.** Only irradiance and load are generated; everything else is derived, so the registers never contradict each other.
-- **Writes take effect.** Settings are stored, read back and acted on.
+- **Writes take effect.** Settings are stored, read back and acted on. A write from the panel goes through the same validation and handling as a Modbus write, so the integration cannot tell them apart and the panel cannot put the device in a state a client could not.
+- **The page knows nothing about models.** It builds itself from the device's description, so a new model needs no page. It is a development tool, so it is plain HTML and JavaScript with no libraries and no tests of its own, while the Python behind it is tested like the rest.
 
 ### Finding your way around
 
@@ -174,6 +175,9 @@ A stand-in SAJ device that Home Assistant or any Modbus client can connect to, s
 | Registers | `modbus_mock/saj_modbus_mock/profiles/` |
 | How values evolve | `modbus_mock/saj_modbus_mock/simulation/` |
 | Services and ports | [compose.yaml](../compose.yaml) |
+| Control panel | `panel.py` (routes), `description.py`, `presets.py` and [modbus_mock/static/index.html](../modbus_mock/static/index.html) |
+| Fault bits per model | `modbus_mock/saj_modbus_mock/profiles/fault_tables.py` |
+| Saved state | `modbus_mock/saj_modbus_mock/persistence.py` |
 
 The transport knows nothing about SAJ, the device owns addresses and access rules, a profile binds registers to simulated quantities, and the simulation does not know how values are transported. Keeping the layers apart is what lets each be unit tested alone.
 
@@ -212,7 +216,21 @@ Run the simulator's own healthcheck, which needs no client installed:
 docker compose exec modbus-mock python -m saj_modbus_mock healthcheck; echo $?
 ```
 
-Writes last until the container restarts. Addresses come from the profiles; the three above are only starting points.
+Writes are kept across restarts when the container has its volume, and reset from the panel. Addresses come from the profiles; the three above are only starting points.
+
+### The control panel
+
+Each simulator serves a web page at `http://localhost:<panel port>/`: `5080` for the HS3 and `5081` for the H2 started by `make up` (`SAJ_MOCK_PANEL_HOST_PORT` and `SAJ_MOCK_H2_PANEL_HOST_PORT` change them). Inside the container it listens on `server.panel_port`, 8080 by default. There is no authentication: the simulator is a development tool.
+
+The page exists so a developer can put the simulated system in a situation without editing a scenario and restarting. It lists the writable settings with names for the raw values, every fault bit the model reports on the equipment that is fitted (bits the document does not name are listed as reserved, so the integration's unrecognised-fault path can be tried), sliders and number fields for the random variation (the seed, with too many values for a slider, is a number field only), holds for PV, load and line readings, the state of charge, the car, the clock, presets, and reset and export. It polls every 3 seconds, so a change made from Home Assistant shows up, and it does not overwrite a control that has focus. Two clients can change things at once: the last write wins, as on a real device.
+
+Some faults do more than set their bit, where a real system would: an inverter fault that names a grid, power-stage, temperature or safety condition stops the inverter, grid lost runs it off-grid, meter communication lost silences Meter A, a battery that is too hot to charge stops charging, and an EV charger fault stops the charger. Anything else, such as a communication, display, fan or authorisation fault, and every reserved bit, only sets the bit.
+
+**Presets** return the settings, variation, seed, faults and holds to the scenario first, then apply their changes, so each gives the same conditions however the simulator was left. The simulated time, the clock speed, the energy counters and the battery state of charge carry on unless the preset sets them, so Home Assistant does not see the clock jump back or the lifetime totals fall. **Reset** is the one that rewinds everything. Equipment that is not fitted has no presets, and neither does a model whose tables do not name the fault.
+
+**Saved state.** Changes are kept across restarts in `/data/state.json`, in a named volume per service in [compose.yaml](../compose.yaml). A state saved for a different scenario is ignored, and logged once, because applying it to another system would be wrong. A state that cannot be read is ignored the same way and the file is kept. Only the settings a client can write are saved, so a change to a fixed register in the code is never masked by an old file, and the energy counters are saved with where each day, month and year started, so a restart is not a counter reset. Without a volume mounted the simulator runs as before and logs one line that changes will not be kept. **Reset** deletes the file and returns to the scenario. The Playwright stack has no volume, so each run starts from its scenario.
+
+**Export** downloads the running seed, variation, faults and clock as a scenario, so a tuned state can be committed and run again in a fresh simulator with the same variation.
 
 ### Configuring a scenario
 
@@ -229,6 +247,18 @@ battery:
 ```
 
 `simulation.speed` is simulated seconds per real second, so this runs ten simulated minutes every second from midsummer noon: useful for watching a full day of charge and discharge in a few minutes. `simulation.seed` picks the weather and load.
+
+Two sections shape the random behaviour and the faults at start. `variation` sets the bounds, depth and period of the solar, load and grid generators (the load level stays in `site.load`), and `faults` lists the active fault bits per equipment by register and bit, plus battery pack codes:
+
+```yaml
+variation:
+  cloud_depth: 0.9
+faults:
+  inverter:
+    - {register: 0x4005, bit: 23}
+  packs:
+    - {pack: 1, fault: 1}
+```
 
 A wrong key or an impossible combination stops the simulator at start and names the key:
 

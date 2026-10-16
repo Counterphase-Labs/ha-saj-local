@@ -79,11 +79,24 @@ def test_a_setting_without_a_shape_is_a_plain_unsigned_word():
 
 
 def test_a_command_can_be_written_but_not_read():
-    field = command(address=0x10, name="restart", options=frozenset({1}))
+    field = command(address=0x10, name="restart", labels={1: "Restart"})
 
     assert field.writable
     assert not field.readable
     assert field.options == {1}
+
+
+def test_a_command_without_labels_has_no_options():
+    field = command(address=0x10, name="set_clock")
+
+    assert (field.options, field.labels) == (None, ())
+
+
+def test_a_labelled_command_takes_its_options_from_its_labels():
+    field = command(address=0x10, name="clear", labels={1: "History", 2: "Current"})
+
+    assert field.options == {1, 2}
+    assert field.labels == ((1, "History"), (2, "Current"))
 
 
 @pytest.mark.parametrize(

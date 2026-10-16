@@ -18,6 +18,7 @@ class ModelSpec:
     battery_protocol_setting: int
     battery_protocol_active: int
     default_serial_number: str
+    max_fault_packs: int
 
 
 MODELS: dict[str, ModelSpec] = {
@@ -33,6 +34,7 @@ MODELS: dict[str, ModelSpec] = {
         battery_protocol_setting=24,
         battery_protocol_active=24,
         default_serial_number="HS3MOCK0000000000001",
+        max_fault_packs=1,
     ),
     H2: ModelSpec(
         name=H2,
@@ -46,5 +48,6 @@ MODELS: dict[str, ModelSpec] = {
         battery_protocol_setting=22,
         battery_protocol_active=13,
         default_serial_number="H2MOCK00000000000001",
+        max_fault_packs=4,
     ),
 }

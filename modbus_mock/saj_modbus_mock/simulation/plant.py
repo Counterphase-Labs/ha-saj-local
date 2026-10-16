@@ -7,18 +7,24 @@ from saj_modbus_mock.registers import EPOCH
 from . import control
 from .balance import BalanceInput, BalanceResult, solve_balance
 from .battery import BatteryBank
-from .control import Controller, Settings, SiteContext
+from .control import Command, Controller, Settings, SiteContext
 from .environment import (
     Environment,
     EnvironmentSample,
+    LoadConfig,
+    ParameterSpec,
+    Variation,
     grid_frequency_hz,
     grid_voltage_v,
     phase_weights,
 )
-from .ev_charger import EvCharger
+from .ev_charger import EvCharger, HandState
+from .faults import Effect, FaultBit, FaultState, active_effects
 from .ledger import EnergyLedger
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from saj_modbus_mock.scenario import Scenario
 
 # Integrated state moves in steps this long, aligned to the simulated clock.
@@ -49,6 +55,16 @@ ENERGY_FLOWS = (
     "pv_4",
 )
 MAX_STRINGS = 4
+HOLD_PV = "pv_w"
+HOLD_LOAD = "load_w"
+HOLD_VOLTAGE = "voltage_v"
+HOLD_FREQUENCY = "frequency_hz"
+HOLD_PARAMETERS = (
+    ParameterSpec(HOLD_PV, "PV power", "Holds", 0, 50_000, 100, "W"),
+    ParameterSpec(HOLD_LOAD, "Household load", "Holds", 0, 50_000, 100, "W"),
+    ParameterSpec(HOLD_VOLTAGE, "Grid voltage", "Holds", 100, 300, 1, "V"),
+    ParameterSpec(HOLD_FREQUENCY, "Grid frequency", "Holds", 45, 65, 0.1, "Hz"),
+)
 # Integrating 1000 W for one second adds 1/3600 kWh, so this flow counts hours.
 GENERATING_HOUR_RATE = 1000.0
 
@@ -70,20 +86,37 @@ def _aligned(*, second: int) -> int:
     return second - second % INTEGRATION_STEP_S
 
 
+def _split_pv(*, strings: tuple[float, ...], held_w: float) -> tuple[float, ...]:
+    """Spread a held total over the strings in the proportions they would produce."""
+    if not strings:
+        return strings
+    total = sum(strings)
+    if not total:
+        return tuple(held_w / len(strings) for _ in strings)
+    return tuple(power * held_w / total for power in strings)
+
+
 class Plant:
-    def __init__(self, *, scenario: Scenario, settings: Settings) -> None:
+    def __init__(
+        self,
+        *,
+        scenario: Scenario,
+        settings: Settings,
+        fault_effects: Mapping[FaultBit, frozenset[Effect]],
+    ) -> None:
         self.scenario = scenario
         self.settings = settings
         spec = scenario.device.model
-        site = scenario.site
+        self._fault_effects = fault_effects
         self.second = epoch_seconds(moment=scenario.simulation.start)
-        self.weights = phase_weights(seed=scenario.simulation.seed, phases=spec.phases)
-        self.environment = Environment(
-            seed=scenario.simulation.seed,
-            string_peaks_w=site.pv_strings,
-            load_base_w=site.load.base_w,
-            load_peak_w=site.load.peak_w,
-        )
+        self.seed = scenario.simulation.seed
+        self.variation = scenario.variation
+        self.load = scenario.site.load
+        self.holds: dict[str, float] = {}
+        self.faults = scenario.faults
+        self.weights: tuple[float, ...]
+        self.environment: Environment
+        self._rebuild_environment()
         battery = scenario.battery
         self.battery = BatteryBank(
             modules=battery.modules,
@@ -95,8 +128,6 @@ class Plant:
             settings=settings,
             context=SiteContext(
                 rated_power_w=float(scenario.device.rated_power_w),
-                grid_connected=site.grid_connected,
-                has_meter_a=scenario.meters.meter_a,
                 inverters=scenario.parallel.inverters,
             ),
         )
@@ -111,7 +142,6 @@ class Plant:
             },
             moment=self.moment(),
         )
-        self.fault_bits = scenario.faults.inverter_fault_bits
         self.restart_until = 0
         self.shedding = False
         self.sample: dict[str, float]
@@ -125,12 +155,84 @@ class Plant:
     def moment(self) -> datetime:
         return EPOCH + timedelta(seconds=self.second)
 
+    def _rebuild_environment(self) -> None:
+        scenario = self.scenario
+        self.weights = phase_weights(
+            seed=self.seed,
+            phases=scenario.device.model.phases,
+            variation=self.variation,
+        )
+        self.environment = Environment(
+            seed=self.seed,
+            string_peaks_w=scenario.site.pv_strings,
+            load=self.load,
+            variation=self.variation,
+        )
+
+    def _invalidate(self) -> None:
+        """Evaluate again from the current second, so a change shows at once."""
+        self._pending = None
+
+    @property
+    def effects(self) -> frozenset[Effect]:
+        return active_effects(state=self.faults, effects=self._fault_effects)
+
+    @property
+    def stopped(self) -> bool:
+        return Effect.INVERTER_STOP in self.effects
+
+    @property
+    def grid_connected(self) -> bool:
+        return self.scenario.site.grid_connected and (
+            Effect.GRID_LOST not in self.effects
+        )
+
+    @property
+    def meter_a_online(self) -> bool:
+        return (
+            self.scenario.meters.meter_a
+            and self.grid_connected
+            and Effect.METER_A_LOST not in self.effects
+        )
+
     def _online_at(self, *, second: int) -> bool:
-        return not self.fault_bits and second >= self.restart_until
+        return not self.stopped and second >= self.restart_until
 
     @property
     def online(self) -> bool:
         return self._online_at(second=self.second)
+
+    def tune(self, *, seed: int, variation: Variation, load: LoadConfig) -> None:
+        """Change the random generators. The battery, counters and clock carry on."""
+        self.seed = seed
+        self.variation = variation
+        self.load = load
+        self._rebuild_environment()
+        self._invalidate()
+
+    def hold(self, *, holds: Mapping[str, float]) -> None:
+        self.holds = dict(holds)
+        self._invalidate()
+
+    def set_faults(self, *, faults: FaultState) -> None:
+        self.faults = faults
+        self._invalidate()
+
+    def set_soc(self, *, soc: float) -> None:
+        self.battery.soc = soc
+        self._invalidate()
+
+    def plug_ev(self, *, energy_needed_wh: int) -> None:
+        self.ev.plug_in(energy_needed_wh=energy_needed_wh, moment=self.moment())
+        self._invalidate()
+
+    def unplug_ev(self) -> None:
+        self.ev.unplug(moment=self.moment())
+        self._invalidate()
+
+    def restore_ev(self, *, state: HandState) -> None:
+        self.ev.restore_hand_state(state=state, moment=self.moment())
+        self._invalidate()
 
     @property
     def restart_remaining_s(self) -> int:
@@ -184,48 +286,75 @@ class Plant:
             return False
         return self.shedding
 
+    def _held(self, *, env: EnvironmentSample) -> EnvironmentSample:
+        """Replace the generated readings the user holds, before the balance."""
+        strings = env.string_powers_w
+        if HOLD_PV in self.holds:
+            strings = _split_pv(strings=strings, held_w=self.holds[HOLD_PV])
+        return dataclasses.replace(
+            env,
+            string_powers_w=strings,
+            load_w=self.holds.get(HOLD_LOAD, env.load_w),
+        )
+
+    def _battery_limits(self, *, command: Command) -> tuple[float, float]:
+        effects = self.effects
+        charge_w = 0.0
+        if Effect.NO_CHARGE not in effects:
+            charge_w = self.battery.max_charge_w(
+                ceiling_soc=command.ceiling_soc,
+                rated_power_w=self._rated_power_w,
+                dt_s=INTEGRATION_STEP_S,
+            )
+        discharge_w = 0.0
+        if Effect.NO_DISCHARGE not in effects:
+            discharge_w = self.battery.max_discharge_w(
+                floor_soc=command.floor_soc,
+                rated_power_w=self._rated_power_w,
+                dt_s=INTEGRATION_STEP_S,
+            )
+        return charge_w, discharge_w
+
     def _evaluate(self, *, second: int, commit: bool) -> Evaluation:
         moment = EPOCH + timedelta(seconds=second)
-        site = self.scenario.site
-        env = self.environment.sample(moment=moment, second=second)
+        grid_connected = self.grid_connected
+        env = self._held(env=self.environment.sample(moment=moment, second=second))
         pv_available = sum(env.string_powers_w)
         external = (
             env.external_pv_w
-            if self.scenario.meters.meter_b and site.grid_connected
+            if self.scenario.meters.meter_b and grid_connected
             else 0.0
         )
         ev_w = self.ev.evaluate(
             moment=moment,
             surplus_w=max(0.0, pv_available - env.load_w),
             step_s=INTEGRATION_STEP_S,
+            stopped=Effect.EV_STOP in self.effects,
         )
         demand = env.load_w + ev_w
         command = self.controller.command(
-            moment=moment, second=second, soc=self.battery.soc
+            moment=moment,
+            second=second,
+            soc=self.battery.soc,
+            grid_connected=grid_connected,
+            meter_a_online=self.meter_a_online,
         )
-        shedding = not site.grid_connected and self._shedding_at(
+        shedding = not grid_connected and self._shedding_at(
             pv_w=pv_available, load_w=demand
         )
-        if commit and not site.grid_connected:
+        if commit and not grid_connected:
             self.shedding = shedding
+        max_charge_w, max_discharge_w = self._battery_limits(command=command)
         result = solve_balance(
             inputs=BalanceInput(
                 pv_available_w=pv_available,
                 external_pv_w=external,
                 demand_w=demand,
                 command=command,
-                grid_connected=site.grid_connected,
+                grid_connected=grid_connected,
                 online=self._online_at(second=second),
-                max_charge_w=self.battery.max_charge_w(
-                    ceiling_soc=command.ceiling_soc,
-                    rated_power_w=self._rated_power_w,
-                    dt_s=INTEGRATION_STEP_S,
-                ),
-                max_discharge_w=self.battery.max_discharge_w(
-                    floor_soc=command.floor_soc,
-                    rated_power_w=self._rated_power_w,
-                    dt_s=INTEGRATION_STEP_S,
-                ),
+                max_charge_w=max_charge_w,
+                max_discharge_w=max_discharge_w,
                 pack_voltage_v=self.battery.pack_voltage_v(),
                 shedding=shedding,
             ),
@@ -251,7 +380,6 @@ class Plant:
         ev_w: float,
         result: BalanceResult,
     ) -> dict[str, float]:
-        seed = self.scenario.simulation.seed
         env_strings = env.string_powers_w
         pv_available = sum(env_strings)
         share = result.pv_w / pv_available if pv_available else 0.0
@@ -263,13 +391,16 @@ class Plant:
             "grid_w": result.grid_w,
             "inverter_w": result.pv_w + result.battery_w,
             "ev_w": ev_w,
-            "backup_w": (
-                result.load_w if not self.scenario.site.grid_connected else 0.0
-            ),
+            "backup_w": result.load_w if not self.grid_connected else 0.0,
             "soc": self.battery.soc,
             "curtailed_w": result.curtailed_w,
             "shed_w": result.shed_w,
-            "frequency_hz": grid_frequency_hz(seed=seed, second=second),
+            "frequency_hz": self.holds.get(
+                HOLD_FREQUENCY,
+                grid_frequency_hz(
+                    seed=self.seed, second=second, variation=self.variation
+                ),
+            ),
         }
         for index in range(1, MAX_STRINGS + 1):
             installed = index <= len(env_strings)
@@ -277,8 +408,14 @@ class Plant:
                 env_strings[index - 1] * share if installed else 0.0
             )
         for phase in range(len(self.weights)):
-            sample[f"voltage_{phase}_v"] = grid_voltage_v(
-                seed=seed, second=second, phase=phase
+            sample[f"voltage_{phase}_v"] = self.holds.get(
+                HOLD_VOLTAGE,
+                grid_voltage_v(
+                    seed=self.seed,
+                    second=second,
+                    phase=phase,
+                    variation=self.variation,
+                ),
             )
         return sample
 

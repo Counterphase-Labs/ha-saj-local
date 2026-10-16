@@ -1,51 +1,152 @@
 import asyncio
+import logging
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from saj_modbus_mock import service as service_module
+from saj_modbus_mock.exceptions import ControlError
 from saj_modbus_mock.service import MockService
 
 from .builders import make_scenario
 
 
 class FakeServer:
-    def __init__(self, *, bank, settings):
+    def __init__(self, *, bank, settings, events):
         self.bank = bank
         self.settings = settings
-        self.events = []
+        self.events = events
         self.bound_port = 4321
 
     async def start(self):
-        self.events.append("start")
+        self.events.append("modbus start")
 
     async def close(self):
-        self.events.append("close")
+        self.events.append("modbus close")
+
+
+class FakePanel:
+    def __init__(self, *, machine, host, port, events, fail=False):
+        self.machine = machine
+        self.host = host
+        self.port = port
+        self.events = events
+        self.fail = fail
+
+    async def start(self):
+        if self.fail:
+            message = "port busy"
+            raise OSError(message)
+        self.events.append("panel start")
+
+    async def close(self):
+        self.events.append("panel close")
+
+
+class FakeStore:
+    def __init__(self, *, path, scenario_hash, saved):
+        self.path = path
+        self.scenario_hash = scenario_hash
+        self.saved = saved
+        self.deleted = 0
+
+    def load(self):
+        return self.saved
+
+    def delete(self):
+        self.deleted += 1
+
+
+class FakeSaver:
+    def __init__(self, *, store, snapshot, monotonic, events):
+        self.store = store
+        self.snapshot = snapshot
+        self.monotonic = monotonic
+        self.events = events
+        self.changes = 0
+
+    def changed(self):
+        self.changes += 1
+
+    async def run(self):
+        self.events.append("saver run")
+        try:
+            await asyncio.Event().wait()
+        finally:
+            self.events.append("saver stopped")
+
+    def flush(self):
+        self.events.append("flush")
 
 
 @pytest.fixture
 def fakes(monkeypatch):
-    made = {}
+    made = SimpleNamespace(events=[], saved=None, restore_error=None, panel_fails=False)
 
-    def machine(*, scenario, monotonic):
-        made["machine"] = SimpleNamespace(
-            scenario=scenario, monotonic=monotonic, device="the device"
-        )
-        return made["machine"]
+    class FakeMachine:
+        def __init__(self, *, scenario, monotonic, on_change, on_reset):
+            self.scenario = scenario
+            self.monotonic = monotonic
+            self.on_change = on_change
+            self.on_reset = on_reset
+            self.device = "the device"
+            self.restored = []
+            made.machine = self
+
+        def restore(self, *, snapshot):
+            if made.restore_error is not None:
+                raise made.restore_error
+            self.restored.append(snapshot)
+
+        def snapshot(self):
+            return {"snapshot": "of the machine"}
 
     def server(*, bank, settings):
-        made["server"] = FakeServer(bank=bank, settings=settings)
-        return made["server"]
+        made.server = FakeServer(bank=bank, settings=settings, events=made.events)
+        return made.server
 
-    monkeypatch.setattr(service_module, "Machine", machine)
+    def panel(*, machine, host, port):
+        made.panel = FakePanel(
+            machine=machine,
+            host=host,
+            port=port,
+            events=made.events,
+            fail=made.panel_fails,
+        )
+        return made.panel
+
+    def store(*, path, scenario_hash):
+        made.store = FakeStore(path=path, scenario_hash=scenario_hash, saved=made.saved)
+        return made.store
+
+    def saver(*, store, snapshot, monotonic):
+        made.saver = FakeSaver(
+            store=store, snapshot=snapshot, monotonic=monotonic, events=made.events
+        )
+        return made.saver
+
+    monkeypatch.setattr(service_module, "Machine", FakeMachine)
     monkeypatch.setattr(service_module, "ModbusServer", server)
+    monkeypatch.setattr(service_module, "PanelServer", panel)
+    monkeypatch.setattr(service_module, "StateStore", store)
+    monkeypatch.setattr(service_module, "Saver", saver)
+    monkeypatch.setattr(
+        service_module, "scenario_hash", lambda **_arguments: "hash-of-scenario"
+    )
     return made
 
 
 def test_building_the_service_wires_the_device_into_a_server_from_the_scenario(fakes):
     scenario = make_scenario(
         model="hs3",
-        server={"port": 1502, "unit_id": 7, "max_clients": 3, "response_delay_ms": 250},
+        server={
+            "port": 1502,
+            "unit_id": 7,
+            "max_clients": 3,
+            "response_delay_ms": 250,
+            "panel_port": 8081,
+        },
     )
 
     def clock():
@@ -53,10 +154,10 @@ def test_building_the_service_wires_the_device_into_a_server_from_the_scenario(f
 
     MockService(scenario=scenario, monotonic=clock, host="10.0.0.2")
 
-    assert fakes["machine"].scenario is scenario
-    assert fakes["machine"].monotonic is clock
-    assert fakes["server"].bank == "the device"
-    settings = fakes["server"].settings
+    assert fakes.machine.scenario is scenario
+    assert fakes.machine.monotonic is clock
+    assert fakes.server.bank == "the device"
+    settings = fakes.server.settings
     assert (settings.unit_id, settings.max_clients, settings.port, settings.host) == (
         7,
         3,
@@ -64,6 +165,72 @@ def test_building_the_service_wires_the_device_into_a_server_from_the_scenario(f
         "10.0.0.2",
     )
     assert settings.response_delay_s == 0.25
+    assert fakes.panel.machine is fakes.machine
+    assert (fakes.panel.host, fakes.panel.port) == ("10.0.0.2", 8081)
+
+
+def test_the_machines_changes_and_resets_reach_the_saver_and_the_store(fakes):
+    MockService(scenario=make_scenario(model="hs3"))
+
+    fakes.machine.on_change()
+    fakes.machine.on_reset()
+
+    assert fakes.saver.changes == 1
+    assert fakes.store.deleted == 1
+
+
+def test_the_state_file_and_the_saver_are_set_up_for_this_scenario(fakes):
+    def clock():
+        return 1.0
+
+    MockService(
+        scenario=make_scenario(model="hs3"),
+        monotonic=clock,
+        state_path=Path("/somewhere/state.json"),
+    )
+
+    assert fakes.store.path == Path("/somewhere/state.json")
+    assert fakes.store.scenario_hash == "hash-of-scenario"
+    assert fakes.saver.store is fakes.store
+    assert fakes.saver.monotonic is clock
+    assert fakes.saver.snapshot() == {"snapshot": "of the machine"}
+
+
+def test_the_state_file_defaults_to_the_data_volume(fakes):
+    MockService(scenario=make_scenario(model="hs3"))
+
+    assert fakes.store.path == Path("/data/state.json")
+
+
+def test_a_saved_state_is_restored_into_the_machine(fakes):
+    fakes.saved = {"settings": {}}
+
+    MockService(scenario=make_scenario(model="hs3"))
+
+    assert fakes.machine.restored == [{"settings": {}}]
+
+
+def test_nothing_is_restored_when_nothing_was_saved(fakes):
+    MockService(scenario=make_scenario(model="hs3"))
+
+    assert fakes.machine.restored == []
+
+
+def test_a_saved_state_the_machine_refuses_is_logged_and_the_service_still_starts(
+    fakes, caplog
+):
+    fakes.saved = {"settings": {}}
+    fakes.restore_error = ControlError(key="settings", reason="must be a mapping")
+
+    with caplog.at_level(logging.WARNING):
+        MockService(scenario=make_scenario(model="hs3"))
+
+    assert [record.getMessage() for record in caplog.records] == [
+        (
+            "saved state was refused (settings: must be a mapping);"
+            " starting from the scenario"
+        )
+    ]
 
 
 def test_the_service_reports_the_port_its_server_is_bound_to(fakes):
@@ -72,22 +239,25 @@ def test_the_service_reports_the_port_its_server_is_bound_to(fakes):
     assert service.port == 4321
 
 
-async def test_running_starts_the_server_signals_ready_and_closes_it_when_stopped(
-    fakes,
-):
+async def test_running_starts_both_servers_and_the_saver_and_stops_them_in_order(fakes):
     service = MockService(scenario=make_scenario(model="hs3"))
     running = asyncio.create_task(service.run())
     await service.ready.wait()
-    assert fakes["server"].events == ["start"]
+    assert fakes.events == ["modbus start", "panel start", "saver run"]
     assert not running.done()
 
     service.request_stop()
     await running
 
-    assert fakes["server"].events == ["start", "close"]
+    assert fakes.events[-4:] == [
+        "saver stopped",
+        "flush",
+        "panel close",
+        "modbus close",
+    ]
 
 
-async def test_the_server_is_closed_even_when_the_wait_is_cancelled(fakes):
+async def test_everything_is_closed_even_when_the_wait_is_cancelled(fakes):
     service = MockService(scenario=make_scenario(model="hs3"))
     running = asyncio.create_task(service.run())
     await service.ready.wait()
@@ -96,4 +266,21 @@ async def test_the_server_is_closed_even_when_the_wait_is_cancelled(fakes):
     with pytest.raises(asyncio.CancelledError):
         await running
 
-    assert fakes["server"].events == ["start", "close"]
+    assert fakes.events[-4:] == [
+        "saver stopped",
+        "flush",
+        "panel close",
+        "modbus close",
+    ]
+
+
+async def test_a_panel_that_cannot_start_still_closes_what_was_started_and_saves(fakes):
+    fakes.panel_fails = True
+    service = MockService(scenario=make_scenario(model="hs3"))
+
+    with pytest.raises(OSError, match="port busy"):
+        await service.run()
+
+    assert not service.ready.is_set()
+    assert "modbus start" in fakes.events
+    assert fakes.events[-3:] == ["flush", "panel close", "modbus close"]

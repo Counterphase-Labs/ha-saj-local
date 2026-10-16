@@ -117,7 +117,7 @@ def test_the_common_builders_are_asked_for_the_hs3_layout(calls):
     }
     assert arguments_of(calls=calls, name="settings_fields") == {
         "scenario": scenario,
-        "modes": frozenset({0, 1, 2, 6, 11}),
+        "modes": hs3.APP_MODES,
         "extended": True,
     }
     assert arguments_of(calls=calls, name="meter_fields") == {

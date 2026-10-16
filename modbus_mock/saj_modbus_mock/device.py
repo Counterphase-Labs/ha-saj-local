@@ -1,13 +1,16 @@
+import math
 from typing import TYPE_CHECKING, Protocol
 
-from .exceptions import ExceptionCode, ModbusError
+from .exceptions import ControlError, ExceptionCode, ModbusError
 from .registers import (
     BYTE_BITS,
+    BYTES_PER_WORD,
     Field,
     FieldValue,
     decode,
     decode_raw,
     encode,
+    raw_range,
 )
 
 if TYPE_CHECKING:
@@ -15,6 +18,7 @@ if TYPE_CHECKING:
 
 ASCII_LIMIT = 0x80
 RESERVED_WORD = 0
+WHOLE_RAW_TOLERANCE = 1e-6
 
 
 class DeviceObserver(Protocol):
@@ -33,11 +37,13 @@ class Block:
         end: int,
         fields: tuple[Field, ...],
         unavailable: ExceptionCode | None = None,
+        name: str = "",
     ) -> None:
         self.start = start
         self.end = end
         self.fields = fields
         self.unavailable = unavailable
+        self.name = name
         self._by_word: dict[int, Field] = {}
         for field in fields:
             self._claim(field=field)
@@ -79,6 +85,7 @@ class Device:
         observer: DeviceObserver,
     ) -> None:
         self._blocks = blocks
+        self._fields = {field.name: field for block in blocks for field in block.fields}
         self._overrun_code = overrun_code
         self._telemetry = telemetry
         self._settings = settings
@@ -129,12 +136,93 @@ class Device:
     def write(self, *, start: int, words: list[int]) -> None:
         block = self._locate(start=start, count=len(words))
         self._telemetry()
-        plan = self._plan_write(block=block, start=start, words=words)
+        self._commit(plan=self._plan_write(block=block, start=start, words=words))
+
+    def _commit(self, *, plan: list[tuple[Field, FieldValue]]) -> None:
         for field, value in plan:
             if field.source is None and field.readable:
                 self._settings[field.name] = value
         for field, value in plan:
             self._observer.field_written(field=field, value=value)
+
+    def field_named(self, *, name: str) -> Field | None:
+        return self._fields.get(name)
+
+    def write_named(self, *, values: Mapping[str, object]) -> None:
+        """Write fields by name, with the validation and effects of a Modbus write.
+
+        Numbers are raw register values. Nothing is written unless every one is valid.
+        """
+        plan = [
+            (field, self._named_value(field=field, value=value))
+            for field, value in self._named_fields(values=values)
+        ]
+        self._telemetry()
+        self._commit(plan=plan)
+
+    def check_stored(self, *, name: str, value: FieldValue) -> None:
+        """Refuse a stored setting that a write of it would refuse.
+
+        Stored numbers are scaled; a write takes the raw register value.
+        """
+        field = self._fields[name]
+        raw: object = value
+        if not field.is_text:
+            unscaled = float(value) / field.scale
+            if not math.isfinite(unscaled) or not math.isclose(
+                unscaled, round(unscaled), abs_tol=WHOLE_RAW_TOLERANCE
+            ):
+                raise ControlError(key=name, reason="is not a whole raw value")
+            raw = round(unscaled)
+        self._named_value(field=field, value=raw)
+
+    def _named_fields(
+        self, *, values: Mapping[str, object]
+    ) -> list[tuple[Field, object]]:
+        found = []
+        for name, value in values.items():
+            field = self._fields.get(name)
+            if field is None or not field.writable or field.is_clock:
+                raise ControlError(key=name, reason="is not a writable field")
+            found.append((field, value))
+        return found
+
+    def _named_value(self, *, field: Field, value: object) -> FieldValue:
+        try:
+            if field.is_text:
+                return self._named_text(field=field, value=value)
+            raw = self._named_raw(value=value)
+            self._check_raw(field=field, raw=raw)
+        except (TypeError, ValueError) as error:
+            raise ControlError(key=field.name, reason=str(error)) from error
+        return raw if field.scale == 1.0 else raw * field.scale
+
+    @staticmethod
+    def _named_raw(*, value: object) -> int:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int | float)
+            or not float(value).is_integer()
+        ):
+            message = "must be an integer"
+            raise ValueError(message)
+        return int(value)
+
+    def _named_text(self, *, field: Field, value: object) -> str:
+        if not isinstance(value, str):
+            message = "must be text"
+            raise TypeError(message)
+        if len(value) > field.words * BYTES_PER_WORD:
+            message = "text is too long"
+            raise ValueError(message)
+        Device._check_text(text=value)
+        return value
+
+    @staticmethod
+    def _check_text(*, text: str) -> None:
+        if any(ord(character) >= ASCII_LIMIT for character in text):
+            message = "text must be ASCII"
+            raise ValueError(message)
 
     def _plan_write(
         self,
@@ -168,13 +256,22 @@ class Device:
     def _check_range(*, field: Field, chunk: list[int]) -> None:
         if field.is_text:
             for word in chunk:
-                if max(word >> BYTE_BITS, word & ((1 << BYTE_BITS) - 1)) >= ASCII_LIMIT:
-                    message = "text must be ASCII"
-                    raise ValueError(message)
+                high, low = word >> BYTE_BITS, word & ((1 << BYTE_BITS) - 1)
+                Device._check_text(text=chr(high) + chr(low))
             return
         if field.is_clock:
             return
-        raw = decode_raw(field=field, words=chunk)
+        Device._check_raw(field=field, raw=decode_raw(field=field, words=chunk))
+
+    @staticmethod
+    def _check_raw(*, field: Field, raw: int) -> None:
+        width_low, width_high = raw_range(field=field)
+        if raw < width_low:
+            message = "value below minimum"
+            raise ValueError(message)
+        if raw > width_high:
+            message = "value above maximum"
+            raise ValueError(message)
         if field.options is not None and raw not in field.options:
             message = "value outside enumeration"
             raise ValueError(message)

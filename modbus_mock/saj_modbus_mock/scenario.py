@@ -7,16 +7,38 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from .models import MAX_PV_STRINGS, MODELS, ModelSpec
+from .simulation.environment import (
+    LOAD_BASE,
+    LOAD_PEAK,
+    SEED_MAXIMUM,
+    VARIATION_PARAMETERS,
+    LoadConfig,
+    ParameterError,
+    ParameterSpec,
+    Variation,
+    checked_parameter,
+)
+from .simulation.faults import (
+    BITS_PER_REGISTER,
+    REGISTERS,
+    WORD_MAXIMUM,
+    Equipment,
+    FaultBit,
+    FaultState,
+    PackCodes,
+    hex_address,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 MAX_PORT = 65535
 MAX_UNIT_ID = 247
-MAX_FAULT_BIT = 31
 PERCENT_MAX = 100
 TIME_OF_DAY_PATTERN = re.compile(r"\d{2}:\d{2}")
+TIME_OF_DAY_FORMAT = "%H:%M"
 DEFAULT_PORT = 502
+DEFAULT_PANEL_PORT = 8080
 DEFAULT_MAX_CLIENTS = 2
 DEFAULT_STRING_SHARE_DIVISOR = 2
 DEFAULT_SEED = 1
@@ -53,6 +75,7 @@ class ServerConfig:
     unit_id: int
     max_clients: int
     response_delay_ms: int
+    panel_port: int
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -60,12 +83,6 @@ class SimulationConfig:
     seed: int
     start: datetime
     speed: float
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class LoadConfig:
-    base_w: int
-    peak_w: int
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -109,11 +126,6 @@ class ParallelConfig:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class FaultsConfig:
-    inverter_fault_bits: tuple[int, ...]
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
 class Scenario:
     device: DeviceConfig
     server: ServerConfig
@@ -123,7 +135,8 @@ class Scenario:
     meters: MetersConfig
     ev_charger: EvChargerConfig
     parallel: ParallelConfig
-    faults: FaultsConfig
+    variation: Variation
+    faults: FaultState
 
 
 class Section:
@@ -161,6 +174,15 @@ class Section:
             raise ScenarioError(key=self.key(name=name), reason=f"must be {bound}")
         return value
 
+    def required_integer(
+        self, *, name: str, minimum: int, maximum: int | None = None
+    ) -> int:
+        if name not in self._data:
+            raise ScenarioError(key=self.key(name=name), reason="is required")
+        return self.integer(
+            name=name, default=minimum, minimum=minimum, maximum=maximum
+        )
+
     def number(self, *, name: str, default: float, minimum: float) -> float:
         value = self._raw(name=name, default=default)
         if isinstance(value, bool) or not isinstance(value, int | float):
@@ -168,6 +190,15 @@ class Section:
         if value < minimum:
             raise ScenarioError(key=self.key(name=name), reason=f"must be >= {minimum}")
         return float(value)
+
+    def parameter(self, *, spec: ParameterSpec, default: float) -> float:
+        value = self._raw(name=spec.name, default=default)
+        try:
+            return checked_parameter(spec=spec, value=value)
+        except ParameterError as error:
+            raise ScenarioError(
+                key=self.key(name=spec.name), reason=str(error)
+            ) from error
 
     def boolean(self, *, name: str, default: bool) -> bool:
         value = self._raw(name=name, default=default)
@@ -247,6 +278,9 @@ def _parse_server(*, root: Section) -> ServerConfig:
         response_delay_ms=section.integer(
             name="response_delay_ms", default=0, minimum=0
         ),
+        panel_port=section.integer(
+            name="panel_port", default=DEFAULT_PANEL_PORT, minimum=0, maximum=MAX_PORT
+        ),
     )
     section.finish()
     return config
@@ -254,7 +288,9 @@ def _parse_server(*, root: Section) -> ServerConfig:
 
 def _parse_simulation(*, root: Section) -> SimulationConfig:
     section = root.section(name="simulation")
-    seed = section.integer(name="seed", default=DEFAULT_SEED, minimum=0)
+    seed = section.integer(
+        name="seed", default=DEFAULT_SEED, minimum=0, maximum=SEED_MAXIMUM
+    )
     start_text = section.text(name="start", default=DEFAULT_START)
     speed = section.number(name="speed", default=1.0, minimum=0.0)
     section.finish()
@@ -403,36 +439,103 @@ def _parse_parallel(*, root: Section) -> ParallelConfig:
     return ParallelConfig(inverters=inverters)
 
 
-def _parse_faults(*, root: Section) -> FaultsConfig:
-    section = root.section(name="faults")
-    bits = section.items(name="inverter_fault_bits", default=[])
+def _parse_variation(*, root: Section) -> Variation:
+    section = root.section(name="variation")
+    defaults = Variation()
+    values: dict[str, Any] = {
+        spec.name: section.parameter(spec=spec, default=getattr(defaults, spec.name))
+        for spec in VARIATION_PARAMETERS
+        if spec.name not in (LOAD_BASE, LOAD_PEAK)
+    }
     section.finish()
-    for index, bit in enumerate(bits):
-        if (
-            isinstance(bit, bool)
-            or not isinstance(bit, int)
-            or not 0 <= bit <= MAX_FAULT_BIT
-        ):
+    return Variation(**values)
+
+
+def _parse_fault_bits(
+    *, faults: Section, equipment: Equipment, fitted: bool
+) -> frozenset[FaultBit]:
+    name = equipment.value
+    entries = faults.items(name=name, default=[])
+    if entries and not fitted:
+        raise ScenarioError(key=faults.key(name=name), reason="equipment is not fitted")
+    registers = REGISTERS[equipment]
+    bits = set()
+    for index, entry in enumerate(entries):
+        item = Section(path=f"{faults.key(name=name)}[{index}]", data=entry)
+        register = item.required_integer(name="register", minimum=0)
+        bit = item.required_integer(
+            name="bit", minimum=0, maximum=BITS_PER_REGISTER - 1
+        )
+        item.finish()
+        if register not in registers:
+            allowed = ", ".join(hex_address(address=known) for known in registers)
             raise ScenarioError(
-                key=f"faults.inverter_fault_bits[{index}]",
-                reason=f"must be a bit number 0..{MAX_FAULT_BIT}",
+                key=item.key(name="register"), reason=f"must be one of {allowed}"
             )
-    return FaultsConfig(inverter_fault_bits=tuple(sorted(set(bits))))
+        bits.add(FaultBit(register=register, bit=bit))
+    return frozenset(bits)
+
+
+def _parse_packs(*, faults: Section, pack_count: int) -> tuple[PackCodes, ...]:
+    entries = faults.items(name="packs", default=[])
+    if entries and not pack_count:
+        raise ScenarioError(key=faults.key(name="packs"), reason="no battery fitted")
+    codes = []
+    for index, entry in enumerate(entries):
+        item = Section(path=f"{faults.key(name='packs')}[{index}]", data=entry)
+        pack = item.required_integer(name="pack", minimum=1, maximum=pack_count)
+        fault = item.integer(name="fault", default=0, minimum=0, maximum=WORD_MAXIMUM)
+        warning = item.integer(
+            name="warning", default=0, minimum=0, maximum=WORD_MAXIMUM
+        )
+        item.finish()
+        codes.append(PackCodes(pack=pack, fault=fault, warning=warning))
+    return tuple(sorted(codes))
+
+
+def _parse_faults(
+    *,
+    root: Section,
+    device: DeviceConfig,
+    battery: BatteryConfig,
+    ev_charger: EvChargerConfig,
+) -> FaultState:
+    section = root.section(name="faults")
+    pack_count = min(battery.modules, device.model.max_fault_packs)
+    state = FaultState(
+        inverter=_parse_fault_bits(
+            faults=section, equipment=Equipment.INVERTER, fitted=True
+        ),
+        battery=_parse_fault_bits(
+            faults=section, equipment=Equipment.BATTERY, fitted=bool(battery.modules)
+        ),
+        ev_charger=_parse_fault_bits(
+            faults=section, equipment=Equipment.EV_CHARGER, fitted=ev_charger.installed
+        ),
+        packs=_parse_packs(faults=section, pack_count=pack_count),
+    )
+    section.finish()
+    return state
 
 
 def parse_scenario(*, data: object) -> Scenario:
     root = Section(path="", data=data)
     device = _parse_device(root=root)
+    battery = _parse_battery(root=root, device=device)
+    ev_charger = _parse_ev_charger(root=root, device=device)
     scenario = Scenario(
         device=device,
         server=_parse_server(root=root),
         simulation=_parse_simulation(root=root),
         site=_parse_site(root=root, device=device),
-        battery=_parse_battery(root=root, device=device),
+        battery=battery,
         meters=_parse_meters(root=root),
-        ev_charger=_parse_ev_charger(root=root, device=device),
+        ev_charger=ev_charger,
         parallel=_parse_parallel(root=root),
-        faults=_parse_faults(root=root),
+        variation=_parse_variation(root=root),
+        faults=_parse_faults(
+            root=root, device=device, battery=battery, ev_charger=ev_charger
+        ),
     )
     root.finish()
     return scenario
@@ -446,3 +549,94 @@ def load_scenario(*, path: Path) -> Scenario:
     except yaml.YAMLError as error:
         raise ScenarioError(key=str(path), reason="is not valid YAML") from error
     return parse_scenario(data=data)
+
+
+class _Register(int):
+    """A register address, written in hex like the fault tables print it."""
+
+
+class _ScenarioDumper(yaml.SafeDumper):
+    pass
+
+
+def _represent_register(dumper: yaml.SafeDumper, value: _Register) -> yaml.ScalarNode:
+    return dumper.represent_scalar("tag:yaml.org,2002:int", hex_address(address=value))
+
+
+_ScenarioDumper.add_representer(_Register, _represent_register)
+
+
+def _bit_entries(*, bits: frozenset[FaultBit]) -> list[dict[str, int]]:
+    return [
+        {"register": _Register(fault.register), "bit": fault.bit}
+        for fault in sorted(bits)
+    ]
+
+
+def _dump_faults(*, faults: FaultState) -> dict[str, Any]:
+    return {
+        Equipment.INVERTER.value: _bit_entries(bits=faults.inverter),
+        Equipment.BATTERY.value: _bit_entries(bits=faults.battery),
+        Equipment.EV_CHARGER.value: _bit_entries(bits=faults.ev_charger),
+        "packs": [
+            {"pack": codes.pack, "fault": codes.fault, "warning": codes.warning}
+            for codes in faults.packs
+        ],
+    }
+
+
+def _dump_sections(*, scenario: Scenario) -> dict[str, Any]:
+    server = scenario.server
+    simulation = scenario.simulation
+    site = scenario.site
+    return {
+        "device": {
+            "model": scenario.device.model.name,
+            "rated_power_w": scenario.device.rated_power_w,
+            "serial_number": scenario.device.serial_number,
+        },
+        "server": {
+            "port": server.port,
+            "unit_id": server.unit_id,
+            "max_clients": server.max_clients,
+            "response_delay_ms": server.response_delay_ms,
+            "panel_port": server.panel_port,
+        },
+        "simulation": {
+            "seed": simulation.seed,
+            "start": simulation.start.replace(tzinfo=None).isoformat(),
+            "speed": simulation.speed,
+        },
+        "site": {
+            "grid_connected": site.grid_connected,
+            "pv_strings": [{"peak_power_w": peak} for peak in site.pv_strings],
+            "load": dataclasses.asdict(site.load),
+        },
+        "battery": dataclasses.asdict(scenario.battery),
+        "meters": dataclasses.asdict(scenario.meters),
+        "ev_charger": {
+            "installed": scenario.ev_charger.installed,
+            "phases": scenario.ev_charger.phases,
+            "max_power_w": scenario.ev_charger.max_power_w,
+            "sessions": [
+                {
+                    "plug_in": session.plug_in.strftime(TIME_OF_DAY_FORMAT),
+                    "unplug": session.unplug.strftime(TIME_OF_DAY_FORMAT),
+                    "energy_needed_wh": session.energy_needed_wh,
+                }
+                for session in scenario.ev_charger.sessions
+            ],
+        },
+        "parallel": dataclasses.asdict(scenario.parallel),
+        "variation": dataclasses.asdict(scenario.variation),
+        "faults": _dump_faults(faults=scenario.faults),
+    }
+
+
+def dump_scenario(*, scenario: Scenario) -> str:
+    """The scenario as YAML that `parse_scenario` reads back to the same scenario."""
+    return yaml.dump(
+        _dump_sections(scenario=scenario),
+        Dumper=_ScenarioDumper,
+        sort_keys=False,
+    )

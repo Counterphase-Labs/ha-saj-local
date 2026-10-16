@@ -2,7 +2,7 @@ import pytest
 
 from saj_modbus_mock import device as device_module
 from saj_modbus_mock.device import Block, Device, initial_settings
-from saj_modbus_mock.exceptions import ExceptionCode, ModbusError
+from saj_modbus_mock.exceptions import ControlError, ExceptionCode, ModbusError
 from saj_modbus_mock.registers import Access, Encoding, Field
 
 TELEMETRY = {"pressure": 12.5}
@@ -329,3 +329,190 @@ def test_a_block_finds_the_field_covering_an_address():
     assert block.field_at(address=0x12) is None
     assert block.contains(address=0x20)
     assert not block.contains(address=0x21)
+
+
+def test_a_field_can_be_found_by_its_name():
+    device, _, _ = build()
+
+    assert device.field_named(name="small").address == 0x104
+    assert device.field_named(name="nothing") is None
+
+
+def test_a_named_write_stores_and_reports_raw_values_like_a_modbus_write():
+    device, settings, recorder = build()
+
+    device.write_named(values={"small": 5, "mode": 4.0, "label": "xy", "trigger": 1})
+
+    assert settings["small"] == 5
+    assert settings["mode"] == 4
+    assert settings["label"] == "xy"
+    assert recorder.writes == [
+        ("small", 5),
+        ("mode", 4),
+        ("label", "xy"),
+        ("trigger", 1),
+    ]
+    assert "trigger" not in settings
+
+
+def test_a_named_write_of_a_scaled_field_reports_the_scaled_value():
+    fields = (
+        Field(address=0, name="scaled", scale=0.1, access=Access.READ_WRITE, initial=0),
+    )
+    settings = {"scaled": 0}
+    recorder = Recorder()
+    device = Device(
+        blocks=(Block(start=0, end=0, fields=fields),),
+        overrun_code=ExceptionCode.BLOCK_OVERRUN,
+        telemetry=lambda: TELEMETRY,
+        settings=settings,
+        observer=recorder,
+    )
+
+    device.write_named(values={"scaled": 25})
+
+    assert settings["scaled"] == pytest.approx(2.5)
+    assert recorder.writes == [("scaled", pytest.approx(2.5))]
+
+
+def test_a_named_write_brings_the_simulation_up_to_date_first():
+    calls = []
+    fields = (Field(address=0, name="a", access=Access.READ_WRITE, initial=0),)
+    device = Device(
+        blocks=(Block(start=0, end=0, fields=fields),),
+        overrun_code=ExceptionCode.BLOCK_OVERRUN,
+        telemetry=lambda: calls.append(1) or TELEMETRY,
+        settings={"a": 0},
+        observer=Recorder(),
+    )
+
+    device.write_named(values={"a": 1})
+
+    assert calls == [1]
+
+
+@pytest.mark.parametrize(
+    ("values", "key", "reason"),
+    [
+        ({"nothing": 1}, "nothing", "is not a writable field"),
+        ({"pressure": 1}, "pressure", "is not a writable field"),
+        ({"clock": 1}, "clock", "is not a writable field"),
+        ({"small": "5"}, "small", "must be an integer"),
+        ({"small": True}, "small", "must be an integer"),
+        ({"small": 5.5}, "small", "must be an integer"),
+        ({"small": float("nan")}, "small", "must be an integer"),
+        ({"small": float("inf")}, "small", "must be an integer"),
+        ({"small": None}, "small", "must be an integer"),
+        ({"small": 1}, "small", "value below minimum"),
+        ({"small": 10}, "small", "value above maximum"),
+        ({"mode": 2}, "mode", "value outside enumeration"),
+        ({"big": 2**32}, "big", "value above maximum"),
+        ({"big": -1}, "big", "value below minimum"),
+        ({"signed": 2**15}, "signed", "value above maximum"),
+        ({"signed": -(2**15) - 1}, "signed", "value below minimum"),
+        ({"label": 5}, "label", "must be text"),
+        ({"label": "abcde"}, "label", "text is too long"),
+        ({"label": "\u00e9"}, "label", "text must be ASCII"),
+    ],
+)
+def test_a_refused_named_write_names_the_field_and_the_reason(values, key, reason):
+    device, _, _ = build()
+
+    with pytest.raises(ControlError) as caught:
+        device.write_named(values=values)
+
+    assert (caught.value.key, caught.value.reason) == (key, reason)
+    assert str(caught.value) == f"{key}: {reason}"
+
+
+@pytest.mark.parametrize(
+    ("name", "raw"),
+    [("big", 2**32 - 1), ("big", 0), ("signed", 2**15 - 1), ("signed", -(2**15))],
+)
+def test_a_named_write_accepts_the_edges_of_what_the_register_holds(name, raw):
+    device, settings, _ = build()
+
+    device.write_named(values={name: raw})
+
+    assert settings[name] == raw
+
+
+def test_a_named_write_changes_nothing_unless_every_value_is_valid():
+    device, settings, recorder = build()
+
+    with pytest.raises(ControlError):
+        device.write_named(values={"small": 5, "mode": 2})
+
+    assert settings["small"] == 2
+    assert recorder.writes == []
+
+
+def test_a_named_write_with_a_value_beyond_the_register_changes_nothing():
+    device, settings, recorder = build()
+
+    with pytest.raises(ControlError):
+        device.write_named(values={"small": 5, "big": 2**32})
+
+    assert settings["small"] == 2
+    assert recorder.writes == []
+
+
+@pytest.mark.parametrize(
+    ("name", "stored", "reason"),
+    [
+        ("mode", 2, "value outside enumeration"),
+        ("small", 1, "value below minimum"),
+        ("small", 10, "value above maximum"),
+        ("big", 2**32, "value above maximum"),
+        ("big", -1, "value below minimum"),
+        ("signed", 2**15, "value above maximum"),
+        ("signed", -(2**15) - 1, "value below minimum"),
+        ("label", "abcde", "text is too long"),
+        ("label", "\u00e9", "text must be ASCII"),
+        ("small", 2.5, "is not a whole raw value"),
+        ("small", float("inf"), "is not a whole raw value"),
+        ("small", float("nan"), "is not a whole raw value"),
+    ],
+)
+def test_a_stored_setting_a_write_would_refuse_is_refused(name, stored, reason):
+    device, _, _ = build()
+
+    with pytest.raises(ControlError) as caught:
+        device.check_stored(name=name, value=stored)
+
+    assert (caught.value.key, caught.value.reason) == (name, reason)
+
+
+@pytest.mark.parametrize(
+    ("name", "stored"),
+    [("small", 2), ("small", 9), ("mode", 4), ("big", 2**32 - 1), ("label", "xy")],
+)
+def test_a_stored_setting_a_write_would_accept_is_accepted(name, stored):
+    device, _, _ = build()
+
+    device.check_stored(name=name, value=stored)
+
+
+def test_a_stored_scaled_setting_is_checked_by_its_raw_value():
+    fields = (
+        Field(
+            address=0,
+            name="scaled",
+            access=Access.READ_WRITE,
+            scale=0.1,
+            maximum=100,
+            initial=1.0,
+        ),
+    )
+    device = Device(
+        blocks=(Block(start=0, end=0, fields=fields),),
+        overrun_code=ExceptionCode.BLOCK_OVERRUN,
+        telemetry=lambda: TELEMETRY,
+        settings={"scaled": 1.0},
+        observer=Recorder(),
+    )
+
+    device.check_stored(name="scaled", value=10.0)
+    for refused in (10.1, 2.55):
+        with pytest.raises(ControlError):
+            device.check_stored(name="scaled", value=refused)
