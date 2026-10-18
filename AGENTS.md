@@ -93,6 +93,8 @@ Use `.github/work/done/index.md` as the starting point when researching prior wo
 
 `.github/work/code-style.md` is the authoritative source for the project's coding standards and style guidelines.
 
+The roadmap is the [Roadmap project](https://github.com/orgs/Counterphase-Labs/projects/1) on GitHub (project 1, owner `Counterphase-Labs`), read and changed with `gh project`. This repository's items have the Product `saj-local`. Kind `Roadmap` marks a feature the requirements ask for; Kind `Idea` marks an idea or open question that no requirement backs yet. Status `Backlog` items are open, in the order they are expected to be worked on; `Done` items are delivered and `Dropped` items were withdrawn without being delivered.
+
 ### Implementation Plans
 
 Every new implementation plan must be written to a Markdown file in `.github/work/future/`. Use a specific, descriptive lowercase kebab-case name that identifies the planned work, such as `add-device-discovery.md`; do not use generic names such as `plan.md`. Future plans must not be placed in `.github/work/done/` or another planning directory.
