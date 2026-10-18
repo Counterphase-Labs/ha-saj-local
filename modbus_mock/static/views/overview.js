@@ -62,7 +62,7 @@ const EV_ENERGY_STEP = 100;
 function flowFor(kind, power) {
   if (Math.round(power) === 0) return { colour: "idle", towardsInverter: true, moving: false };
   if (kind === "solar" || kind === "external_pv") return { colour: "solar", towardsInverter: true, moving: true };
-  if (kind === "grid") return { colour: "grid", towardsInverter: power > 0, moving: true };
+  if (kind === "grid") return { colour: "grid", towardsInverter: power < 0, moving: true };
   if (kind === "battery") {
     return power < 0
       ? { colour: "charge", towardsInverter: false, moving: true }

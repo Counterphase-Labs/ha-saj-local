@@ -118,7 +118,7 @@ BLOCK_KEYS = ("start", "end", "code")
 READINGS = (
     ("PV power", "pv_w", "W", 0, Needs.NOTHING),
     ("Household load", HOUSEHOLD_LOAD, "W", 0, Needs.NOTHING),
-    ("Grid power", "grid_w", "W", 0, Needs.NOTHING),
+    ("Grid power", "grid_export_w", "W", 0, Needs.NOTHING),
     ("Battery power", "battery_w", "W", 0, Needs.BATTERY),
     ("Battery state of charge", "soc_percent", "%", 1, Needs.BATTERY),
     ("EV charger power", "ev_power_w", "W", 0, Needs.EV_CHARGER),

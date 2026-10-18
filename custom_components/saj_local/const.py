@@ -10,7 +10,7 @@ from .saj.models import PowerFunction
 from .saj.schedule import Cadence
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
@@ -138,7 +138,15 @@ def installation_entities(
 def enabled_entity_keys(
     *, hass: HomeAssistant, entry_id: str, registers: Iterable[Register]
 ) -> frozenset[str]:
-    registered = installation_entities(hass=hass, entry_id=entry_id)
+    return enabled_keys(
+        registered=installation_entities(hass=hass, entry_id=entry_id),
+        registers=registers,
+    )
+
+
+def enabled_keys(
+    *, registered: Mapping[str, er.RegistryEntry], registers: Iterable[Register]
+) -> frozenset[str]:
     return frozenset(
         register.key
         for register in registers

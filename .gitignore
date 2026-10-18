@@ -20,4 +20,8 @@ CLAUDE.md
 .codex
 config/*
 !config/configuration.yaml
+!config/dashboards/
+config/dashboards/*
+!config/dashboards/saj-hs3.yaml
+!config/dashboards/saj-h2.yaml
 compose.override.yaml

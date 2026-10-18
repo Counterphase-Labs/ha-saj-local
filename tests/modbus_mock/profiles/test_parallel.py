@@ -32,8 +32,8 @@ def test_powers_split_into_a_low_word_and_a_signed_high_word():
     assert fields[0x4206].encoding is Encoding.U16
     assert fields[0x420E].encoding is Encoding.I16
     assert fields[0x420C].encoding is Encoding.U16
-    assert fields[0x4206].source == "parallel_grid_w_low"
-    assert fields[0x420E].source == "parallel_grid_w_high"
+    assert fields[0x4206].source == "parallel_grid_export_w_low"
+    assert fields[0x420E].source == "parallel_grid_export_w_high"
 
 
 def test_state_of_charge_is_in_whole_percent():
@@ -58,7 +58,7 @@ def test_the_h2_layout_serves_each_power_as_one_signed_or_unsigned_register():
     assert powers
     assert all(field.source == field.name for field in powers.values())
     assert not any(name.endswith(("_low", "_high")) for name in powers)
-    assert powers["parallel_grid_w"].encoding is Encoding.I16
+    assert powers["parallel_grid_export_w"].encoding is Encoding.I16
     assert powers["parallel_pv_w"].encoding is Encoding.U16
 
 

@@ -129,6 +129,7 @@ def test_totals_come_straight_from_the_sample_and_the_average_uses_its_own_prefi
     assert out["battery_w"] == -1000.0
     assert out["grid_w"] == -1000.0
     assert out["avg_grid_w"] == -500.0
+    assert out["grid_export_w"] == 1000.0
     assert out["soc_percent"] == 50.0
     assert out["avg_soc_percent"] == 40.0
     assert out["clock_s"] == 12345.0
@@ -139,7 +140,7 @@ def test_totals_come_straight_from_the_sample_and_the_average_uses_its_own_prefi
     [
         ("direction_pv", 1.0),
         ("direction_battery", -1.0),
-        ("direction_grid", -1.0),
+        ("direction_grid", 1.0),
         ("direction_output", 1.0),
     ],
 )
@@ -147,13 +148,13 @@ def test_direction_registers_follow_the_sign_of_each_flow(key, expected):
     assert telemetry()[key] == expected
 
 
-def test_directions_are_zero_for_idle_flows_and_positive_for_import():
+def test_directions_are_zero_for_idle_flows_and_negative_for_import():
     out = telemetry(sample=make_sample(pv_w=0.0, battery_w=0.0, grid_w=700.0))
 
     assert (out["direction_pv"], out["direction_battery"], out["direction_grid"]) == (
         0.0,
         0.0,
-        1.0,
+        -1.0,
     )
 
 
@@ -267,11 +268,11 @@ def test_phase_share_counters_only_exist_for_the_extra_phases():
 
 
 def test_parallel_values_multiply_the_unit_and_split_into_signed_words():
-    out = telemetry(parallel={"inverters": 2}, sample=make_sample(grid_w=-40000.0))
+    out = telemetry(parallel={"inverters": 2}, sample=make_sample(grid_w=40000.0))
 
-    assert out["parallel_grid_w"] == -80000.0
-    low = out["parallel_grid_w_low"]
-    high = out["parallel_grid_w_high"]
+    assert out["parallel_grid_export_w"] == -80000.0
+    low = out["parallel_grid_export_w_low"]
+    high = out["parallel_grid_export_w_high"]
     assert int(high) * 65536 + int(low) == -80000
     assert high == -2.0
     assert out["parallel_capacity_ah"] == 400.0

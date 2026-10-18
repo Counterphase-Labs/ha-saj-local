@@ -137,7 +137,7 @@ HOUSEHOLD_POWER = Reading(
 EXTERNAL_PV_POWER = Reading(
     name="ext_pv_w", label="External PV power", unit="W", places=0
 )
-GRID_POWER = Reading(name="grid_w", label="Grid power", unit="W", places=0)
+GRID_POWER = Reading(name="grid_export_w", label="Grid power", unit="W", places=0)
 GRID_VOLTAGE = Reading(name="grid_r_v", label="Grid voltage", unit="V", places=1)
 GRID_FREQUENCY = Reading(
     name="frequency_hz", label="Grid frequency", unit="Hz", places=2

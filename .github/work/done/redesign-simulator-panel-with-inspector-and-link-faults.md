@@ -4,10 +4,10 @@
 
 - **Revision:** 1
 - **Status:** Approved
+- **Roadmap item:** None. A follow-up to the simulator control panel.
 - **Last revised:** 2026-10-16
 - **Requirements:** `../requirements.md`
 - **Code style:** `../code-style.md`
-- **Roadmap item:** None. A follow-up to the simulator control panel.
 - **Builds on:** `../done/add-simulator-control-panel.md` and the plans it builds on. Everything in those plans that is not restated or explicitly replaced here continues to apply.
 - **Field evidence:** "Field Evidence" in `../done/add-polling-groups-with-per-sensor-cadence.md`, the reports of SAJ communication modules (the AIO3 above all) that the link faults reproduce.
 

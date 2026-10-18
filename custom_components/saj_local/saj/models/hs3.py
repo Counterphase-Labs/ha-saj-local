@@ -212,6 +212,7 @@ PROFILE = Profile(
                 "power_hardware_version": 0x8F1C,
                 "meter_a_status": 0xA03C,
                 "meter_a_power": None,
+                "backup_load_power": None,
             },
             Evidence.RESPONDS_UNCHECKED: {
                 "parallel_mode": 0x4200,

@@ -1,0 +1,43 @@
+import {
+    mdiAlertCircle,
+    mdiCheckCircle,
+    mdiChevronDown,
+    mdiClockOutline,
+    mdiCog,
+    mdiCurrentAc,
+    mdiEvStation,
+    mdiHome,
+    mdiHomeBattery,
+    mdiInformation,
+    mdiLoading,
+    mdiLock,
+    mdiMeterElectric,
+    mdiPower,
+    mdiSolarPower,
+    mdiThermometer,
+    mdiTransmissionTower,
+    mdiBattery,
+} from "@mdi/js";
+
+export const ICONS = {
+    solar: mdiSolarPower,
+    battery: mdiBattery,
+    grid: mdiTransmissionTower,
+    home: mdiHome,
+    inverter: mdiCurrentAc,
+    ev: mdiEvStation,
+    backup: mdiHomeBattery,
+    meter: mdiMeterElectric,
+    fault: mdiAlertCircle,
+    ok: mdiCheckCircle,
+    lock: mdiLock,
+    settings: mdiCog,
+    temperature: mdiThermometer,
+    clock: mdiClockOutline,
+    power: mdiPower,
+    info: mdiInformation,
+    busy: mdiLoading,
+    expand: mdiChevronDown,
+} as const;
+
+export type IconName = keyof typeof ICONS;

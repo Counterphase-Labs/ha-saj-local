@@ -1,4 +1,4 @@
-.PHONY: setup up down logs lint copy-paste test test-isolated python-ci frontend-check frontend-build test-browser-controlled test-browser-home-assistant frontend-ci release-check mock-build mock-smoke ci
+.PHONY: setup up down logs build lint copy-paste test test-python test-frontend test-isolated python-ci frontend-check test-browser-controlled test-browser-home-assistant frontend-ci release-check mock-build mock-smoke ci
 
 setup:
 	uv sync --group dev --group lint
@@ -14,6 +14,9 @@ down:
 logs:
 	docker compose logs -f homeassistant
 
+build:
+	cd frontend && npm run build
+
 lint:
 	uv run ruff format --check .
 	uv run ruff check .
@@ -24,24 +27,26 @@ lint:
 copy-paste:
 	uv run jscpd --exit-code 1 --no-colors --no-tips .
 
-test:
+test: test-python test-frontend test-isolated test-browser-controlled test-browser-home-assistant mock-smoke
+
+test-python:
 	uv run pytest
+
+test-frontend:
+	cd frontend && npm run test
 
 test-isolated:
 	UV_PROJECT_ENVIRONMENT=.venv-isolated uv run --only-group test pytest --no-cov tests/saj tests/modbus_mock
 
-python-ci: lint copy-paste test test-isolated
+python-ci: lint copy-paste test-python test-isolated
 
 frontend-check:
 	cd frontend && npm run format:check
 	cd frontend && npm run typecheck
 	cd frontend && npm run lint
-	cd frontend && npm run test
+	$(MAKE) test-frontend
 
-frontend-build:
-	cd frontend && npm run build
-
-test-browser-controlled: frontend-build
+test-browser-controlled: build
 	cd frontend && npm run test:browser:controlled
 
 test-browser-home-assistant:
@@ -56,7 +61,7 @@ release-check:
 	trap 'rm -r "$$temp_dir"' 0; \
 	(cd custom_components && zip -qr "$$archive" saj_local); \
 	unzip -Z1 "$$archive" | grep -Eq '^saj_local/frontend/asset-manifest\.json$$'; \
-	unzip -Z1 "$$archive" | grep -Eq '^saj_local/frontend/saj-local-card-[A-Za-z0-9_-]+\.js$$'
+	unzip -Z1 "$$archive" | grep -Eq '^saj_local/frontend/saj-local-[A-Za-z0-9_-]+\.js$$'
 
 mock-build:
 	docker compose build modbus-mock

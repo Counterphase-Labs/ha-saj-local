@@ -58,6 +58,7 @@ class FakeCoordinator:
         self.refreshed = False
         self.shutdown = False
         self.released = 0
+        self.control_allowed = True
         self.events: list[str] = []
         self.setup_events: list[str] = []
         self.instances.append(self)
@@ -147,6 +148,35 @@ def issues(monkeypatch) -> IssueRecorder:
             "remove_issues",
         ),
     )
+    return recorder
+
+
+class ControlRecorder:
+    def __init__(self) -> None:
+        self.applied: list[dict[str, object]] = []
+        self.listening: list[dict[str, object]] = []
+        self.stopped = 0
+        self.order: list[str] = []
+
+    def apply(self, **kwargs) -> None:
+        self.applied.append(kwargs)
+        self.order.append("apply")
+
+    def listen(self, **kwargs):
+        self.listening.append(kwargs)
+        self.order.append("listen")
+
+        def stop() -> None:
+            self.stopped += 1
+
+        return stop
+
+
+@pytest.fixture(autouse=True)
+def controls(monkeypatch) -> ControlRecorder:
+    recorder = ControlRecorder()
+    monkeypatch.setattr(integration, "apply_control_set", recorder.apply)
+    monkeypatch.setattr(integration, "start_control_listener", recorder.listen)
     return recorder
 
 
@@ -833,3 +863,80 @@ async def test_a_load_that_identifies_the_configured_device_clears_the_model_iss
         "clear_model_issues",
         {"hass": hass, "entry": entry},
     ) in issues.calls
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+async def test_setup_applies_the_control_set_once_the_platforms_are_set_up(
+    monkeypatch, controls, allowed
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    entry = _entry()
+    events = []
+
+    async def forward(_entry, _platforms):
+        events.append("platforms")
+
+    def apply(**kwargs):
+        events.append("apply")
+        controls.apply(**kwargs)
+
+    class AllowingCoordinator(FakeCoordinator):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.control_allowed = allowed
+
+    monkeypatch.setattr(hass.config_entries, "async_forward_entry_setups", forward)
+    monkeypatch.setattr(integration, "apply_control_set", apply)
+    monkeypatch.setattr(integration, "SajCoordinator", AllowingCoordinator)
+
+    assert await integration.async_setup_entry(hass, entry)
+
+    assert events == ["platforms", "apply"]
+    assert controls.applied == [
+        {"hass": hass, "entry": entry, "fit": DEVICE.fit, "allowed": allowed}
+    ]
+
+
+async def test_setup_starts_the_registry_listener_and_removes_it_on_unload(
+    monkeypatch, controls
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    entry = _entry()
+
+    assert await integration.async_setup_entry(hass, entry)
+
+    assert controls.order == ["apply", "listen"]
+    assert controls.listening == [{"hass": hass, "entry": entry}]
+    for callback in entry.unload_callbacks:
+        callback()
+    assert controls.stopped == 1
+
+
+async def test_a_failed_platform_setup_applies_no_control_set(monkeypatch, controls):
+    hass = _hass()
+    _patch_success(monkeypatch)
+
+    async def fail(_entry, _platforms):
+        raise RuntimeError
+
+    monkeypatch.setattr(hass.config_entries, "async_forward_entry_setups", fail)
+
+    with pytest.raises(RuntimeError):
+        await integration.async_setup_entry(hass, _entry())
+
+    assert controls.order == []
+
+
+async def test_integration_setup_registers_the_cards_bundle_once(monkeypatch):
+    registered = []
+
+    async def register(*, hass):
+        registered.append(hass)
+
+    monkeypatch.setattr(integration, "async_register_frontend", register)
+    hass = _hass()
+
+    assert await integration.async_setup(hass, {})
+    assert registered == [hass]

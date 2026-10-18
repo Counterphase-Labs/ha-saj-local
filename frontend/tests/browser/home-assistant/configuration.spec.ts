@@ -247,6 +247,72 @@ const setNumber = async (
     });
 };
 
+const DASHBOARD_URL_PATH = "saj-local-power-flow";
+const ELEMENT_REGISTRATION_TIMEOUT_MS = 60_000;
+const POWER_FLOW_ELEMENT = "saj-local-power-flow-card";
+const HS3_MODEL_PREFIX = "HS3";
+const SOLAR_VALUE = /^\d.*W$/;
+
+interface RegisteredDevice {
+    id: string;
+    model: string | null;
+}
+
+const expectPowerFlowCardShowsSolarPower = async (
+    page: Page,
+): Promise<void> => {
+    const devices = await callHassWebSocket<RegisteredDevice[]>(page, {
+        type: "config/device_registry/list",
+    });
+    const system = devices.find((device) =>
+        (device.model ?? "").startsWith(HS3_MODEL_PREFIX),
+    );
+    if (system === undefined) {
+        throw new Error("The HS3 system is not in the device registry");
+    }
+    await callHassWebSocket(page, {
+        type: "lovelace/dashboards/create",
+        url_path: DASHBOARD_URL_PATH,
+        title: "SAJ Local power flow",
+        mode: "storage",
+        require_admin: false,
+        show_in_sidebar: false,
+    });
+    await callHassWebSocket(page, {
+        type: "lovelace/config/save",
+        url_path: DASHBOARD_URL_PATH,
+        config: {
+            views: [
+                {
+                    title: "Power flow",
+                    cards: [
+                        {
+                            type: `custom:${POWER_FLOW_ELEMENT}`,
+                            device: system.id,
+                        },
+                    ],
+                },
+            ],
+        },
+    });
+    await page.goto("/");
+    await page.waitForFunction(
+        (tag) => customElements.get(tag) !== undefined,
+        POWER_FLOW_ELEMENT,
+        { timeout: ELEMENT_REGISTRATION_TIMEOUT_MS },
+    );
+    await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
+    await page.evaluate((path) => {
+        history.pushState(null, "", path);
+        window.dispatchEvent(new CustomEvent("location-changed"));
+    }, `/${DASHBOARD_URL_PATH}`);
+    await expect(
+        page.locator(
+            `${POWER_FLOW_ELEMENT} g.node[aria-label^="Solar"] text.value`,
+        ),
+    ).toHaveText(SOLAR_VALUE);
+};
+
 const REQUEST_BUDGET_WINDOW_MS = 60_000;
 const SETTING_CHANGE_TIMEOUT_MS = REQUEST_BUDGET_WINDOW_MS + 15_000;
 const TEST_TIMEOUT_MS = 2 * SETTING_CHANGE_TIMEOUT_MS + 120_000;
@@ -275,7 +341,7 @@ const expectSettingChangeToShow = async (
         .toBe(wanted);
 };
 
-test("an HS3 and an H2 endpoint load, report values, refuse a change until control is allowed, then change a setting", async ({
+test("an HS3 and an H2 endpoint load, report values, show a solar value on a dashboard power flow card, refuse a change until control is allowed, then change a setting", async ({
     page,
     browserFailures,
 }) => {
@@ -284,6 +350,7 @@ test("an HS3 and an H2 endpoint load, report values, refuse a change until contr
 
     await addIntegration(page, browserFailures, "modbus-mock");
     await expectCoreEntitiesReportValues(page, [""]);
+    await expectPowerFlowCardShowsSolarPower(page);
 
     await addIntegration(page, browserFailures, "modbus-mock-h2", "h2");
     await expectCoreEntitiesReportValues(page, ["", "h2"]);

@@ -17,6 +17,7 @@ test = [
 ]
 dev = [
     { include-group = "test" },
+    "home-assistant-frontend==20260826.7",
     "homeassistant==2026.9.3",
     "pre-commit==4.6.2",
     "pytest-homeassistant-custom-component==0.13.366",

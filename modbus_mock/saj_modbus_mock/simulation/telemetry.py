@@ -40,7 +40,14 @@ BATTERY_TEMP_RISE_C = 8.0
 SECOND_PHASE_NUMBER = 2
 FIRST_PHASE_ONLY = 1
 GRID_SIDE_GROUPS = frozenset({"grid", "side", "gridload"})
-PARALLEL_FLOWS = ("pv_w", "battery_w", "grid_w", "load_w", "backup_w", "grid_load_w")
+PARALLEL_FLOWS = (
+    "pv_w",
+    "battery_w",
+    "grid_export_w",
+    "load_w",
+    "backup_w",
+    "grid_load_w",
+)
 MODE_RUNNING = 2
 MODE_WAITING = 1
 MODE_OFF_GRID = 3
@@ -270,6 +277,7 @@ def build_telemetry(*, plant: Plant) -> dict[str, float]:
     out["meter_a_status"] = float(meter_a)
     out["meter_b_status"] = float(scenario.meters.meter_b)
     out["ct_grid_w"] = sample["grid_w"] if meter_a else 0.0
+    out["grid_export_w"] = -sample["grid_w"]
     out.update(
         _energy(
             ledger=plant.ledger,
@@ -287,7 +295,7 @@ def build_telemetry(*, plant: Plant) -> dict[str, float]:
     out["battery_capacity_ah"] = float(plant.battery.capacity_ah)
     out["direction_pv"] = float(sample["pv_w"] > 0)
     out["direction_battery"] = _sign(value=sample["battery_w"])
-    out["direction_grid"] = _sign(value=sample["grid_w"])
+    out["direction_grid"] = _sign(value=out["grid_export_w"])
     out["direction_output"] = 1.0
     out["clock_s"] = float(plant.second)
     out["operating_mode"] = operating_mode(plant=plant)

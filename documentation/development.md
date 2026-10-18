@@ -118,6 +118,17 @@ Every action is a make target and CI calls the same targets, so passing locally 
 
 `make ci` runs everything CI runs and is the definition of done. Run the narrower targets while iterating.
 
+`make build` builds everything the project builds, so there is no build target per part. `make test` runs every test suite, and each suite has its own target so one can be run alone:
+
+| Target | Suite |
+| --- | --- |
+| `make test-python` | The pytest unit tests of the library, the integration and the simulator, with the coverage gate. |
+| `make test-frontend` | The unit tests of the cards, with the coverage gate. |
+| `make test-isolated` | The library and the simulator tests in an environment that has no Home Assistant, which proves the boundary between them. |
+| `make test-browser-controlled` | Playwright against a built bundle and controlled data, with no Home Assistant. It builds first. |
+| `make test-browser-home-assistant` | Playwright against a throwaway Home Assistant with the simulators, which proves the cards load and work in the real frontend. |
+| `make mock-smoke` | The simulator container answers a client. |
+
 GitHub Actions are pinned to a commit hash so a moved tag cannot change what CI runs.
 
 ## Testing
@@ -139,15 +150,40 @@ The rules are in the Non Functional section of `requirements.md`. The reasons:
 
 [code-style.md](../.github/work/code-style.md) is the authority. Its documentation rule shapes this guide: explain why, not how, and let names and types describe the rest.
 
+## Frontend
+
+The cards, the tile card feature, and the badge are one Lit and TypeScript bundle under `frontend/`, built into `custom_components/saj_local/frontend/` as `saj-local-<hash>.js` with an `asset-manifest.json`. The integration serves the file the manifest names and adds its URL to Home Assistant's frontend, so users add no resource.
+
+The hash changes with every build so a browser never runs a stale bundle. The cost is that Home Assistant registers the hashed file name once, at start: a new product bundle needs a Home Assistant restart before the browser is offered it.
+
+The layout follows what changes together:
+
+- `src/system/` holds everything that is not drawing: finding a system's entities in `hass`, power direction, weekdays, schedule slots, faults, the control lock and service calls. It never touches the DOM, so the rules are tested without a browser.
+- `src/ui/` holds the parts every card draws, styled only with Home Assistant's theme variables, because the frontend promises no `ha-*` element to custom cards.
+- `src/cards/`, `src/features/`, and `src/badges/` hold the elements and register them with Home Assistant's picker.
+- `src/i18n/` holds the text only the cards need, one file per language of the integration, with English as the fallback. Entity names, states and values come from Home Assistant.
+- `tests/fakes/` holds a fake `hass`, built from a list of entities, and the replacements for the modules an element uses. Each unit test exercises one module with every collaborator replaced by one of these fakes.
+
+Elements find entities by device and translation key, never by entity ID, so a test or a card never depends on a prefix.
+
+### Showcase dashboards
+
+Looking at every card in every option needs a Home Assistant with real systems, so the development environment declares two dashboards, `saj-hs3` and `saj-h2`, from `config/dashboards/saj-hs3.yaml` and `config/dashboards/saj-h2.yaml`, through the `lovelace: dashboards:` block of `config/configuration.yaml`. They are plain YAML dashboards written by hand, and nothing generates them. Each SAJ Local element is a reusable custom element configured by its own YAML, so every card, tile feature and badge is written out individually with every option set, under a heading that names the card and its options.
+
+- Each dashboard has four views: Dashboard (the cards of a typical system dashboard, written out as plain cards), Cards (every card in each of its option combinations), Features and badges (one tile card with the `custom:saj-local-weekdays` feature per slot weekdays entity, and the status badge) and Empty states (each card with no `device` and with the device of something that is not SAJ Local).
+- The dashboards hold this development instance's device IDs. A developer whose instance has different device IDs replaces the two `device` IDs in each file, the system's own and the ID of any device that is not SAJ Local used in the Empty states view, and the slot weekdays entity IDs when the entity prefix differs.
+- Home Assistant reads the dashboard files when it starts, so restart Home Assistant after changing `config/configuration.yaml`. A change to a dashboard file shows after a reload of the page.
+- The bundle loads on every page without a dashboard resource, because the integration adds it to Home Assistant's frontend.
+
 ## Docker
 
 Development runs in containers so Home Assistant is a known, pinned release with a clean configuration.
 
 - [compose.yaml](../compose.yaml): the interactive environment, Home Assistant plus the simulators. The integration is mounted read-only so the container never writes into the source tree.
-- [compose.playwright.yaml](../compose.playwright.yaml): a throwaway Home Assistant with an HS3 simulator and an H2 simulator, for the browser smoke test that proves each endpoint can be added, loads, reports sensor values and, once control is allowed, shows a changed setting. It shares no state with the interactive environment.
+- [compose.playwright.yaml](../compose.playwright.yaml): a throwaway Home Assistant with an HS3 simulator and an H2 simulator, for the browser smoke test that proves each endpoint can be added, loads, reports sensor values, shows its solar power on a power flow card and, once control is allowed, shows a changed setting. It shares no state with the interactive environment.
 - `compose.override.yaml`: your machine's ports, time zone and scenarios. Ignored by git; `compose.override.yaml.example` shows the shape. Do not edit `compose.yaml` for local needs, because the smoke test starts it too.
 
-Under `config/`, only `configuration.yaml` is tracked. The rest is local Home Assistant state.
+Under `config/`, only `configuration.yaml` and the two development dashboards in `config/dashboards/` are tracked. The rest is local Home Assistant state.
 
 ## The Modbus simulator
 

@@ -1,0 +1,417 @@
+title: SAJ H2
+views:
+  - title: Dashboard
+    path: dashboard
+    type: sections
+    badges:
+      - type: custom:saj-local-status-badge
+        device: 8430c558a7e03fc407d3e9ba7de39425
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Now"
+          - type: heading
+            heading: "saj-local-power-flow-card show_strings: false, show_optional: true, scope: system"
+          - type: custom:saj-local-power-flow-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_strings: false
+            show_optional: true
+            scope: system
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Status"
+          - type: heading
+            heading: "saj-local-status-card show_energy: true"
+          - type: custom:saj-local-status-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_energy: true
+          - type: heading
+            heading: "saj-local-faults-card show_clear_groups: true"
+          - type: custom:saj-local-faults-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_clear_groups: true
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Battery"
+          - type: heading
+            heading: "saj-local-battery-card show_packs: true"
+          - type: custom:saj-local-battery-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_packs: true
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Controls"
+          - type: heading
+            heading: "saj-local-controls-card sections: [mode, battery, grid, power_control, ev_charger, device]"
+          - type: custom:saj-local-controls-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            sections:
+              - mode
+              - battery
+              - grid
+              - power_control
+              - ev_charger
+              - device
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Schedules"
+          - type: heading
+            heading: "saj-local-schedule-card kinds: [charge, discharge, ev], show_timeline: true"
+          - type: custom:saj-local-schedule-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            kinds:
+              - charge
+              - discharge
+              - ev
+            show_timeline: true
+  - title: Cards
+    path: cards
+    type: sections
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-power-flow-card show_strings: false, show_optional: true, scope: system"
+          - type: custom:saj-local-power-flow-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_strings: false
+            show_optional: true
+            scope: system
+          - type: heading
+            heading: "saj-local-power-flow-card show_strings: false, show_optional: true, scope: parallel"
+          - type: custom:saj-local-power-flow-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_strings: false
+            show_optional: true
+            scope: parallel
+          - type: heading
+            heading: "saj-local-power-flow-card show_strings: false, show_optional: false, scope: system"
+          - type: custom:saj-local-power-flow-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_strings: false
+            show_optional: false
+            scope: system
+          - type: heading
+            heading: "saj-local-power-flow-card show_strings: false, show_optional: false, scope: parallel"
+          - type: custom:saj-local-power-flow-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_strings: false
+            show_optional: false
+            scope: parallel
+          - type: heading
+            heading: "saj-local-power-flow-card show_strings: true, show_optional: true, scope: system"
+          - type: custom:saj-local-power-flow-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_strings: true
+            show_optional: true
+            scope: system
+          - type: heading
+            heading: "saj-local-power-flow-card show_strings: true, show_optional: true, scope: parallel"
+          - type: custom:saj-local-power-flow-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_strings: true
+            show_optional: true
+            scope: parallel
+          - type: heading
+            heading: "saj-local-power-flow-card show_strings: true, show_optional: false, scope: system"
+          - type: custom:saj-local-power-flow-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_strings: true
+            show_optional: false
+            scope: system
+          - type: heading
+            heading: "saj-local-power-flow-card show_strings: true, show_optional: false, scope: parallel"
+          - type: custom:saj-local-power-flow-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_strings: true
+            show_optional: false
+            scope: parallel
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-status-card show_energy: true"
+          - type: custom:saj-local-status-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_energy: true
+          - type: heading
+            heading: "saj-local-status-card show_energy: false"
+          - type: custom:saj-local-status-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_energy: false
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-faults-card show_clear_groups: true"
+          - type: custom:saj-local-faults-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_clear_groups: true
+          - type: heading
+            heading: "saj-local-faults-card show_clear_groups: false"
+          - type: custom:saj-local-faults-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_clear_groups: false
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-battery-card show_packs: true"
+          - type: custom:saj-local-battery-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_packs: true
+          - type: heading
+            heading: "saj-local-battery-card show_packs: false"
+          - type: custom:saj-local-battery-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            show_packs: false
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-controls-card sections: [mode, battery, grid, power_control, ev_charger, device]"
+          - type: custom:saj-local-controls-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            sections:
+              - mode
+              - battery
+              - grid
+              - power_control
+              - ev_charger
+              - device
+          - type: heading
+            heading: "saj-local-controls-card sections: [mode]"
+          - type: custom:saj-local-controls-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            sections:
+              - mode
+          - type: heading
+            heading: "saj-local-controls-card sections: [battery]"
+          - type: custom:saj-local-controls-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            sections:
+              - battery
+          - type: heading
+            heading: "saj-local-controls-card sections: [grid]"
+          - type: custom:saj-local-controls-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            sections:
+              - grid
+          - type: heading
+            heading: "saj-local-controls-card sections: [power_control]"
+          - type: custom:saj-local-controls-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            sections:
+              - power_control
+          - type: heading
+            heading: "saj-local-controls-card sections: [ev_charger]"
+          - type: custom:saj-local-controls-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            sections:
+              - ev_charger
+          - type: heading
+            heading: "saj-local-controls-card sections: [device]"
+          - type: custom:saj-local-controls-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            sections:
+              - device
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-schedule-card kinds: [charge, discharge, ev], show_timeline: true"
+          - type: custom:saj-local-schedule-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            kinds:
+              - charge
+              - discharge
+              - ev
+            show_timeline: true
+          - type: heading
+            heading: "saj-local-schedule-card kinds: [charge, discharge, ev], show_timeline: false"
+          - type: custom:saj-local-schedule-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            kinds:
+              - charge
+              - discharge
+              - ev
+            show_timeline: false
+          - type: heading
+            heading: "saj-local-schedule-card kinds: [charge], show_timeline: true"
+          - type: custom:saj-local-schedule-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            kinds:
+              - charge
+            show_timeline: true
+          - type: heading
+            heading: "saj-local-schedule-card kinds: [charge], show_timeline: false"
+          - type: custom:saj-local-schedule-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            kinds:
+              - charge
+            show_timeline: false
+          - type: heading
+            heading: "saj-local-schedule-card kinds: [discharge], show_timeline: true"
+          - type: custom:saj-local-schedule-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            kinds:
+              - discharge
+            show_timeline: true
+          - type: heading
+            heading: "saj-local-schedule-card kinds: [discharge], show_timeline: false"
+          - type: custom:saj-local-schedule-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            kinds:
+              - discharge
+            show_timeline: false
+          - type: heading
+            heading: "saj-local-schedule-card kinds: [ev], show_timeline: true"
+          - type: custom:saj-local-schedule-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            kinds:
+              - ev
+            show_timeline: true
+          - type: heading
+            heading: "saj-local-schedule-card kinds: [ev], show_timeline: false"
+          - type: custom:saj-local-schedule-card
+            device: 8430c558a7e03fc407d3e9ba7de39425
+            kinds:
+              - ev
+            show_timeline: false
+  - title: Features and badges
+    path: features-and-badges
+    type: sections
+    badges:
+      - type: custom:saj-local-status-badge
+        device: 8430c558a7e03fc407d3e9ba7de39425
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-weekdays feature on a tile card"
+          - type: tile
+            entity: number.saj_charge_slot_1_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_charge_slot_2_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_charge_slot_3_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_charge_slot_4_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_charge_slot_5_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_charge_slot_6_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_charge_slot_7_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_discharge_slot_1_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_discharge_slot_2_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_discharge_slot_3_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_discharge_slot_4_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_discharge_slot_5_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_discharge_slot_6_days
+            features:
+              - type: custom:saj-local-weekdays
+          - type: tile
+            entity: number.saj_discharge_slot_7_days
+            features:
+              - type: custom:saj-local-weekdays
+  - title: Empty states
+    path: empty-states
+    type: sections
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-power-flow-card"
+          - type: heading
+            heading: "No device"
+          - type: custom:saj-local-power-flow-card
+          - type: heading
+            heading: "Not a SAJ Local system: device is the Sun device"
+          - type: custom:saj-local-power-flow-card
+            device: 1491264f4dba2ee1eca64179e7c5dfb0
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-status-card"
+          - type: heading
+            heading: "No device"
+          - type: custom:saj-local-status-card
+          - type: heading
+            heading: "Not a SAJ Local system: device is the Sun device"
+          - type: custom:saj-local-status-card
+            device: 1491264f4dba2ee1eca64179e7c5dfb0
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-faults-card"
+          - type: heading
+            heading: "No device"
+          - type: custom:saj-local-faults-card
+          - type: heading
+            heading: "Not a SAJ Local system: device is the Sun device"
+          - type: custom:saj-local-faults-card
+            device: 1491264f4dba2ee1eca64179e7c5dfb0
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-battery-card"
+          - type: heading
+            heading: "No device"
+          - type: custom:saj-local-battery-card
+          - type: heading
+            heading: "Not a SAJ Local system: device is the Sun device"
+          - type: custom:saj-local-battery-card
+            device: 1491264f4dba2ee1eca64179e7c5dfb0
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-controls-card"
+          - type: heading
+            heading: "No device"
+          - type: custom:saj-local-controls-card
+          - type: heading
+            heading: "Not a SAJ Local system: device is the Sun device"
+          - type: custom:saj-local-controls-card
+            device: 1491264f4dba2ee1eca64179e7c5dfb0
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-schedule-card"
+          - type: heading
+            heading: "No device"
+          - type: custom:saj-local-schedule-card
+          - type: heading
+            heading: "Not a SAJ Local system: device is the Sun device"
+          - type: custom:saj-local-schedule-card
+            device: 1491264f4dba2ee1eca64179e7c5dfb0

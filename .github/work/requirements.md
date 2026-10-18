@@ -22,6 +22,10 @@ Platform stability and correctness is paramount.
 - Ability to create one or more different sensor reading cadences
 - Use intelligent modbus access that does not put the system in danger of overload, especially AIO3 systems
 - Expose UI elements that can be added to lovelace dashboards, including informational and configuration
+  - Cards for power flow, system status, faults, the battery, controls and schedules, a weekday picker for schedule slots and a status badge
+  - Each element is set up by choosing a system, so the same element can be added once for each system
+  - Each element shows only what its system has, and keeps working when the system's prefix changes
+  - Elements look and behave like standard Home Assistant cards and follow the user's theme and language
 - Full localisation and internalisation support
 - clear and detailed errors with good error handling
 - extensive and useful debug dump tools using native HA solutions that are privacy focused
@@ -37,6 +41,8 @@ Platform stability and correctness is paramount.
 ### Writing
 
 - Writing is off for every new system. It is switched on per system, with a warning first
+- Each system shows whether changes are allowed, so dashboards can show its controls as locked
+- Switching writing on also enables the system's controls, and the warning shows the added request load. Switching writing off disables the controls that switching writing on enabled. A control the user disabled or enabled by hand keeps the user's choice
 - A system whose model could not be verified is never written to
 - Dangerous changes are never made from Home Assistant. Users make them in the SAJ elekeeper app. This covers:
   - Commissioning settings (meter, RS485, battery protocol, network, EV charger link). They are read-only: a wrong value can cut the inverter off from its meter, battery, charger or Home Assistant
@@ -71,6 +77,7 @@ Platform stability and correctness is paramount.
 
 - The different implementations of SAJ systems form an abstraction layer. There is a single unified interface (entities, controls, Lovelace elements) that does the same thing across all models, as closely as each model allows: consistent names, values, units and behaviour. Where models differ, each model's implementation translates to and from the common form.
 - A feature is left out only on a model that lacks the possibility to do it.
+- Battery and grid power use one sign on every model, in readings and in targets: positive when the battery discharges or the system sends power to the grid, negative when the battery charges or the system takes power from the grid.
 - Controls are shared, not built per model. A control such as a state of charge limit, an export limit or EV charging is defined once and offered by every model that can do it. On a model that cannot do it, or where the equipment is not fitted, the control is not shown.
 
 - option to enable debug logging which will provide clear and helpful debug logs rather than spam that creates log fatigue
@@ -89,6 +96,9 @@ Platform stability and correctness is paramount.
 - Playwright tests for UI covering only critical paths
 - Playwright tests split into 1. fake UI with controlled data 2. actual HA development environment through docker
 - All commands for things like building, running, testing, linting, etc are exposed as make targets
+  - One `make build` builds everything the project builds. There is no build target per feature or part, such as `frontend-build` or `showcase-build`
+  - One `make test` runs every test. Each test suite also has its own target, which `make test` runs
+  - One `make ci` runs every check. The partial targets that make up `make ci` stay
 - All testing and verification can run in github workflows using the same make targets
 - This HACS repository will be the sole repository and must contain all elements of the integration, including the SAJ stand alone library, the actual SAJ integration, any lovelace components and custom dashboards
 

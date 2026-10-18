@@ -321,6 +321,7 @@ PROFILE = Profile(
             Replacement(key=key, encoding=encoding, uncombined=True)
             for key, encoding in PARALLEL_POWER_ENCODINGS.items()
         ),
+        Replacement(key="backup_load_power", uncombined=True),
         *(
             Replacement(key=key, options=APPLICATION_MODE_OPTIONS)
             for key in ("application_mode", "application_mode_active")

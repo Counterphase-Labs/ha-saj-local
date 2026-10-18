@@ -11,7 +11,8 @@
     "noUnusedParameters": true,
     "verbatimModuleSyntax": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vitest/globals", "node"]
+    "resolveJsonModule": true,
+    "types": ["vitest/globals", "node", "vite/client"]
   },
   "include": [
     "src",

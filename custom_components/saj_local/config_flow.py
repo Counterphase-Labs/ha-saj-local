@@ -62,6 +62,7 @@ from .const import (
     VALIDATION_LABEL,
     PowerSchedule,
     enabled_entity_keys,
+    enabled_keys,
     endpoint_guard,
     entity_id_in_use,
     fixed_entity_id,
@@ -70,6 +71,7 @@ from .const import (
     power_schedules,
     selector_options,
 )
+from .controls import keys_to_enable
 from .equipment import (
     configured_settings,
     settings_of,
@@ -329,7 +331,16 @@ class SajLocalConfigFlow(ConfigFlow, domain=DOMAIN):
                 ems=offers_ems_device(device=change.device), submitted=submitted
             ),
             errors=errors or {},
-            description_placeholders={},
+            description_placeholders=control_placeholders(
+                fit=Fit(
+                    profile=change.device.profile,
+                    device_type=change.device.device_type,
+                    equipment=change.device.profile.equipment,
+                ),
+                registered={},
+                default_interval=change.submission.scan_interval,
+                groups=(),
+            ),
         )
 
     def _show_user_form(
@@ -544,7 +555,14 @@ class SajOptionsFlow(OptionsFlow):
                 step_id=STEP_CONFIRM_CONTROL,
                 data_schema=vol.Schema({}),
                 errors={},
-                description_placeholders={},
+                description_placeholders=control_placeholders(
+                    fit=_stored_fit(entry=self.config_entry),
+                    registered=installation_entities(
+                        hass=self.hass, entry_id=self.config_entry.entry_id
+                    ),
+                    default_interval=change.submission.scan_interval,
+                    groups=tuple(group_cadences(entry=self.config_entry)),
+                ),
             )
         reason = await self._changes.save(change=change)
         return self.async_abort(reason=reason)
@@ -759,6 +777,31 @@ class LoadChange:
             "after": format_load(load=self.after),
             "budget": format_load(load=BUDGET_PER_MINUTE),
         }
+
+
+def control_placeholders(
+    *,
+    fit: Fit,
+    registered: Mapping[str, er.RegistryEntry],
+    default_interval: int,
+    groups: tuple[Cadence, ...],
+) -> dict[str, str]:
+    enabling = keys_to_enable(fit=fit, registered=registered)
+    enabled = enabled_keys(
+        registered=registered, registers=device_read_registers(fit=fit)
+    )
+
+    def load_with(*, keys: frozenset[str]) -> float:
+        return InstallationLoad(
+            fit=fit, enabled=keys, default_interval=default_interval, groups=groups
+        ).per_minute
+
+    return {
+        "count": str(len(enabling)),
+        **LoadChange(
+            before=load_with(keys=enabled), after=load_with(keys=enabled | enabling)
+        ).placeholders,
+    }
 
 
 def format_load(*, load: float) -> str:

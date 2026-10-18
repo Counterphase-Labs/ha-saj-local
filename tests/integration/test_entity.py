@@ -15,6 +15,7 @@ from custom_components.saj_local import (
     text,
 )
 from custom_components.saj_local import time as time_platform
+from custom_components.saj_local.binary_sensor import CONTROL_ALLOWED_KEY
 from custom_components.saj_local.const import DOMAIN
 from custom_components.saj_local.saj.catalogue import Fit, device_registers
 from custom_components.saj_local.saj.definitions import Access, EntityKind, Quantity
@@ -370,9 +371,10 @@ async def test_each_platform_creates_an_entity_for_each_row_of_its_own_type(
         if kind is EntityKind.SENSOR
         else {f"{kind.value}_row"}
     )
-    assert {built.key for built in created} == expected
-    assert {built.coordinator_context for built in created} == expected
-    assert all(isinstance(built, ENTITY_CLASSES[kind]) for built in created)
+    rows_created = [built for built in created if built.key != CONTROL_ALLOWED_KEY]
+    assert {built.key for built in rows_created} == expected
+    assert {built.coordinator_context for built in rows_created} == expected
+    assert all(isinstance(built, ENTITY_CLASSES[kind]) for built in rows_created)
 
 
 @pytest.mark.parametrize("kind", ALL_KINDS)
@@ -461,7 +463,7 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
             HS3,
             0x1610,
             {
-                "sensor": 426,
+                "sensor": 427,
                 "binary_sensor": 129,
                 "number": 77,
                 "select": 19,
@@ -471,7 +473,7 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
                 "button": 5,
             },
             {
-                "sensor": 46,
+                "sensor": 47,
                 "binary_sensor": 129,
                 "number": 2,
                 "select": 2,

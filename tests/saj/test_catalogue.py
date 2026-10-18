@@ -1,3 +1,4 @@
+import re
 from dataclasses import replace
 
 import pytest
@@ -672,7 +673,7 @@ def test_a_device_gets_the_registers_of_its_types_shape():
 
 
 SHIPPED_SHAPES = [
-    ("hs3", Shape(phases=3, strings=2), 547, 746, 179),
+    ("hs3", Shape(phases=3, strings=2), 547, 747, 180),
     ("h2", Shape(phases=1, strings=2), 390, 487, 118),
     ("h2", Shape(phases=1, strings=3), 398, 495, 121),
     ("h2", Shape(phases=3, strings=4, assumed=True), 482, 579, 118),
@@ -711,7 +712,7 @@ def test_the_two_shipped_models_share_342_catalogued_rows():
     h2_keys = {r.key for r in CATALOGUES["h2"].registers if r.readable}
 
     assert len(hs3 & h2) == 342
-    assert len(hs3_keys & h2_keys) == 432
+    assert len(hs3_keys & h2_keys) == 433
 
 
 @pytest.mark.parametrize("period", ["today", "month", "year", "total"])
@@ -1308,6 +1309,33 @@ def test_meter_b_power_is_the_sum_of_its_phase_powers_just_as_meter_a_power_is(
     assert meter_b.definition.combination.operation is (
         meter_a.definition.combination.operation
     )
+
+
+def test_hs3_backup_load_power_is_the_sum_of_its_backup_phase_powers():
+    registers = CATALOGUES["hs3"].registers
+    by_key = {register.key: register for register in registers}
+    backup_load = by_key["backup_load_power"]
+    phase_powers = tuple(
+        register.key
+        for register in registers
+        if re.fullmatch(r"backup_l\d+_power", register.key)
+    )
+
+    assert backup_load.address is None
+    assert backup_load.core is True
+    assert backup_load.definition.combination.operation is Operation.SUM
+    assert backup_load.sources == phase_powers
+    assert len(phase_powers) > 1
+
+
+def test_h2_backup_load_power_is_read_from_its_own_register():
+    backup_load = {register.key: register for register in CATALOGUES["h2"].registers}[
+        "backup_load_power"
+    ]
+
+    assert backup_load.address is not None
+    assert backup_load.combination is None
+    assert backup_load.core is True
 
 
 def _packed_catalogue() -> Catalogue:

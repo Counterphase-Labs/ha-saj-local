@@ -510,8 +510,10 @@ def _battery_and_power() -> list[Field]:
         live(address=0x40A4, name="ct_pv_apparent", source="ext_pv_w", enc=I16),
         live(address=0x40A5, name="pv_power", source="pv_w", enc=I16),
         live(address=0x40A6, name="battery_total_power", source="battery_w", enc=I16),
-        live(address=0x40A7, name="grid_total_power", source="grid_w", enc=I16),
-        live(address=0x40A8, name="grid_total_apparent", source="grid_w", enc=I16),
+        live(address=0x40A7, name="grid_total_power", source="grid_export_w", enc=I16),
+        live(
+            address=0x40A8, name="grid_total_apparent", source="grid_export_w", enc=I16
+        ),
         live(address=0x40A9, name="inverter_total_power", source="inverter_w", enc=I16),
         live(
             address=0x40AA, name="inverter_total_apparent", source="inverter_w", enc=I16

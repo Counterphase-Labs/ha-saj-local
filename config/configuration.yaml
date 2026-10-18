@@ -4,3 +4,18 @@ logger:
   default: info
   logs:
     custom_components.saj_local: debug
+
+lovelace:
+  dashboards:
+    saj-hs3:
+      mode: yaml
+      title: SAJ HS3
+      icon: mdi:solar-power
+      show_in_sidebar: true
+      filename: dashboards/saj-hs3.yaml
+    saj-h2:
+      mode: yaml
+      title: SAJ H2
+      icon: mdi:solar-power
+      show_in_sidebar: true
+      filename: dashboards/saj-h2.yaml

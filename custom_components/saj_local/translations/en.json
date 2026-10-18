@@ -24,7 +24,7 @@
       },
       "confirm_control": {
         "title": "Confirm that control is allowed",
-        "description": "With control allowed, entity changes and automations will change the settings of your inverter. A wrong setting can stop the inverter, change how it uses the battery or the grid, or cost you money.\n\nEnabling EMS functions disables the inverter's reverse-current protection.\n\nWhen Home Assistant stops or this installation is reloaded, it tries to switch off the functions you switched on from Home Assistant. This is a best effort, not a guarantee. If the inverter cannot be reached or Home Assistant stops abruptly, they can stay on. The inverter's own EMS timeout may then end them, but it has not proved reliable.\n\nAllow control?",
+        "description": "With control allowed, entity changes and automations will change the settings of your inverter. A wrong setting can stop the inverter, change how it uses the battery or the grid, or cost you money.\n\nEnabling EMS functions disables the inverter's reverse-current protection.\n\nWhen Home Assistant stops or this installation is reloaded, it tries to switch off the functions you switched on from Home Assistant. This is a best effort, not a guarantee. If the inverter cannot be reached or Home Assistant stops abruptly, they can stay on. The inverter's own EMS timeout may then end them, but it has not proved reliable.\n\nAllowing control also enables up to {count} control entities of this system, such as schedule slots and battery limits, so they can be shown and changed on dashboards. Reading them raises the load from {before} to up to {after} of {budget} requests per minute. The entities appear about 30 seconds after saving. Wait until they appear before changing anything: the system reloads once more when they appear, and the reload switches off any power control function switched on before then.\n\nAllow control?",
         "data": {
           "ems_heartbeat": "EMS heartbeat (seconds)"
         },
@@ -117,7 +117,7 @@
       },
       "confirm_control": {
         "title": "Confirm that control is allowed",
-        "description": "With control allowed, entity changes and automations will change the settings of your inverter. A wrong setting can stop the inverter, change how it uses the battery or the grid, or cost you money.\n\nEnabling EMS functions disables the inverter's reverse-current protection.\n\nWhen Home Assistant stops or this installation is reloaded, it tries to switch off the functions you switched on from Home Assistant. This is a best effort, not a guarantee. If the inverter cannot be reached or Home Assistant stops abruptly, they can stay on. The inverter's own EMS timeout may then end them, but it has not proved reliable.\n\nAllow control?"
+        "description": "With control allowed, entity changes and automations will change the settings of your inverter. A wrong setting can stop the inverter, change how it uses the battery or the grid, or cost you money.\n\nEnabling EMS functions disables the inverter's reverse-current protection.\n\nWhen Home Assistant stops or this installation is reloaded, it tries to switch off the functions you switched on from Home Assistant. This is a best effort, not a guarantee. If the inverter cannot be reached or Home Assistant stops abruptly, they can stay on. The inverter's own EMS timeout may then end them, but it has not proved reliable.\n\nAllowing control also enables {count} control entities of this system, such as schedule slots and battery limits, so they can be shown and changed on dashboards. Reading them raises the load from {before} to {after} of {budget} requests per minute. The entities appear about 30 seconds after saving. Wait until they appear before changing anything: the system reloads once more when they appear, and the reload switches off any power control function switched on before then.\n\nAllow control?"
       }
     },
     "error": {
@@ -1898,6 +1898,9 @@
       }
     },
     "binary_sensor": {
+      "control_allowed": {
+        "name": "Control allowed"
+      },
       "inverter_fault": {
         "name": "Inverter fault"
       },

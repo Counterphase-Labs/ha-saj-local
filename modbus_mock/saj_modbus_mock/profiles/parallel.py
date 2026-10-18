@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 POWER_REGISTERS = (
     (0x4204, 0x420C, "pv_w", U16),
     (0x4205, 0x420D, "battery_w", I16),
-    (0x4206, 0x420E, "grid_w", I16),
+    (0x4206, 0x420E, "grid_export_w", I16),
     (0x4207, 0x420F, "load_w", U16),
     (0x4208, 0x4210, "backup_w", I16),
     (0x420A, 0x4211, "grid_load_w", I16),
@@ -20,7 +20,7 @@ POWER_REGISTERS = (
 SINGLE_POWER_REGISTERS = (
     (0x4204, "pv_w", U16),
     (0x4205, "battery_w", I16),
-    (0x4206, "grid_w", I16),
+    (0x4206, "grid_export_w", I16),
     (0x4207, "load_w", I16),
     (0x4208, "backup_w", U16),
     (0x420A, "grid_load_w", U16),

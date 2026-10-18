@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.const import CONF_HOST, CONF_PORT, EVENT_HOMEASSISTANT_STOP
 from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 
 from .const import (
     CONF_ALLOW_CONTROL,
@@ -20,6 +21,7 @@ from .const import (
     SUBENTRY_POLLING_GROUP,
     endpoint_guard,
 )
+from .controls import apply_control_set, start_control_listener
 from .coordinator import Installation, SajCoordinator, power_control_store
 from .equipment import (
     EquipmentReport,
@@ -27,6 +29,7 @@ from .equipment import (
     settle_equipment,
 )
 from .errors import HANDLED_ERRORS, translate_error
+from .frontend import async_register_frontend
 from .issues import (
     check_unreachable,
     clear_model_issues,
@@ -50,10 +53,13 @@ if TYPE_CHECKING:
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import Event, HomeAssistant
+    from homeassistant.helpers.typing import ConfigType
 
     from .saj.models import Equipment
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 @dataclass
@@ -63,6 +69,12 @@ class SajRuntimeData:
     coordinator: SajCoordinator
     equipment: dict[Equipment, EquipmentReport]
     packs: PackReport
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    del config
+    await async_register_frontend(hass=hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -155,6 +167,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_shutdown()
         await client.close(reason=ConnectionReason.UNLOAD)
         raise
+    apply_control_set(
+        hass=hass,
+        entry=entry,
+        fit=device.fit,
+        allowed=coordinator.control_allowed,
+    )
+    entry.async_on_unload(start_control_listener(hass=hass, entry=entry))
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     entry.async_on_unload(
         hass.bus.async_listen_once(

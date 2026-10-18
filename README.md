@@ -76,7 +76,7 @@ Every register the integration knows for a model becomes an entity, one of eight
 | Entity type | What it is |
 | --- | --- |
 | `sensor` | Read-only numbers, counters, statuses, text, clocks and timestamps |
-| `binary_sensor` | A fault the inverter, the battery or the EV charger reports, shown as a problem that is on or off, see [Device faults and repairs](#device-faults-and-repairs) |
+| `binary_sensor` | A fault the inverter, the battery or the EV charger reports, shown as a problem that is on or off, see [Device faults and repairs](#device-faults-and-repairs), and `control_allowed`, which is on while the system accepts changes, see [Control allowed](#control-allowed) |
 | `number` | A setting with a numeric range |
 | `select` | A setting with named options |
 | `switch` | A setting that is off or on, and each named bit of a packed register |
@@ -84,9 +84,9 @@ Every register the integration knows for a model becomes an entity, one of eight
 | `text` | A text setting, such as a network address. Every text row is a commissioning setting and read-only |
 | `button` | A command with nothing to read, such as restart. Created disabled |
 
-An HS3 with every optional piece of equipment has 740 entities and a single-phase H2 with two PV strings and every optional piece of equipment has 483. Only a core set is enabled by default: power, voltage, temperature and state of charge readings, the energy counters, the main battery limits and every fault entity. An HS3 with a battery and a grid meter (Meter A) has 141 enabled by default and an H2 has 112. Optional equipment adds its own defaults when it is fitted: the second meter's total power, the EV charger's status, mode, power and energy counters, and the parallel system's powers and state of charge, which brings an HS3 with everything fitted to 179 and an H2 to 118. The rest is created disabled, so a new installation stays light on the inverter and you enable what you want. A packed register that holds several values is read once and each value is its own entity. Equipment a unit may not have is only created when it is fitted, see [Optional equipment](#optional-equipment).
+An HS3 with every optional piece of equipment has 742 entities and a single-phase H2 with two PV strings and every optional piece of equipment has 484. Only a core set is enabled by default: power, voltage, temperature and state of charge readings, the energy counters, the main battery limits and every fault entity. An HS3 with a battery and a grid meter (Meter A) has 143 enabled by default and an H2 has 113. Optional equipment adds its own defaults when it is fitted: the second meter's total power, the EV charger's status, mode, power and energy counters, and the parallel system's powers and state of charge, which brings an HS3 with everything fitted to 181 and an H2 to 119. The rest is created disabled, so a new installation stays light on the inverter and you enable what you want. A packed register that holds several values is read once and each value is its own entity. Equipment a unit may not have is only created when it is fitted, see [Optional equipment](#optional-equipment).
 
-A device only gets the entities that fit it: an H2 with one PV string has no second-string entities. A device running on a manually chosen model that is not recognised gets every entity of the model, since its shape is unknown, with those beyond one phase and two strings disabled.
+A device only gets the entities that fit it: an H2 with one PV string has no second-string entities. A device running on a manually chosen model that is not recognised gets every entity of the model, since its shape is unknown, with those beyond one phase and two strings disabled. The HS3 has no register for the live total of the backup port, so its backup load power is the sum of the three backup phase powers; the five-minute average backup power is a different reading and is not used for it.
 
 Settings are in the configuration category, and versions, commissioning settings and network settings are in the diagnostic category. A value outside a setting's documented range is shown as read; the range limits what can be set, not what is shown. An enumerated value with no known name is shown as unknown, and its code is listed in diagnostics so it can be reported.
 
@@ -100,7 +100,7 @@ Setup only requires the device identity and six core readings (operating mode, b
 
 ### Optional equipment
 
-Nothing about equipment is asked during setup. Every time the integration loads, which includes every Home Assistant start and every reload, it checks which optional equipment the inverter has and creates entities only for that: the battery, the grid meter (Meter A), a second meter (Meter B) and a parallel machine system on both models, and the EV charger on an HS3. An HS3 with a battery and nothing else has 501 entities instead of 740, and an H2 with no battery has none of the 193 battery entities. The check reads all of its registers together, at most 4 requests on either model, so the default request load does not change. The battery is detected from the battery protocol, Meter A and Meter B from their meter status, the EV charger from its enable setting and a parallel system from the parallel mode and the number of machines online. If the inverter does not answer a check, a battery and Meter A are assumed and the others are not. A unit that refuses the parallel check costs one refused request per load and gets no parallel entities.
+Nothing about equipment is asked during setup. Every time the integration loads, which includes every Home Assistant start and every reload, it checks which optional equipment the inverter has and creates entities only for that: the battery, the grid meter (Meter A), a second meter (Meter B) and a parallel machine system on both models, and the EV charger on an HS3. An HS3 with a battery and nothing else has 503 entities instead of 742, and an H2 with no battery has none of the 193 battery entities. The check reads all of its registers together, at most 4 requests on either model, so the default request load does not change. The battery is detected from the battery protocol, Meter A and Meter B from their meter status, the EV charger from its enable setting and a parallel system from the parallel mode and the number of machines online. If the inverter does not answer a check, a battery and Meter A are assumed and the others are not. A unit that refuses the parallel check costs one refused request per load and gets no parallel entities.
 
 Equipment that was detected is remembered and stays fitted, so a meter that is offline during a restart does not take its entities away. When a remembered piece of equipment is no longer detected, one warning per load names it and the values read, diagnostics flag it, a repair issue in Home Assistant names the installation and the equipment and asks you to check it or set it to Not fitted in Configure, and its entities stay and read whatever the inverter answers. The repair issue goes away at the next load that detects the equipment again or no longer has it on Automatic, and when the installation is removed. Equipment fitted later is picked up at the next restart or reload.
 
@@ -116,7 +116,7 @@ Moving an installation between an H2 and an HS3 is done through Configure. Confi
 
 - Automatic detection recognises the HS3 and the single-phase H2 only. Other H2-family units, such as the three-phase H2, report other device types and need the model chosen manually, with readings that may be wrong because they cannot be verified.
 - AS2, HS2 and other SAJ products are not recognised.
-- The sign of total grid power is published as the inverter reports it and is not labelled as import or export.
+- Battery and grid power use one sign on every model, so a reading means the same on an HS3 and an H2 and the power flow card can draw the direction without knowing the model. Battery power is positive while the battery discharges and negative while it charges. Grid power is positive while the system sends power to the grid and negative while it takes power from the grid. The same convention is used by the power control targets.
 
 [![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dogmatic69&repository=home-assistant-saj-modbus&category=integration)
 [![Open your Home Assistant instance and start setting up SAJ Local.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=saj_local)
@@ -170,6 +170,19 @@ On the H2 three more settings can be changed: the buzzer (`switch.saj_buzzer`, o
 **Commissioning settings stay read-only for now.** The meter and its address, RS485, the battery protocol, the network, the EV charger link and the settings sequence number are refused whatever you do. On the H2 this also covers the grid type, the parallel set-up, the battery and PV input modes, the rated power and machine model, the protection limits, the PV start and shutdown voltages and the MPPT limits, the lead-acid battery parameters, the BMS update, the reverse-flow mode and the off-grid output voltage and frequency. They are shown with their real control type and refuse changes, because a wrong value can cut the inverter off from its meter, battery, charger or from Home Assistant itself. This may be revisited. Clearing the energy history and factory reset are not offered; the official app covers them. This may be revisited too.
 
 **Commands** are buttons, created disabled and in the configuration category: clear fault history, clear current fault, restart inverter, synchronise clock (which sends Home Assistant's local time) and, on the HS3, remove the EMS PV power limit. A command is sent once; when no acknowledgement arrives the message says it may or may not have run. After a restart the inverter stops answering for a while and the normal back-off applies.
+
+#### Control allowed
+
+Every system has a `binary_sensor.saj_control_allowed` (`binary_sensor.saj_<prefix>_control_allowed` when a prefix is set), named "Control allowed" and in the diagnostic category. It is on while the system's **Allow control** option is on and the model is verified, which is the same condition that lets the integration write. It is a read-only sensor and not a switch on purpose: a switch on a dashboard would switch writing on without the warning that Configure shows first. The dashboard cards read the sensor and show their controls as locked while it is off.
+
+#### The control set
+
+Most schedule slot entities and many controls are created disabled, so a dashboard card would have nothing to show or change. Switching **Allow control** on therefore also enables the system's control set: every entity a card can change, which is every field of the charge, discharge and EV charger slots, the power control switches and targets of every function the system offers, the application mode and time-of-use settings, the battery and grid limits, the EV charger settings, the buzzer, the LED mode, the clock synchronisation command and the clear fault command. Battery pack readings and other read-only entities are not part of the set. Entities that were already enabled stay as they are.
+
+- **What the confirmation shows.** The **Allow control** confirmation states how many control entities will be enabled and how reading them changes the request load. With every piece of equipment fitted and the default 60-second interval the set is 141 entities on an HS3 and raises the load from 14 to 18 of 40 requests per minute, and is 87 entities on an H2 and raises the load from 9 to 10. The setup flow cannot know the equipment of a system that does not exist yet, so it counts with every piece of equipment fitted and says "up to"; Configure uses the equipment found and its figures are exact.
+- **The second reload.** The entities appear about 30 seconds after saving, because Home Assistant reloads a system 30 seconds after any of its entities is enabled, whoever enables the entity. That reload unloads the system, and unloading switches off every power control function that was switched on from Home Assistant, as every reload does. Wait until the entities appear before changing anything, or a power control function switched on in between is switched off again. The same second reload follows whenever a new member of the set appears later, such as the EV charger slots once an EV charger is detected.
+- **Switching off.** Switching **Allow control** off, or running a model that is not verified, disables every entity the set enabled and removes the mark the integration left on it. Home Assistant removes each disabled entity at once, no reload follows and the request load returns to what it was before. An entity you enabled yourself has no mark and stays enabled.
+- **Your choice wins.** An entity you disabled before switching control on stays disabled, and a card then counts the slot as left out. If you disable an entity of the set while control is on, it stays disabled from then on.
 
 #### EMS on the HS3
 
@@ -232,6 +245,56 @@ With nothing wanted and nothing outstanding the controller sends nothing. Diagno
 #### What has been exercised on real hardware
 
 Power control on the H2 (passive mode with the application mode, direction and powers) is implemented from field reports and the H2 document and has not been exercised by this project. Verified on a real HS3 with single-register writes: the application mode, the backup reserve, the passive battery charge power, the four EMS enable switches, the EMS timeout and the eight EMS targets and limits. Implemented from field reports of H2 units, not exercised by this project: the H2 schedule slots, application mode, passive mode and its powers, the battery limits, the power limits and the export limit. Documented only, never exercised on real hardware: on the H2 the buzzer switch, the LED mode and the battery forced charge power limit, and every other writable setting, every write of more than one register, and every command.
+
+### Dashboard cards
+
+The integration serves its own cards and registers them with Home Assistant when it starts, so they appear in the card picker with no resource to add and nothing to clear from a cache. Every element is set up by choosing one SAJ system with its **System** option, so a home with two systems adds the same card twice, once per system. In a two-system home, rename each system's device (Settings, Devices & services, the device, the pencil) so the titles say which is which: a system's title is its device name followed by its model, and the serial number is added only when two titles would otherwise match. Elements find a system's entities through the entity registry and never by entity ID, so they keep working when a prefix changes. A part whose entity does not exist or is disabled is not drawn, so each card shows only what its system has. Values, names and states use Home Assistant's own formatting, text follows the Home Assistant language, and the cards follow the theme.
+
+| Element | What it shows | Options |
+| --- | --- | --- |
+| `saj-local-power-flow-card` | Live power between solar, battery, grid, home and the optional equipment, with the direction and speed of each flow | `show_strings` (off by default) lists each solar string, `show_optional` (on by default) draws the EV charger, backup load and Meter B, `scope` (`system` or `parallel`, `system` by default) chooses the system's own readings or the parallel system's readings, and a system without parallel readings shows the empty state with `parallel` |
+| `saj-local-status-card` | Operating state, application mode, key readings, today's energy, a fault summary and whether changes are allowed | `show_energy` (on by default) |
+| `saj-local-faults-card` | Active faults per piece of equipment with how long ago each began, and clear fault | `show_clear_groups` (on by default) shows the groups with no fault |
+| `saj-local-battery-card` | State of charge with the reserve and limits marked, battery power and readings, one row group per pack | `show_packs` (on by default) |
+| `saj-local-controls-card` | The shared settings the system offers, grouped into sections | `sections`, a list of `mode`, `battery`, `grid`, `power_control`, `ev_charger` and `device` (all by default) |
+| `saj-local-schedule-card` | Charge, discharge and EV charger slots, a week timeline and a slot editor | `kinds`, a list of `charge`, `discharge` and `ev` (all by default), `show_timeline` (on by default) |
+| `saj-local-weekdays` | A tile card feature with seven named day buttons for a slot's weekdays entity | None. Add it to a tile card whose entity is a slot weekdays number |
+| `saj-local-status-badge` | A badge with the operating state and the number of active faults | None |
+
+A few details are worth knowing:
+
+- The battery card shows pack readings only for the pack entities you have enabled, because most of them are created disabled. The faults card shows every pack fault and warning, which are enabled by default.
+- A card that finds none of its entities says which kind of entity to enable and links to the device page, because Home Assistant gives dashboards no way to list entities that are disabled. A schedule slot is drawn only when every entity of the slot is enabled, and the card counts the slots it left out.
+- While `control_allowed` is off, every control on the controls, schedule and faults cards and on the weekdays feature is disabled and the card links to the integration's settings, where Allow control is switched on with its warning. Switching Allow control on is also what enables the entities the cards need, see [The control set](#the-control-set).
+- A control writes once per decision: a slider when released, a number field on Enter or on leaving the field, a select, switch or time field on change, and the weekday buttons 1.5 seconds after the last press. The control then shows the value the inverter holds, never a guess, and a refusal is shown under the control in the integration's own words.
+- The slot weekday buttons start on your first weekday. The number stored on the inverter does not move: Monday is bit 0 and Sunday bit 6 on every model, so Monday, Wednesday and Friday is 21.
+- Charge and discharge slots only run in a time-of-use application mode, so the schedule card shows a notice with the mode select when the mode is another one. Both **Time-of-use** and **Time-of-use (BMS)** count, because the SAJ app keeps the charge settings of the BMS mode in the ordinary charge slots.
+- The power flow card draws the sign convention under [Limitations](#limitations): a grid power of -2000 W draws the grid line flowing towards the inverter and labels the grid "Importing". Meter B is shown as a reading with no direction because its sign is not established on either model.
+- The controls card has no Restart inverter button, so a tap on a dashboard cannot restart the inverter. Restart stays an entity.
+
+**Adding a card.** Edit a dashboard, add a card, choose the SAJ Local card in the card picker and pick the system. Each card, tile feature and badge is configured by its own YAML, with the system's `device` ID and the options in the table above.
+
+```yaml
+type: custom:saj-local-power-flow-card
+device: 0123456789abcdef0123456789abcdef
+show_strings: false
+show_optional: true
+scope: system
+```
+
+A tile card takes the weekdays feature on a slot's weekdays entity, and a badge takes the system's `device` ID:
+
+```yaml
+type: tile
+entity: number.saj_charge_slot_1_days
+features:
+  - type: custom:saj-local-weekdays
+```
+
+```yaml
+type: custom:saj-local-status-badge
+device: 0123456789abcdef0123456789abcdef
+```
 
 ### Protecting the inverter
 

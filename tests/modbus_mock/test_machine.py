@@ -67,7 +67,7 @@ TELEMETRY = {
     "pv_w": 1.0,
     "ext_pv_w": 7.0,
     "load_w": 2.0,
-    "grid_w": 3.0,
+    "grid_export_w": 3.0,
     "battery_w": 4.0,
     "soc_percent": 55.0,
     "ev_power_w": 6.0,

@@ -1349,6 +1349,15 @@ wheels = [
 ]
 
 [[package]]
+name = "home-assistant-frontend"
+version = "20260826.7"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/31/c8/61f4ef6332bba5b36c22cd4d8f6359f328926a788e09af0a3cb9516f371a/home_assistant_frontend-20260826.7.tar.gz", hash = "sha256:2c0081d18a54c454c93e39ee29be96d557d8215be08d4cc1771888377db46a5b", size = 127242644, upload-time = "2026-09-11T13:47:44.058Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8c/ea/1a4fd4fb013d4d9fb1eebfb9e3a21146d3b8488a9eb8999dd664180b6719/home_assistant_frontend-20260826.7-py3-none-any.whl", hash = "sha256:a2714fdc1ba9fac29e380ae3b57a37a1a04cbc6f0f58bff3458c2281b9152a94", size = 127215449, upload-time = "2026-09-11T13:47:39.051Z" },
+]
+
+[[package]]
 name = "home-assistant-saj-modbus"
 version = "0.1.0"
 source = { virtual = "." }
@@ -1356,6 +1365,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "aiohttp" },
+    { name = "home-assistant-frontend" },
     { name = "homeassistant" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -1385,6 +1395,7 @@ test = [
 [package.metadata.requires-dev]
 dev = [
     { name = "aiohttp", specifier = "==3.14.3" },
+    { name = "home-assistant-frontend", specifier = "==20260826.7" },
     { name = "homeassistant", specifier = "==2026.9.3" },
     { name = "pre-commit", specifier = "==4.6.2" },
     { name = "pytest", specifier = "==9.0.3" },

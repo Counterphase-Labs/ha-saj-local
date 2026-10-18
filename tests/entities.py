@@ -69,6 +69,7 @@ class FakeCoordinator:
         self.data = Telemetry(values=values or {})
         self.entry_id = ENTRY_ID
         self.last_update_success = True
+        self.control_allowed = False
         self.unavailable_keys: frozenset[str] = frozenset()
         self.last_read: frozenset[str] = frozenset()
         self.changed_keys: frozenset[str] = frozenset()

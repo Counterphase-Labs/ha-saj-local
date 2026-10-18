@@ -1,8 +1,11 @@
 {
-  "src/card.ts": {
-    "file": "saj-local-card-BR-hqEv5.js",
-    "name": "card",
-    "src": "src/card.ts",
-    "isEntry": true
+  "src/index.ts": {
+    "file": "saj-local-C4jSUqiY.js",
+    "name": "index",
+    "src": "src/index.ts",
+    "isEntry": true,
+    "dynamicImports": [
+      "src/index.ts"
+    ]
   }
 }

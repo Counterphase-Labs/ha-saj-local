@@ -160,6 +160,7 @@ class Definition:
     options: Mapping[int, str] | None = None
     range: Range | None = None
     core: bool = False
+    control: bool = False
     phases: int = 1
     strings: int = 1
     packs: int = 0
@@ -1176,6 +1177,7 @@ def _schedule_time(*, offset: int, key: str) -> Member:
             kind=EntityKind.TIME,
             access=Access.READ_WRITE,
             encoding=Encoding.TIME_OF_DAY,
+            control=True,
         ),
     )
 
@@ -1191,6 +1193,7 @@ def _slot_days(*, offset: int) -> Member:
             encoding=Encoding.U16,
             field=SLOT_DAYS_FIELD,
             range=DAYS_RANGE,
+            control=True,
         ),
     )
 
@@ -1206,6 +1209,7 @@ def _slot_switch(*, offset: int, key: str, field: BitRange, follows: bool) -> Me
             encoding=Encoding.U16,
             field=field,
             range=SWITCH_RANGE,
+            control=True,
         ),
         field_follows_index=follows,
     )
@@ -1241,6 +1245,7 @@ def _schedule_slots(
                     unit=Unit.PERCENT,
                     field=SLOT_POWER_FIELD,
                     range=PERCENT_RANGE,
+                    control=True,
                 ),
             ),
         ),
@@ -1294,6 +1299,7 @@ EV_SLOTS = Family(
                 encoding=Encoding.U16,
                 field=EV_SLOT_MODE_FIELD,
                 options=EV_SLOT_MODE_OPTIONS,
+                control=True,
             ),
         ),
         _slot_switch(
@@ -1319,6 +1325,7 @@ EV_SLOTS = Family(
                 encoding=Encoding.U32,
                 unit=Unit.WATT,
                 range=EV_POWER_RANGE,
+                control=True,
             ),
         ),
     ),
@@ -1376,6 +1383,7 @@ def _power_limit_setting(
     key: str,
     equipment: Equipment | None = None,
     value_range: Range = POWER_LIMIT_RANGE,
+    control: bool = False,
 ) -> Definition:
     return Definition(
         key=key,
@@ -1387,19 +1395,20 @@ def _power_limit_setting(
         scale=0.1,
         unit=Unit.PERCENT,
         range=value_range,
+        control=control,
     )
 
 
 def _percent_setting(*, key: str, equipment: Equipment | None = None) -> Definition:
     return replace(
-        _power_limit_setting(key=key, equipment=equipment),
+        _power_limit_setting(key=key, equipment=equipment, control=True),
         scale=1,
         range=PERCENT_RANGE,
         core=True,
     )
 
 
-def _command(*, key: str, value: int) -> Definition:
+def _command(*, key: str, value: int, control: bool = False) -> Definition:
     return Definition(
         key=key,
         quantity=Quantity.CODE,
@@ -1407,6 +1416,7 @@ def _command(*, key: str, value: int) -> Definition:
         access=Access.WRITE_ONLY,
         encoding=Encoding.U16,
         command_value=value,
+        control=control,
     )
 
 
@@ -1975,6 +1985,7 @@ SINGLES: tuple[Definition, ...] = (
     _percent_setting(key="battery_charge_limit", equipment=Equipment.BATTERY),
     Definition(
         key="application_mode",
+        control=True,
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
         access=Access.READ_WRITE,
@@ -1982,14 +1993,17 @@ SINGLES: tuple[Definition, ...] = (
         options=APPLICATION_MODE_OPTIONS,
         core=True,
     ),
-    _power_limit_setting(key="battery_charge_power_limit", equipment=Equipment.BATTERY),
     _power_limit_setting(
-        key="battery_discharge_power_limit", equipment=Equipment.BATTERY
+        key="battery_charge_power_limit", equipment=Equipment.BATTERY, control=True
     ),
-    _power_limit_setting(key="grid_import_power_limit"),
-    _power_limit_setting(key="grid_export_power_limit"),
+    _power_limit_setting(
+        key="battery_discharge_power_limit", equipment=Equipment.BATTERY, control=True
+    ),
+    _power_limit_setting(key="grid_import_power_limit", control=True),
+    _power_limit_setting(key="grid_export_power_limit", control=True),
     Definition(
         key="backup_reserve_soc",
+        control=True,
         equipment=Equipment.BATTERY,
         quantity=Quantity.STATE_OF_CHARGE,
         kind=EntityKind.NUMBER,
@@ -2001,6 +2015,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="export_limit_power",
+        control=True,
         quantity=Quantity.PERCENTAGE,
         kind=EntityKind.NUMBER,
         access=Access.READ_WRITE,
@@ -2011,6 +2026,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="export_limit_current",
+        control=True,
         quantity=Quantity.CURRENT,
         kind=EntityKind.NUMBER,
         access=Access.READ_WRITE,
@@ -2021,6 +2037,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="export_limit_mode",
+        control=True,
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
         access=Access.READ_WRITE,
@@ -2029,6 +2046,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="time_of_use_idle_mode",
+        control=True,
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
         access=Access.READ_WRITE,
@@ -2037,6 +2055,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="time_of_use_grid_discharge",
+        control=True,
         quantity=Quantity.TOGGLE,
         kind=EntityKind.SWITCH,
         access=Access.READ_WRITE,
@@ -2045,6 +2064,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="buzzer",
+        control=True,
         quantity=Quantity.TOGGLE,
         kind=EntityKind.SWITCH,
         access=Access.READ_WRITE,
@@ -2057,9 +2077,11 @@ SINGLES: tuple[Definition, ...] = (
         key="battery_forced_charge_power_limit",
         equipment=Equipment.BATTERY,
         value_range=FORCED_CHARGE_POWER_RANGE,
+        control=True,
     ),
     Definition(
         key="led_mode",
+        control=True,
         quantity=Quantity.CODE,
         kind=EntityKind.SELECT,
         access=Access.READ_WRITE,
@@ -2424,6 +2446,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_enabled",
+        control=True,
         quantity=Quantity.TOGGLE,
         kind=EntityKind.SWITCH,
         access=Access.READ_WRITE,
@@ -2487,6 +2510,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_mode",
+        control=True,
         core=True,
         equipment=Equipment.EV_CHARGER,
         quantity=Quantity.CODE,
@@ -2497,6 +2521,7 @@ SINGLES: tuple[Definition, ...] = (
     ),
     Definition(
         key="ev_charge_power",
+        control=True,
         equipment=Equipment.EV_CHARGER,
         quantity=Quantity.POWER,
         kind=EntityKind.NUMBER,
@@ -2536,10 +2561,11 @@ SINGLES: tuple[Definition, ...] = (
         range=Range(minimum=0, maximum=65534),
     ),
     _command(key="clear_fault_history", value=1),
-    _command(key="clear_current_fault", value=2),
+    _command(key="clear_current_fault", value=2, control=True),
     _command(key="restart_inverter", value=1),
     Definition(
         key="synchronise_clock",
+        control=True,
         quantity=Quantity.TIMESTAMP,
         kind=EntityKind.BUTTON,
         access=Access.WRITE_ONLY,
@@ -2728,6 +2754,12 @@ SINGLES: tuple[Definition, ...] = (
         encoding=Encoding.U16,
         unit=Unit.WATT,
         core=True,
+        combination=Combination(
+            operation=Operation.SUM,
+            sources=tuple(
+                f"backup_l{phase}_power" for phase in range(1, PHASE_COUNT + 1)
+            ),
+        ),
     ),
     Definition(
         key="backup_load_apparent_power",

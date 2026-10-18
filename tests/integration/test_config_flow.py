@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from custom_components.saj_local.saj.models import Profile
 
 from custom_components.saj_local import config_flow, const
+from custom_components.saj_local.config_flow import control_placeholders
 from custom_components.saj_local.errors import Translation
 from custom_components.saj_local.saj import errors as saj_errors
 from custom_components.saj_local.saj.catalogue import blocks_by_key
@@ -181,6 +182,32 @@ _nothing_enabled.asked = []
 _nothing_enabled.keys = frozenset()
 
 
+REGISTERED_ENTITIES = {"registered": object()}
+
+
+def _registered_entities(*, hass, entry_id) -> dict[str, object]:
+    del hass
+    _registered_entities.asked.append(entry_id)
+    return REGISTERED_ENTITIES
+
+
+_registered_entities.asked = []
+
+
+@pytest.fixture
+def registered_entities(monkeypatch) -> None:
+    _registered_entities.asked.clear()
+    monkeypatch.setattr(config_flow, "installation_entities", _registered_entities)
+
+
+def _recorded_control_placeholders(**asked) -> dict[str, str]:
+    _recorded_control_placeholders.asked.append(asked)
+    return {"count": "recorded"}
+
+
+_recorded_control_placeholders.asked = []
+
+
 def _one_request_per_key(*, fit, enabled, default_interval, groups) -> float:
     _one_request_per_key.asked.append(
         {
@@ -251,6 +278,7 @@ def reset_flow_client_instances(monkeypatch):
     _nothing_enabled.asked.clear()
     _nothing_enabled.keys = frozenset()
     _one_request_per_key.asked.clear()
+    _recorded_control_placeholders.asked.clear()
     monkeypatch.setattr(config_flow.selector, "NumberSelector", FakeNumberSelector)
     monkeypatch.setattr(
         config_flow.selector, "NumberSelectorMode", FakeNumberSelectorMode
@@ -262,6 +290,9 @@ def reset_flow_client_instances(monkeypatch):
     monkeypatch.setattr(config_flow, "entity_id_in_use", _nothing_taken)
     monkeypatch.setattr(config_flow, "enabled_entity_keys", _nothing_enabled)
     monkeypatch.setattr(config_flow, "installation_load", _one_request_per_key)
+    monkeypatch.setattr(
+        config_flow, "control_placeholders", _recorded_control_placeholders
+    )
     monkeypatch.setattr(config_flow, "requests_per_read", _requests_per_key)
     monkeypatch.setattr(const, "async_get_translations", _block_translations)
 
@@ -3375,7 +3406,7 @@ async def test_a_model_without_ems_saves_no_heartbeat(monkeypatch):
 
 
 async def test_switching_control_on_asks_for_confirmation_and_saves_nothing_first(
-    monkeypatch,
+    monkeypatch, registered_entities
 ):
     entry = _saved_entry()
     flow = _options_flow(monkeypatch, entry=entry)
@@ -3388,7 +3419,7 @@ async def test_switching_control_on_asks_for_confirmation_and_saves_nothing_firs
 
 
 async def test_the_control_confirmation_repeats_until_confirmed_then_saves_it_on(
-    monkeypatch,
+    monkeypatch, registered_entities
 ):
     entry = _saved_entry()
     flow = _options_flow(monkeypatch, entry=entry)
@@ -3939,3 +3970,111 @@ async def test_the_equipment_section_is_optional_in_the_schema(monkeypatch):
 
     marker = _marker(form["data_schema"], "equipment")
     assert isinstance(marker, config_flow.vol.Optional)
+
+
+async def test_setup_counts_the_control_entities_with_every_piece_of_equipment_fitted(
+    monkeypatch,
+):
+    instance = _flow(monkeypatch)
+    device = _device()
+    monkeypatch.setattr(config_flow, "identify", _identifying(device))
+
+    form = await instance.async_step_user(
+        {**INPUT, "scan_interval": 45, "allow_control": True}
+    )
+
+    (asked,) = _recorded_control_placeholders.asked
+    assert form["description_placeholders"] == {"count": "recorded"}
+    assert asked["fit"].profile is device.profile
+    assert asked["fit"].device_type == device.device_type
+    assert asked["fit"].equipment == device.profile.equipment
+    assert asked["fit"].pack_limit is None
+    assert asked["registered"] == {}
+    assert asked["default_interval"] == 45
+    assert asked["groups"] == ()
+
+
+def _offering_ems(*, device) -> bool:
+    del device
+    return True
+
+
+async def test_setup_repeats_the_control_figures_when_the_heartbeat_is_refused(
+    monkeypatch,
+):
+    monkeypatch.setattr(config_flow, "offers_ems_device", _offering_ems)
+    instance = _flow(monkeypatch)
+    monkeypatch.setattr(config_flow, "identify", _identifying(_device()))
+    await instance.async_step_user({**INPUT, "allow_control": True})
+
+    form = await instance.async_step_confirm_control({"ems_heartbeat": 1})
+
+    assert form["errors"] == {"ems_heartbeat": "invalid_ems_heartbeat"}
+    assert form["description_placeholders"] == {"count": "recorded"}
+
+
+async def test_configure_counts_the_control_entities_exactly_from_the_stored_fit(
+    monkeypatch, registered_entities
+):
+    entry = _saved_entry()
+    flow = _options_flow(monkeypatch, entry=entry)
+
+    form = await flow.async_step_init(
+        {**_submission(scan_interval=45), "allow_control": True}
+    )
+
+    (asked,) = _recorded_control_placeholders.asked
+    assert form["description_placeholders"] == {"count": "recorded"}
+    assert asked["fit"] == config_flow._stored_fit(entry=entry)
+    assert asked["registered"] is REGISTERED_ENTITIES
+    assert _registered_entities.asked == [entry.entry_id]
+    assert asked["default_interval"] == 45
+    assert asked["groups"] == ()
+
+
+def _count_enabled(*, fit, enabled, default_interval, groups) -> float:
+    del fit, default_interval, groups
+    return len(enabled)
+
+
+def test_the_control_figures_are_the_count_and_the_load_without_and_with_the_members(
+    monkeypatch,
+):
+    enabling = frozenset({"slot_a", "slot_b", "slot_c"})
+    enabled = frozenset({"pv_power", "slot_a_already_on"})
+    asked = {}
+
+    def would_enable(*, fit, registered):
+        asked["enable"] = (fit, registered)
+        return enabling
+
+    def enabled_now(*, registered, registers):
+        asked["enabled"] = (registered, registers)
+        return enabled
+
+    def read_registers(*, fit):
+        asked["read"] = fit
+        return ("registers",)
+
+    monkeypatch.setattr(config_flow, "keys_to_enable", would_enable)
+    monkeypatch.setattr(config_flow, "enabled_keys", enabled_now)
+    monkeypatch.setattr(config_flow, "device_read_registers", read_registers)
+    monkeypatch.setattr(config_flow, "installation_load", _count_enabled)
+    fit = object()
+    registered = {"key": object()}
+
+    placeholders = control_placeholders(
+        fit=fit, registered=registered, default_interval=60, groups=()
+    )
+
+    assert placeholders == {
+        "count": "3",
+        "before": "2",
+        "after": "5",
+        "budget": config_flow.format_load(load=config_flow.BUDGET_PER_MINUTE),
+    }
+    assert asked == {
+        "enable": (fit, registered),
+        "read": fit,
+        "enabled": (registered, ("registers",)),
+    }

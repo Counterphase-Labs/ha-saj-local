@@ -80,6 +80,10 @@ class Register:
         return self.definition.key
 
     @property
+    def control(self) -> bool:
+        return self.definition.control
+
+    @property
     def equipment(self) -> Equipment | None:
         return self.definition.equipment
 

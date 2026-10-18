@@ -1,6 +1,9 @@
 {
   "gitignore": true,
-  "ignore": ["**/package-lock.json"],
+  "ignore": [
+    "**/package-lock.json",
+    "config/dashboards/**"
+  ],
   "minLines": 5,
   "minTokens": 50,
   "mode": "mild"

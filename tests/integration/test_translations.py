@@ -1,9 +1,11 @@
 import json
+import re
 import string
 from pathlib import Path
 
 import pytest
 
+from custom_components.saj_local.binary_sensor import CONTROL_ALLOWED_KEY
 from custom_components.saj_local.config_flow import (
     ABORT_ALREADY_CONFIGURED,
     ABORT_PREFIX_UNAVAILABLE,
@@ -68,6 +70,7 @@ WRITE_KEYS = {
 POWER_ENTITIES = {
     ("switch", function.switch_key): function for function in PowerFunction
 } | {("number", function.target_key): function for function in PowerFunction}
+CONTROL_ALLOWED = ("binary_sensor", CONTROL_ALLOWED_KEY)
 
 
 def _shipped_registers(*, profile_key: str):
@@ -112,7 +115,7 @@ def test_there_are_no_translations_for_rows_that_do_not_exist():
         for key in entries
     }
 
-    assert translated == set(rows) | set(POWER_ENTITIES)
+    assert translated == set(rows) | set(POWER_ENTITIES) | {CONTROL_ALLOWED}
 
 
 def test_there_are_no_option_labels_for_options_a_row_does_not_have():
@@ -163,6 +166,28 @@ def test_the_control_confirmation_warns_about_reverse_current_protection():
 
     assert "reverse-current protection" in description
     assert "automations" in description
+
+
+@pytest.mark.parametrize(
+    ("flow", "step"), [("config", "confirm_control"), ("options", "confirm_control")]
+)
+def test_the_control_confirmation_states_the_cost_of_enabling_the_control_set(
+    flow, step
+):
+    description = TRANSLATIONS[flow]["step"][step]["description"]
+
+    assert {"{count}", "{before}", "{after}", "{budget}"} <= set(
+        re.findall(r"\{\w+\}", description)
+    )
+    assert "wait" in description.lower()
+
+
+def test_only_the_setup_confirmation_counts_control_entities_as_an_upper_limit():
+    setup = TRANSLATIONS["config"]["step"]["confirm_control"]["description"]
+    configure = TRANSLATIONS["options"]["step"]["confirm_control"]["description"]
+
+    assert "up to {count}" in setup
+    assert "up to" not in configure
 
 
 def test_every_block_an_entity_can_be_listed_under_has_a_label():
@@ -339,6 +364,12 @@ def test_every_power_control_switch_and_target_has_a_display_name():
     ]
 
     assert missing == []
+
+
+def test_the_control_allowed_entity_has_a_name():
+    platform, key = CONTROL_ALLOWED
+
+    assert ENTITY_TRANSLATIONS[platform][key]["name"]
 
 
 def test_every_power_function_has_a_selector_label():

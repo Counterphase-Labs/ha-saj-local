@@ -6,7 +6,7 @@ export default defineConfig({
     build: {
         emptyOutDir: true,
         lib: {
-            entry: resolve(import.meta.dirname, "src/card.ts"),
+            entry: resolve(import.meta.dirname, "src/index.ts"),
             formats: ["es"],
         },
         manifest: "asset-manifest.json",
@@ -16,7 +16,8 @@ export default defineConfig({
         ),
         rollupOptions: {
             output: {
-                entryFileNames: "saj-local-card-[hash].js",
+                entryFileNames: "saj-local-[hash].js",
+                inlineDynamicImports: true,
             },
         },
     },

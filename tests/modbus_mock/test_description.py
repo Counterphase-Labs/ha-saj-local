@@ -478,7 +478,7 @@ def test_each_card_names_its_readings_its_special_controls_and_whether_it_is_the
     }
 
     assert [reading["name"] for reading in cards["grid"]["readings"]] == [
-        "grid_w",
+        "grid_export_w",
         "grid_r_v",
         "frequency_hz",
     ]
@@ -524,7 +524,7 @@ def test_the_state_gives_each_card_reading_by_the_name_the_description_gives_it(
         "pv_w": 10.4,
         "ext_pv_w": 2.6,
         "household_load_w": 700.0,
-        "grid_w": -5.5,
+        "grid_export_w": -5.5,
         "grid_r_v": 230.04,
         "frequency_hz": 49.987,
         "battery_w": -0.04,
@@ -590,7 +590,7 @@ def test_the_state_gives_each_node_reading_by_the_name_the_description_gives_it(
     data = {
         "pv_w": 10.4,
         "ext_pv_w": 2.6,
-        "grid_w": -5.5,
+        "grid_export_w": -5.5,
         "household_load_w": 7.0,
         "battery_w": -0.04,
         "soc_percent": 55.54,
