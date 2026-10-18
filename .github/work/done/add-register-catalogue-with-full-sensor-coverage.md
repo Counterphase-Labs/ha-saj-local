@@ -49,7 +49,7 @@ Included:
 
 ## Deferred
 
-Everything this plan knows about and does not deliver. Each line is also recorded in `../roadmap.md` under the item named, so it survives this plan being completed.
+Everything this plan knows about and does not deliver. Each line was also recorded in the roadmap under the item named, so it survives this plan being completed.
 
 | What | Registers | Why not here | Goes to |
 | --- | --- | --- | --- |

@@ -5,7 +5,7 @@
 - **Revision:** 1
 - **Status:** Approved
 - **Last revised:** 2026-10-13
-- **Roadmap item:** "Debug dump and logging" in `../roadmap.md`
+- **Roadmap item:** "Debug dump and logging" in the [Roadmap project](https://github.com/orgs/Counterphase-Labs/projects/1)
 - **Builds on:** `add-device-faults-and-repairs.md` and the plans it builds on. Everything in those plans that is not restated or explicitly replaced here continues to apply.
 - **Requirements:** `../requirements.md`
 - **Code style:** `../code-style.md`

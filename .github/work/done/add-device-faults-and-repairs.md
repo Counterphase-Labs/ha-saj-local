@@ -7,7 +7,7 @@
 - **Last revised:** 2026-10-13
 - **Requirements:** `../requirements.md`
 - **Code style:** `../code-style.md`
-- **Roadmap item:** "Device faults and Repairs" in `../roadmap.md`
+- **Roadmap item:** "Device faults and Repairs" in the [Roadmap project](https://github.com/orgs/Counterphase-Labs/projects/1)
 - **Builds on:** `add-model-neutral-power-control-with-schedules.md`, `add-optional-equipment-detection.md` and the plans they build on. Everything in those plans that is not restated or explicitly replaced here continues to apply.
 
 ## Outcome And Scope

@@ -7,7 +7,7 @@
 - **Last revised:** 2026-10-10
 - **Requirements:** `../requirements.md`
 - **Code style:** `../code-style.md`
-- **Roadmap item:** 1 in `../roadmap.md`
+- **Roadmap item:** "Opt-in register writes" in the [Roadmap project](https://github.com/orgs/Counterphase-Labs/projects/1)
 - **Builds on:** `add-register-catalogue-with-full-sensor-coverage.md` and the plans it builds on. Everything in those plans that is not restated or explicitly replaced here continues to apply.
 
 ## Outcome And Scope

@@ -7,7 +7,7 @@
 - **Last revised:** 2026-10-14
 - **Requirements:** `../requirements.md`
 - **Code style:** `../code-style.md`
-- **Roadmap item:** "Full H2 support" in `../roadmap.md`
+- **Roadmap item:** "Full H2 support" in the [Roadmap project](https://github.com/orgs/Counterphase-Labs/projects/1)
 - **Builds on:** `add-register-catalogue-with-full-sensor-coverage.md`, `add-model-neutral-power-control-with-schedules.md`, `add-device-faults-and-repairs.md`, `add-debug-dump-and-logging.md` and the plans they build on. Everything in those plans that is not restated or explicitly replaced here continues to apply.
 
 ## Outcome And Scope

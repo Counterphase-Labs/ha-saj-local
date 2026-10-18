@@ -7,7 +7,7 @@
 - **Last revised:** 2026-10-11
 - **Requirements:** `../requirements.md`
 - **Code style:** `../code-style.md`
-- **Roadmap item:** 3 in `../roadmap.md`
+- **Roadmap item:** "Optional equipment detection" in the [Roadmap project](https://github.com/orgs/Counterphase-Labs/projects/1)
 - **Builds on:** `add-opt-in-register-writes.md` and the plans it builds on. Everything in those plans that is not restated or explicitly replaced here continues to apply.
 
 ## Outcome And Scope

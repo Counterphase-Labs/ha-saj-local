@@ -7,7 +7,7 @@
 - **Last revised:** 2026-10-16
 - **Requirements:** `../requirements.md`
 - **Code style:** `../code-style.md`
-- **Roadmap item:** "Simulator control panel" in `../roadmap.md`
+- **Roadmap item:** "Simulator control panel" in the [Roadmap project](https://github.com/orgs/Counterphase-Labs/projects/1)
 - **Builds on:** `../done/build-saj-modbus-mock-simulator.md`, `../done/add-device-faults-and-repairs.md`, `../done/add-full-h2-support.md` and the plans they build on. Everything in those plans that is not restated or explicitly replaced here continues to apply.
 
 ## Outcome And Scope

@@ -7,7 +7,7 @@
 - **Last revised:** 2026-10-12
 - **Requirements:** `../requirements.md`
 - **Code style:** `../code-style.md`
-- **Roadmap item:** "New item, EMS controller" in `../roadmap.md`
+- **Roadmap item:** "Power control" in the [Roadmap project](https://github.com/orgs/Counterphase-Labs/projects/1)
 - **Builds on:** `add-opt-in-register-writes.md`, `add-optional-equipment-detection.md` and the plans they build on. Everything in those plans that is not restated or explicitly replaced here continues to apply.
 
 ## Outcome And Scope
