@@ -41,7 +41,7 @@ Home Assistant is then on the port published in `compose.yaml`. You do not need 
 make ci
 ```
 
-This runs everything CI runs and must pass before you send a change. The other targets in the `Makefile` run parts of it while you work. The rules behind the checks are in [Testing](documentation/development.md#testing).
+This runs everything CI runs, and GitHub runs `make ci` itself, so the result matches. The command must pass before you send a change. `make ci` prints one line per step and a final result line, and a failing step adds the findings needed to fix the failure. Add `V=1`, for example `make ci V=1`, to show the raw tool output. The other targets in the `Makefile` run parts of it while you work. The rules behind the checks are in [Testing](documentation/development.md#testing). Python tests live in six folders under `tests/`: `tests/saj` (unit tests of the SAJ library), `tests/saj-integration` (unit tests of the Home Assistant integration), `tests/mock` (unit tests of the Modbus mock, with `profiles/` and `simulation/`), `tests/mock-integration` (the container smoke script and the shipped-scenario test of the Modbus mock), `tests/playwright` (the Docker scripts for the browser tests) and `tests/scripts` (the unit tests of the check runner, and its real-process tests in `test_runner_processes.py`).
 
 ## Send your change
 

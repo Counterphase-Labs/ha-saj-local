@@ -1,0 +1,53 @@
+{
+  "tests/saj-integration/test_config_flow_schedule.py": [
+    "custom_components/saj_local/config_flow.py"
+  ],
+  "tests/saj-integration/test_coordinator_power.py": [
+    "custom_components/saj_local/coordinator.py"
+  ],
+  "tests/saj-integration/test_coordinator_write.py": [
+    "custom_components/saj_local/coordinator.py"
+  ],
+  "tests/saj-integration/test_identity_and_history.py": [
+    "custom_components/saj_local/config_flow.py"
+  ],
+  "tests/saj-integration/test_init.py": [
+    "custom_components/saj_local/__init__.py"
+  ],
+  "tests/saj-integration/test_power_entities.py": [
+    "custom_components/saj_local/number.py",
+    "custom_components/saj_local/switch.py"
+  ],
+  "tests/saj-integration/test_translations.py": [
+    "custom_components/saj_local/const.py"
+  ],
+  "tests/mock/profiles/test_profiles.py": [
+    "modbus_mock/saj_modbus_mock/profiles/__init__.py"
+  ],
+  "tests/mock/test_main.py": [
+    "modbus_mock/saj_modbus_mock/__main__.py"
+  ],
+  "tests/saj/test_control_hs3.py": [
+    "custom_components/saj_local/saj/control.py",
+    "custom_components/saj_local/saj/models/hs3.py"
+  ],
+  "tests/saj/test_control_members.py": [
+    "custom_components/saj_local/saj/catalogue.py"
+  ],
+  "tests/saj/test_h2_settings.py": [
+    "custom_components/saj_local/saj/control.py",
+    "custom_components/saj_local/saj/models/h2.py"
+  ],
+  "tests/saj/test_import.py": [
+    "custom_components/saj_local/saj/__init__.py"
+  ],
+  "tests/saj/test_model_faults.py": [
+    "custom_components/saj_local/saj/models/faults.py"
+  ],
+  "tests/saj/test_models.py": [
+    "custom_components/saj_local/saj/models/__init__.py"
+  ],
+  "tests/saj/test_power_control_models.py": [
+    "custom_components/saj_local/saj/power_control.py"
+  ]
+}

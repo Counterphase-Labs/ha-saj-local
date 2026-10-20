@@ -2,8 +2,8 @@ import pytest
 
 from saj_modbus_mock.profiles import parallel
 from saj_modbus_mock.registers import Encoding
-from tests.modbus_mock.builders import by_address, make_scenario
-from tests.modbus_mock.profiles.fakes import isolate
+from tests.mock.builders import by_address, make_scenario
+from tests.mock.profiles.fakes import isolate
 
 
 @pytest.fixture(autouse=True)

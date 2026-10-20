@@ -19,7 +19,7 @@ from saj_modbus_mock.simulation.faults import (
     FaultState,
     PackCodes,
 )
-from tests.modbus_mock.builders import START, make_scenario
+from tests.mock.builders import START, make_scenario
 
 STEP = plant_module.INTEGRATION_STEP_S
 

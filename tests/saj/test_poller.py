@@ -1080,3 +1080,14 @@ async def test_a_stale_connection_is_logged_before_it_is_reopened(caplog):
         await harness.poller().run(enabled={"a"})
 
     assert _poller_debug(caplog)[0] == f"{LABEL}: Reopening a stale connection"
+
+
+def test_a_cadence_plan_counts_one_request_per_range():
+    plan = CadencePlan(
+        interval=5,
+        keys=frozenset({"a", "b"}),
+        ranges=((0x4000, 2), (0x4010, 1)),
+        default=False,
+    )
+
+    assert plan.requests == 2

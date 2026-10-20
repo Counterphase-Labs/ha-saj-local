@@ -6,7 +6,7 @@ export default defineConfig({
     forbidOnly: true,
     outputDir: "test-results/home-assistant",
     reporter: [
-        ["list"],
+        ["dot"],
         [
             "html",
             { open: "never", outputFolder: "playwright-report/home-assistant" },

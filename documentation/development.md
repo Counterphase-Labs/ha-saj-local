@@ -116,18 +116,42 @@ Home Assistant is pinned in several files that must change together, or lint and
 
 Every action is a make target and CI calls the same targets, so passing locally and passing in CI mean the same thing. A new CI step starts as a make target.
 
-`make ci` runs everything CI runs and is the definition of done. Run the narrower targets while iterating.
+`make ci` runs everything CI runs and is the definition of done. GitHub runs `make ci` itself in one `checks` job of [ci.yml](../.github/workflows/ci.yml), alongside the shared `roquerodrigo/workflows` jobs (`lint`, `tests`, `validate`) and the `hacs` job, so a step added to `make ci` runs in GitHub with no workflow change. Run the narrower targets while iterating.
 
 `make build` builds everything the project builds, so there is no build target per part. `make test` runs every test suite, and each suite has its own target so one can be run alone:
 
 | Target | Suite |
 | --- | --- |
-| `make test-python` | The pytest unit tests of the library, the integration and the simulator, with the coverage gate. |
+| `make test-python` | The pytest unit tests of the library, the integration, the simulator and the check runner, without `tests/mock-integration` and `tests/scripts/test_runner_processes.py`, with the 100 % line and branch coverage gate. |
 | `make test-frontend` | The unit tests of the cards, with the coverage gate. |
-| `make test-isolated` | The library and the simulator tests in an environment that has no Home Assistant, which proves the boundary between them. |
+| `make test-modules` | Every module with logic (any function, method or branch) against the unit test files mapped to the module alone, with 100 % line and branch coverage required per module. A module with logic and no unit test file fails, and a module with no logic, such as an empty module or a data table, is skipped. |
+| `make test-isolated` | The library and the simulator tests in an environment that has no Home Assistant, which proves the boundary between them. Coverage is gated on the modules the test files test. |
+| `make test-runner-processes` | The real-process tests of the check runner in `tests/scripts/test_runner_processes.py`, which start real processes and are outside coverage. |
 | `make test-browser-controlled` | Playwright against a built bundle and controlled data, with no Home Assistant. It builds first. |
 | `make test-browser-home-assistant` | Playwright against a throwaway Home Assistant with the simulators, which proves the cards load and work in the real frontend. |
-| `make mock-smoke` | The simulator container answers a client. |
+| `make mock-smoke` | The simulator container answers a client, then the tests in `tests/mock-integration` run. |
+
+The checks that make up `make ci` also have a target each, so one tool can be run alone:
+
+| Target | Check |
+| --- | --- |
+| `make ruff` | `ruff format --check` and `ruff check`. |
+| `make mypy` | The strict type check. |
+| `make import-lint` | The import-linter contracts. |
+| `make complexipy` | The cognitive complexity limit. |
+| `make copy-paste` | jscpd duplicate detection. |
+| `make prettier`, `make tsc`, `make eslint` | Formatting, type check and lint of the frontend. |
+| `make release-check` | The HACS archive holds the asset manifest and the built card bundle. |
+| `make mock-build` | The simulator image builds and holds no bytecode. |
+| `make validate` | hassfest against the working tree, in Docker. HACS validation reads the pushed repository, so only the `hacs` workflow job runs the HACS validation. |
+
+`make lint`, `make python-ci`, `make frontend-check` and `make frontend-ci` run groups of these targets.
+
+Every target runs through the check runner in `.github/scripts/`. The runner prints one `[x]` or `[ ]` line per step, the findings of a failing step as `file:line message`, and a final result line. The runner runs every selected step even after one fails, and reports a timeout, a signal or a missing tool as such. The quiet output exists so a person or an agent reads only what is needed to fix a failure:
+
+- `ARGS="..."` passes paths and options to a single-tool target, for example `make test-python ARGS="tests/saj/test_poller.py -k decode"`. A test file selected this way gates coverage on the module the file tests, and the other unit test files mapped to the module run alongside, with the folder mapping in `.github/scripts/pytest_scope.py` and the exceptions in `.github/scripts/pytest_scope.json`.
+- `ONLY=<step,...>` runs a subset of the steps of a grouping target, for example `make ci ONLY=ruff,mypy`.
+- `V=1` streams the raw tool output of any target, for example `make test-python V=1`.
 
 GitHub Actions are pinned to a commit hash so a moved tag cannot change what CI runs.
 
@@ -141,7 +165,9 @@ The rules are in the Non Functional section of `requirements.md`. The reasons:
 - **No inline bypasses** of lint, type or coverage checks. Change the configuration, where the decision is visible, or restructure the code.
 - **Assert behaviour, not constants.** A test that restates a register address proves nothing.
 
-`tests/integration/` holds the unit tests of the Home Assistant integration, not integration tests.
+`tests/` holds exactly six folders: `tests/saj` (unit tests of the SAJ library), `tests/saj-integration` (unit tests of the Home Assistant integration), `tests/mock` (unit tests of the Modbus mock, with `profiles/` and `simulation/`), `tests/mock-integration` (the container smoke script and the shipped-scenario test of the Modbus mock), `tests/playwright` (the Docker scripts for the browser tests) and `tests/scripts` (the unit tests of the check runner, and its real-process tests in `test_runner_processes.py`). `tests/mock-integration` and `tests/scripts/test_runner_processes.py` are outside the unit run and outside coverage.
+
+`tests/saj-integration` holds the unit tests of the Home Assistant integration, not integration tests.
 
 - **Writes have one path.** An entity action calls `SajEntity.async_change`, which calls the coordinator's single `write` method. The EMS cleanup uses the same lock and error handling. The heartbeat is not a write: it reads each owned function's target through the library's keep-alive read, then the EMS limits through the library's limits read, under the same cycle lock, and uses no write slot. Only `custom_components/saj_local/errors.py` may import the library's errors; the rest go through it.
 - **The simulator is not a source for write behaviour.** Writes are specified by the SAJ protocol documents and real readings. If the simulator departs from the documented `0x06` and `0x10` behaviour, that is a simulator defect to raise, not something to adjust the integration around.

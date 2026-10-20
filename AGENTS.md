@@ -50,16 +50,51 @@ Rules:
 
 ## Verification workflow
 
-After code changes, run lint and tests in this order:
+Run checks through the make targets. Each target runs one tool through the runner in `.github/scripts/`, which prints one `[x]` or `[ ]` line per step, the details of each failed step, and a final result line. The runner runs every selected step even after one fails and exits non-zero when any step fails. A step killed by a signal, a timeout or a missing tool is reported as that, not as a test or lint failure.
 
-```bash
-make ci
-```
+Never exclude `.github/work/` (requirements, code style, plans and done work) from the copy-paste check (the `ignore` list in `.jscpd.json`) or from any other check; duplicated text found there is fixed in the documents, not hidden.
 
-- Lint runs `ruff format`, `ruff check` and `mypy` — all configured in `pyproject.toml`. Fix any failure and re-run before moving on.
-- `pytest` enforces a **100 % coverage gate** (`--cov-fail-under` in `pyproject.toml`).
+`make help` lists every make target with a one-line description and ends with a line naming `make help ARGS=<target>` for the detail of one target. `make help ARGS=<target>` prints the detail for one target: what the target runs, what the target prints on success and on failure, what `ARGS` does for the target, and for a grouping target the steps the target runs. The help lives with the step definitions in `.github/scripts/check_steps.py` and is printed by the runner, so a target added or changed there is described by `make help` without an edit of this file. An unknown target name exits non-zero.
 
-Both gates mirror CI (`.github/workflows/ci.yml`). Skip this only when the change literally cannot affect lint or tests (e.g., README-only edits).
+`make ci` is the gate after code changes. `test-python` enforces a **100 % coverage gate** for lines and branches (`--cov-fail-under` and `--cov-branch` in `pyproject.toml`), including `.github/scripts`. GitHub runs `make ci` itself in the one `checks` job of `.github/workflows/ci.yml`, alongside the shared `roquerodrigo/workflows` jobs and the `hacs` job, so local and CI results match and every step of `make ci` runs in GitHub. Skip the checks only when the change literally cannot affect lint or tests (for example README-only edits). `validate` runs hassfest against the working tree and needs only Docker. `tests/scripts/test_runner_processes.py` holds the tests of the runner that start real processes; `test-runner-processes` runs them, and they are kept out of `test-python` and out of coverage. `tests/mock-integration` is run by `mock-smoke` and is kept out of `test-python` and out of coverage too.
+
+### Options
+
+- `ARGS="..."` passes paths and tool options to a single-tool target, for example `make test-python ARGS="tests/saj/test_poller.py -k decode"` or `make ruff ARGS="custom_components/saj_local/coordinator.py"`.
+- `ONLY=<step,...>` runs a subset of the steps of a grouping target, for example `make ci ONLY=ruff,mypy`.
+- `V=1` streams the raw tool output and switches off the sparse tool configuration and environment settings for that run.
+
+### Coverage of a subset run
+
+A full `make test-python` measures and gates the whole package. When `ARGS` selects test files or folders, the target measures coverage only for the modules those files test and adds the other unit test files mapped to those modules to the run, and applies the same 100 % gate to those modules, so a run of `tests/saj-integration/test_coordinator_write.py` also runs `test_coordinator.py` and `test_coordinator_power.py` and gates `coordinator.py`. The module is the file with the test file's name without the `test_` prefix, looked up by test folder:
+
+| Test folder | Module folders |
+| --- | --- |
+| `tests/saj` | `custom_components/saj_local/saj`, `custom_components/saj_local/saj/models` |
+| `tests/saj-integration` | `custom_components/saj_local` |
+| `tests/mock` | `modbus_mock/saj_modbus_mock` |
+| `tests/mock/profiles` | `modbus_mock/saj_modbus_mock/profiles` |
+| `tests/mock/simulation` | `modbus_mock/saj_modbus_mock/simulation` |
+| `tests/scripts` | `.github/scripts` |
+
+Test files with no module of the same name are listed in `.github/scripts/pytest_scope.json`, each with the modules the file tests, and a test file with no known module is rejected until the file is added there. Selecting tests with `-k`, `-m` or `--lf` needs a test file in `ARGS`. `test-modules` runs in `make ci` and gates every module at 100 % line and branch coverage from the unit test files mapped to the module alone, so coverage from the tests of other modules does not count. A module with logic (any function, method or branch) and no unit test file fails the step, and a module with no logic, such as an empty module or a module that only holds a data table, is skipped, because the requirements forbid tests of constants. A module that only passes the gate in the full `test-python` run means other tests cover the module by accident, and that is a real gap to fix. `--no-cov` is never used; `test-isolated` gates coverage the same way as any subset run.
+
+### Agent use
+
+Use the make target where one exists. A covered tool may be run directly for anything else; the tool configuration and the agent environment keep the tool as sparse as the make target. Agent shells get the quiet git, docker compose and uv settings from the `env` block of the user-level Claude Code settings (`~/.claude/settings.json`), which applies to every project and is not stored in this repository. The runner sets the docker compose and uv settings for its own steps, so make targets are quiet without the block.
+
+Allowed, because none of the following adds output: filtering, piping or redirecting any output, make targets included (`| grep`, `| tail`, `> file`). Allowed because the agent chose to see more of its own run: selecting tests or stopping early with a test path or node ID, `-k`, `-x`, `--lf` and `-s`. A long target such as `make ci` or a full `make test-python` may be given a longer shell timeout or run in the background.
+
+Forbidden: any way of getting verbose output out of the trimmed output, that is `V=1`, options such as `--cov-report=term`, `-v` or `--reporter=verbose`, environment or configuration overrides, and unsetting the agent environment. `--no-cov` is forbidden too. Run `make complexipy` and never `uv run complexipy` without `--plain`, because complexipy has no setting that removes the banner.
+
+When the trimmed output does not explain a failure clearly enough to fix the failure, stop and ask the user to run the verbose command for the target in the session, for example `! make test-python V=1 ARGS="tests/saj/test_poller.py"`, so the raw output lands in the conversation. After the cause is understood, fix the parser of the target in `.github/scripts/check_parsers.py` so the same kind of failure is explained clearly in the trimmed output from then on, and add a unit test for the case in `tests/scripts/`.
+
+## Efficient reading
+
+- Read the files a task needs instead of exploring; use the repository structure below to find them.
+- Do not read the same content twice in one task.
+- Never list or search `.venv`, `.venv-isolated` or `node_modules`.
+- This never means reading less of something you need: a code review reads the whole diff. The built card bundle (`custom_components/saj_local/frontend/saj-local-*.js`), `uv.lock` and `frontend/package-lock.json` print as one `Binary files differ` line in `git diff` and `git show`; use `git diff --text` only when their content is the subject.
 
 ## Bumping the Home Assistant version
 
@@ -73,10 +108,15 @@ Verify the pairing on PyPI before committing: the `requires_dist` of `pytest-hom
 
 ## Repository Layout
 
-- Integration code: `custom_components/saj_local/`
-- Tests: `tests/`
-- Development configuration: `config/`
-- Project requirements: `.github/work/requirements.md`
+- `custom_components/saj_local/`: the integration; `saj/` is the SAJ library, which can be tested without Home Assistant, and `frontend/` holds the built card bundle.
+- `modbus_mock/`: the Modbus simulator of a SAJ controller.
+- `frontend/`: the card source, its unit tests, the Playwright browser tests, and the Vite, Vitest, Playwright, ESLint and TypeScript configuration.
+- `tests/`: Python tests in exactly six folders: `tests/saj` (unit tests of the SAJ library), `tests/saj-integration` (unit tests of the Home Assistant integration), `tests/mock` (unit tests of the Modbus mock, with `profiles/` and `simulation/`), `tests/mock-integration` (the container smoke script and the shipped-scenario test of the Modbus mock), `tests/playwright` (the Docker scripts for the browser tests) and `tests/scripts` (the unit tests of the check runner, and its real-process tests in `test_runner_processes.py`). `tests/mock-integration` and `tests/scripts/test_runner_processes.py` are outside the unit run and outside coverage.
+- `.github/scripts/`: the check runner and its helpers behind the make targets.
+- `.github/work/`: project requirements (`requirements.md`), coding standards (`code-style.md`), `future/` plans and `done/` work.
+- `config/`: development Home Assistant configuration; the compose and Dockerfile files define the Docker environments.
+- `documentation/`: the development guide and user documentation.
+- `Makefile`, `pyproject.toml`: entry points and tool configuration.
 
 Keep implementation and tests focused on observable Home Assistant behavior.
 Add a module only when the integration has behaviors that needs it.

@@ -2,7 +2,7 @@ import pytest
 
 from saj_modbus_mock.profiles import fault_tables
 from saj_modbus_mock.simulation.faults import Effect, Equipment, FaultBit
-from tests.modbus_mock.builders import make_scenario
+from tests.mock.builders import make_scenario
 
 REGISTER_COUNT = {Equipment.INVERTER: 3, Equipment.BATTERY: 1, Equipment.EV_CHARGER: 2}
 

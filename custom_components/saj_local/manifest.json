@@ -1,8 +1,8 @@
 {
   "domain": "saj_local",
   "name": "SAJ Local",
-  "codeowners": ["@dogmatic69"],
   "after_dependencies": ["recorder"],
+  "codeowners": ["@dogmatic69"],
   "config_flow": true,
   "dependencies": ["frontend", "http"],
   "documentation": "https://github.com/dogmatic69/home-assistant-saj-modbus",

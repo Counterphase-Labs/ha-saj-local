@@ -6,8 +6,8 @@ import pytest
 from saj_modbus_mock.exceptions import ExceptionCode
 from saj_modbus_mock.profiles import hs3
 from saj_modbus_mock.registers import Field
-from tests.modbus_mock.builders import arguments_of, block_at, by_address, make_scenario
-from tests.modbus_mock.profiles.fakes import fake_fixed
+from tests.mock.builders import arguments_of, block_at, by_address, make_scenario
+from tests.mock.profiles.fakes import fake_fixed
 
 COMMON_BUILDERS = {
     "information_fields": 0x8F00,

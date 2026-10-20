@@ -6,5 +6,11 @@
   ],
   "minLines": 5,
   "minTokens": 50,
-  "mode": "mild"
+  "mode": "mild",
+  "reporters": [
+    "ai"
+  ],
+  "noColors": true,
+  "noTips": true,
+  "exitCode": 1
 }

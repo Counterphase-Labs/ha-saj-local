@@ -18,7 +18,7 @@ from saj_modbus_mock.simulation.faults import (
     FaultState,
     PackCodes,
 )
-from tests.modbus_mock.builders import make_scenario
+from tests.mock.builders import make_scenario
 
 SETTING = Field(
     address=0x3647,

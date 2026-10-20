@@ -210,3 +210,67 @@ def test_group_cadences_cover_polling_groups_only_and_can_leave_one_out(
     assert [cadence.interval for cadence in cadences] == expected_intervals
     assert all(isinstance(cadence.keys, frozenset) for cadence in cadences)
     assert const.group_cadences(entry=entry)[0].keys == {"a", "b"}
+
+
+async def test_selector_options_are_the_translated_labels_of_one_selector(monkeypatch):
+    asked = []
+
+    async def translations(hass, language, category, integrations):
+        asked.append((hass, language, category, integrations))
+        return {
+            "component.saj_local.selector.power_function.options.battery": "Batterie",
+            "component.saj_local.selector.power_function.options.grid": "Netz",
+            "component.saj_local.selector.other.options.battery": "Other",
+            "component.saj_local.issues.model_mismatch.title": "Title",
+        }
+
+    monkeypatch.setattr(const, "async_get_translations", translations)
+    hass = SimpleNamespace(config=SimpleNamespace(language="de"))
+
+    options = await const.selector_options(hass=hass, selector_name="power_function")
+
+    assert options == {"battery": "Batterie", "grid": "Netz"}
+    assert asked == [(hass, "de", "selector", [const.DOMAIN])]
+
+
+def test_installations_of_one_endpoint_share_a_guard_whatever_the_host_case():
+    hass = SimpleNamespace(data={})
+
+    first = const.endpoint_guard(hass=hass, host="Inverter.Local", port=502)
+
+    assert const.endpoint_guard(hass=hass, host="inverter.local", port=502) is first
+    assert const.endpoint_guard(hass=hass, host="inverter.local", port=503) is not first
+    assert const.endpoint_guard(hass=hass, host="other.local", port=502) is not first
+
+
+def _schedule_subentry(subentry_id, *, kind="power_schedule", function="battery"):
+    return SimpleNamespace(
+        subentry_id=subentry_id,
+        subentry_type=kind,
+        data={"function": function, "schedule": f"schedule.{subentry_id}"},
+    )
+
+
+@pytest.mark.parametrize(
+    ("excluding", "expected"),
+    [
+        (None, [("battery", "schedule.s1"), ("grid", "schedule.s2")]),
+        ("s1", [("grid", "schedule.s2")]),
+        ("s2", [("battery", "schedule.s1")]),
+        ("unknown", [("battery", "schedule.s1"), ("grid", "schedule.s2")]),
+    ],
+)
+def test_power_schedules_cover_schedule_subentries_only_and_can_leave_one_out(
+    excluding, expected
+):
+    entry = SimpleNamespace(
+        subentries={
+            "s1": _schedule_subentry("s1", function="battery"),
+            "other": _schedule_subentry("other", kind="polling_group"),
+            "s2": _schedule_subentry("s2", function="grid"),
+        }
+    )
+
+    schedules = const.power_schedules(entry=entry, excluding=excluding)
+
+    assert [(item.function.value, item.entity_id) for item in schedules] == expected

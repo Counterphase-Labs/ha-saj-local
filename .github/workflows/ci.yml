@@ -13,9 +13,9 @@ permissions:
   contents: read
 
 jobs:
-  python:
+  checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -27,18 +27,6 @@ jobs:
         with:
           python-version: "3.14"
           groups: dev lint
-
-      - name: Verify Python
-        run: make python-ci
-
-  frontend:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -55,46 +43,18 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Verify frontend
-        run: make frontend-ci
-
-      - name: Verify HACS archive contents
-        run: make release-check
-
-  mock:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Build the Modbus mock image
-        run: make mock-build
-
-      - name: Smoke test the Modbus mock scenarios
-        run: make mock-smoke
-
-  home-assistant-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Verify clean Home Assistant browser flow
-        run: make test-browser-home-assistant
+      - name: Run every check
+        run: make ci
 
       - name: Upload browser failure details
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: home-assistant-browser-failure
+          name: browser-failure
           path: |
+            frontend/playwright-report/controlled
             frontend/playwright-report/home-assistant
+            frontend/test-results/controlled
             frontend/test-results/home-assistant
           if-no-files-found: warn
           retention-days: 7

@@ -34,18 +34,32 @@ lint = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = [".", "custom_components/saj_local", "modbus_mock"]
+pythonpath = [".", ".github/scripts", "custom_components/saj_local", "modbus_mock"]
 addopts = [
+    "-q",
+    "--tb=short",
+    "--ignore=tests/mock-integration",
+    "--ignore=tests/scripts/test_runner_processes.py",
     "--cov=custom_components/saj_local",
     "--cov=modbus_mock/saj_modbus_mock",
+    "--cov=.github/scripts",
     "--cov-branch",
-    "--cov-report=term-missing",
+    "--cov-report=term-missing:skip-covered",
     "--cov-fail-under=100",
 ]
 
 [tool.mypy]
 python_version = "3.14"
-files = ["custom_components/saj_local", "modbus_mock/saj_modbus_mock"]
+files = [
+    "custom_components/saj_local",
+    "modbus_mock/saj_modbus_mock",
+    ".github/scripts",
+]
+pretty = false
+show_error_codes = true
+show_error_context = false
+error_summary = false
+color_output = false
 ignore_missing_imports = true
 follow_imports = "silent"
 strict_optional = true
@@ -64,6 +78,7 @@ check_untyped_defs = false
 
 [tool.ruff]
 target-version = "py314"
+output-format = "concise"
 
 [tool.ruff.format]
 exclude = ["*.md"]
@@ -91,6 +106,7 @@ keep-runtime-typing = true
 max-complexity = 20
 
 [tool.ruff.lint.per-file-ignores]
+".github/scripts/**" = ["INP001", "S603", "S607"]
 "tests/**" = [
     "S101",
     "S105",
@@ -103,10 +119,16 @@ max-complexity = 20
 ]
 
 [tool.complexipy]
-paths = ["custom_components/saj_local", "modbus_mock/saj_modbus_mock"]
+paths = [
+    "custom_components/saj_local",
+    "modbus_mock/saj_modbus_mock",
+    ".github/scripts",
+]
 max-complexity-allowed = 20
 cache-dir = ".complexipy_cache"
 color = "no"
+failed = true
+snapshot-ignore = true
 
 [tool.importlinter]
 root_packages = ["custom_components.saj_local", "saj_modbus_mock"]

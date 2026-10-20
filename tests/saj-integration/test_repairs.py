@@ -89,6 +89,17 @@ def fake_changes(monkeypatch):
     monkeypatch.setattr(repairs_module, "EntryChanges", FakeChanges)
 
 
+def _issues(issue):
+    return SimpleNamespace(
+        async_get=lambda _hass: SimpleNamespace(async_get_issue=lambda *_: issue)
+    )
+
+
+@pytest.fixture(autouse=True)
+def no_open_issue(monkeypatch):
+    monkeypatch.setattr(repairs_module, "ir", _issues(None))
+
+
 def _form(**details):
     return {"type": "form", **details}
 
@@ -154,11 +165,37 @@ async def test_the_model_fix_starts_at_its_one_confirm_step():
     assert form["step_id"] == "confirm"
     assert form["errors"] == {}
     assert form["description_placeholders"] == {
+        "selected_model": "?",
+        "approved_serial": "?",
         "installation": "Roof inverter",
         "model": "HS3",
         "serial": "SERIAL-2",
     }
     assert FakeChanges.instances[0].validated == [adoption_input(entry=ENTRY)]
+
+
+async def test_the_model_fix_also_shows_what_the_issue_was_raised_with(monkeypatch):
+    FakeChanges.validations = [_detected()]
+    issue = SimpleNamespace(
+        translation_placeholders={
+            "installation": "Raised under another title",
+            "selected_model": "H2",
+            "approved_serial": "SERIAL-1",
+            "model": "stale",
+        }
+    )
+
+    monkeypatch.setattr(repairs_module, "ir", _issues(issue))
+
+    form = await _model_flow().async_step_confirm()
+
+    assert form["description_placeholders"] == {
+        "installation": "Roof inverter",
+        "selected_model": "H2",
+        "approved_serial": "SERIAL-1",
+        "model": "HS3",
+        "serial": "SERIAL-2",
+    }
 
 
 async def test_showing_the_fix_saves_nothing():
@@ -258,6 +295,8 @@ async def test_a_failing_validation_is_shown_on_the_form_and_saves_nothing(caplo
     assert _logged(caplog) == []
     assert form["errors"] == {"base": "unsupported_device"}
     assert form["description_placeholders"] == {
+        "selected_model": "?",
+        "approved_serial": "?",
         "installation": "Roof inverter",
         "model": "?",
         "serial": "?",
@@ -265,6 +304,48 @@ async def test_a_failing_validation_is_shown_on_the_form_and_saves_nothing(caplo
     }
     assert FakeChanges.instances[0].saved == []
     assert flow.hass.config_entries.reloads == []
+
+
+@pytest.mark.parametrize(
+    ("raised_with", "model", "serial"),
+    [
+        ({"selected_model": "H2", "detected_model": "HS3"}, "HS3", "?"),
+        ({"approved_serial": "SERIAL-1", "found_serial": "SERIAL-2"}, "?", "SERIAL-2"),
+    ],
+    ids=["model mismatch", "identity mismatch"],
+)
+async def test_a_failed_read_shows_what_the_issue_detected(
+    raised_with, model, serial, monkeypatch
+):
+    FakeChanges.validations = [Validation(errors={"base": "cannot_connect"})]
+    issue = SimpleNamespace(translation_placeholders=raised_with)
+    monkeypatch.setattr(repairs_module, "ir", _issues(issue))
+
+    form = await _model_flow().async_step_confirm()
+
+    assert form["errors"] == {"base": "cannot_connect"}
+    assert form["description_placeholders"] == {
+        "selected_model": "?",
+        "approved_serial": "?",
+        **raised_with,
+        "installation": "Roof inverter",
+        "model": model,
+        "serial": serial,
+    }
+
+
+async def test_a_failed_read_without_an_open_issue_shows_every_value_unknown():
+    FakeChanges.validations = [Validation(errors={"base": "cannot_connect"})]
+
+    form = await _model_flow().async_step_confirm()
+
+    assert form["description_placeholders"] == {
+        "selected_model": "?",
+        "approved_serial": "?",
+        "installation": "Roof inverter",
+        "model": "?",
+        "serial": "?",
+    }
 
 
 async def test_a_serial_that_belongs_to_another_installation_is_not_adopted():

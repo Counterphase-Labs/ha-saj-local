@@ -5,7 +5,7 @@ export default defineConfig({
     fullyParallel: true,
     outputDir: "test-results/controlled",
     reporter: [
-        ["list"],
+        ["dot"],
         [
             "html",
             { open: "never", outputFolder: "playwright-report/controlled" },

@@ -3,7 +3,14 @@ import { defineConfig } from "eslint/config";
 import tseslint from "typescript-eslint";
 
 export default defineConfig(
-    { ignores: ["coverage", "playwright-report", "test-results"] },
+    {
+        ignores: [
+            "coverage",
+            "eslint-compact-formatter.js",
+            "playwright-report",
+            "test-results",
+        ],
+    },
     eslint.configs.recommended,
     tseslint.configs.strictTypeChecked,
     tseslint.configs.stylisticTypeChecked,

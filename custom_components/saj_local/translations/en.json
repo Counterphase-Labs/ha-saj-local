@@ -3176,12 +3176,11 @@
     },
     "model_mismatch": {
       "title": "{installation} is set to the wrong model",
-      "description": "{installation} is set to {selected_model}, but the device at its address identifies as {detected_model}, so it was not loaded. Adopt the {detected_model} here to keep this installation's entities and history, or check the address in Configure.",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "Adopt the detected inverter",
-            "description": "{installation} is set to a different inverter than the one at its address. The device reports {model} with serial {serial}. Adopt it? Your entities, their IDs and their historical data stay with this installation, and the device details change. Allow control and every other setting stay as they are."
+            "description": "{installation} is set to {selected_model}, but the device at its address identifies as {model} with serial {serial}, so it was not loaded. Adopt the {model}? Your entities, their IDs and their historical data stay with this installation, and the device details change. Allow control and every other setting stay as they are. To keep {selected_model} instead, check the address in Configure."
           }
         },
         "error": {
@@ -3202,12 +3201,11 @@
     },
     "identity_mismatch": {
       "title": "{installation} now reaches a different inverter",
-      "description": "{installation} was set up with the inverter with serial {approved_serial}, but the device at its address has serial {found_serial}. Adopt the new inverter here to keep this installation's entities and history, or check the address in Configure.",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "Adopt the detected inverter",
-            "description": "{installation} is set to a different inverter than the one at its address. The device reports {model} with serial {serial}. Adopt it? Your entities, their IDs and their historical data stay with this installation, and the device details change. Allow control and every other setting stay as they are."
+            "description": "{installation} was set up with the inverter with serial {approved_serial}, but the device at its address has serial {serial} and identifies as {model}. Adopt the new inverter? Your entities, their IDs and their historical data stay with this installation, and the device details change. Allow control and every other setting stay as they are. To keep the original inverter instead, check the address in Configure."
           }
         },
         "error": {
@@ -3232,12 +3230,11 @@
     },
     "registers_refused": {
       "title": "{installation} has readings the inverter refuses",
-      "description": "The inverter keeps refusing these readings of {installation}, so they are no longer read: {entities}. They are tried again once a day and whenever the integration loads, and this repair goes away by itself when they answer again. Disabling them stops them being read for good.",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "Disable the refused entities",
-            "description": "Disable these entities of {installation}? They stop being read: {entities}. You can enable them again from the entity settings."
+            "description": "The inverter keeps refusing these readings of {installation}, so they are no longer read: {entities}. They are tried again once a day and whenever the integration loads, and this repair goes away by itself when they answer again. Disable them to stop them being read for good? You can enable them again from the entity settings."
           }
         }
       }

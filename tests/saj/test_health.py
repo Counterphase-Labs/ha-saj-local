@@ -356,3 +356,29 @@ def test_a_key_stays_tracked_until_it_answers_or_stops_being_read(
     assert tracked_refusals(
         tracked=tracked, suspended=suspended, enabled=enabled, answered=answered
     ) == frozenset(expected)
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "crossed"),
+    [
+        (0, 10, False),
+        (5, 20, True),
+        (15, 40, True),
+        (5, 40, True),
+        (10, 30, False),
+        (12, 18, False),
+        (40, 60, False),
+    ],
+)
+def test_a_break_is_crossed_only_by_a_request_that_spans_a_side_of_it_strictly(
+    start: int, end: int, *, crossed: bool
+):
+    gap = Break(before=10, after=30)
+
+    assert gap.crossed_by(start=start, end=end) is crossed
+
+
+def test_a_region_hull_runs_from_its_lowest_address_to_its_highest_end():
+    region = Region(rows=(Row(address=30, words=2), Row(address=10, words=1)))
+
+    assert region.hull == Break(before=10, after=32)

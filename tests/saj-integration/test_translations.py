@@ -1,3 +1,4 @@
+import functools
 import json
 import re
 import string
@@ -295,21 +296,39 @@ def test_there_is_a_translation_for_every_issue_the_integration_raises():
     }
 
 
+DESCRIPTION = ("description",)
+CONFIRM_DESCRIPTION = ("fix_flow", "step", "confirm", "description")
+
+
 @pytest.mark.parametrize(
-    ("key", "placeholders"),
+    ("key", "where", "placeholders"),
     [
-        (ISSUE_MODEL_MISMATCH, {"installation", "selected_model", "detected_model"}),
-        (ISSUE_IDENTITY_MISMATCH, {"installation", "approved_serial", "found_serial"}),
-        (ISSUE_UNSUPPORTED_DEVICE, {"installation", "device_type"}),
-        (ISSUE_REGISTERS_REFUSED, {"installation", "entities"}),
-        (ISSUE_ENDPOINT_UNREACHABLE, {"installation", "host", "port"}),
+        (ISSUE_UNSUPPORTED_DEVICE, DESCRIPTION, {"installation", "device_type"}),
+        (ISSUE_ENDPOINT_UNREACHABLE, DESCRIPTION, {"installation", "host", "port"}),
+        (
+            ISSUE_MODEL_MISMATCH,
+            CONFIRM_DESCRIPTION,
+            {"installation", "selected_model", "model", "serial"},
+        ),
+        (
+            ISSUE_IDENTITY_MISMATCH,
+            CONFIRM_DESCRIPTION,
+            {"installation", "approved_serial", "model", "serial"},
+        ),
+        (
+            ISSUE_REGISTERS_REFUSED,
+            CONFIRM_DESCRIPTION,
+            {"installation", "entities"},
+        ),
     ],
 )
 def test_each_issue_says_what_happened_with_the_values_it_is_raised_with(
-    key, placeholders
+    key, where, placeholders
 ):
     issue = ISSUES[key]
-    text = issue["title"] + issue["description"]
+    text = issue["title"] + functools.reduce(
+        lambda node, step: node[step], where, issue
+    )
 
     assert placeholders <= {
         name for _, name, _, _ in string.Formatter().parse(text) if name

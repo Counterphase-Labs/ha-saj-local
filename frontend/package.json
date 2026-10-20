@@ -9,12 +9,12 @@
   "scripts": {
     "build": "vite build --config vite.config.ts",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "lint": "eslint .",
+    "format:check": "prettier --check --log-level warn .",
+    "lint": "eslint --format ./eslint-compact-formatter.js .",
     "test": "vitest run",
     "test:browser:controlled": "playwright test --config playwright.controlled.config.ts",
     "test:browser:home-assistant": "playwright test --config playwright.home-assistant.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit --pretty false"
   },
   "dependencies": {
     "@mdi/js": "7.4.47",

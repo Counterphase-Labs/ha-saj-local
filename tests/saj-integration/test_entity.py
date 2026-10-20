@@ -22,12 +22,13 @@ from custom_components.saj_local.saj.definitions import Access, EntityKind, Quan
 from custom_components.saj_local.saj.errors import (
     ControlDisabledError,
     InvalidValueError,
+    NoPowerTargetError,
     ProtectedSettingError,
     ValueProblem,
     WriteMismatchError,
     WriteRejectedError,
 )
-from custom_components.saj_local.saj.models import ALL_EQUIPMENT
+from custom_components.saj_local.saj.models import ALL_EQUIPMENT, PowerFunction
 from custom_components.saj_local.saj.models.h2 import PROFILE as H2
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from tests.entities import ENTRY_ID, FakeCoordinator, device, register_of
@@ -526,3 +527,119 @@ def test_a_recognised_device_gets_the_entities_of_its_shape_with_the_core_enable
         )
         for kind in ALL_KINDS
     } == enabled_by_kind
+
+
+def _power_entity(coordinator=None, function=PowerFunction.GRID):
+    return entity.SajPowerEntity(
+        coordinator=coordinator or FakeCoordinator(),
+        function=function,
+        identity=entity.EntityIdentity(
+            domain="number", key=f"{function}_power_target", prefix="house"
+        ),
+    )
+
+
+def test_a_power_entity_is_a_disabled_configuration_entity_of_its_function():
+    built = _power_entity(function=PowerFunction.INVERTER)
+
+    assert built.function is PowerFunction.INVERTER
+    assert built.entity_registry_enabled_default is False
+    assert built.entity_category == "config"
+    assert built.entity_id == "number.saj_house_inverter_power_target"
+
+
+async def test_a_power_action_that_succeeds_is_awaited_and_raises_nothing():
+    done = []
+
+    async def action():
+        done.append(True)
+
+    await _power_entity().async_run(action=action())
+
+    assert done == [True]
+
+
+async def test_a_failed_power_action_names_the_function_in_the_users_language(
+    monkeypatch,
+):
+    asked = []
+
+    async def names(*, hass, selector_name):
+        asked.append((hass, selector_name))
+        return {"battery": "Batterie", "grid": "Netz"}
+
+    async def refused():
+        raise NoPowerTargetError(function=PowerFunction.BATTERY)
+
+    monkeypatch.setattr(entity, "selector_options", names)
+    built = _power_entity()
+    built.hass = "the hass"
+
+    with pytest.raises(ServiceValidationError) as raised:
+        await built.async_run(action=refused())
+
+    assert raised.value.translation_key == "no_power_target"
+    assert raised.value.translation_placeholders == {"function": "Batterie"}
+    assert isinstance(raised.value.__cause__, NoPowerTargetError)
+    assert asked == [("the hass", "power_function")]
+
+
+def _power_platform(**changes):
+    return entity.PowerPlatform(
+        kind=EntityKind.NUMBER,
+        entity_class=entity.SajPowerEntity,
+        key_of=lambda function: f"{function}_target",
+        **changes,
+    )
+
+
+@pytest.fixture
+def displaced(monkeypatch):
+    asked = []
+    monkeypatch.setattr(
+        entity, "_warn_about_displaced_entities", lambda **kwargs: asked.append(kwargs)
+    )
+    return asked
+
+
+def test_a_power_entity_is_added_for_each_function_the_coordinator_offers(displaced):
+    coordinator = FakeCoordinator()
+    coordinator.power_offered = (PowerFunction.BATTERY, PowerFunction.GRID)
+    entry = _entry(coordinator, prefix="house")
+    added = []
+
+    entity.add_power_entities(
+        hass="the hass",
+        entry=entry,
+        async_add_entities=added.extend,
+        platform=_power_platform(),
+    )
+
+    assert [built.function for built in added] == [
+        PowerFunction.BATTERY,
+        PowerFunction.GRID,
+    ]
+    assert [built.entity_id for built in added] == [
+        "number.saj_house_battery_target",
+        "number.saj_house_grid_target",
+    ]
+    assert [(call["hass"], call["entry"], call["prefix"]) for call in displaced] == [
+        ("the hass", entry, "house")
+    ]
+    assert [(call["kind"], call["keys"]) for call in displaced] == [
+        (EntityKind.NUMBER, ["battery_target", "grid_target"])
+    ]
+
+
+def test_nothing_is_added_or_checked_when_no_power_function_is_offered(displaced):
+    added = []
+
+    entity.add_power_entities(
+        hass=None,
+        entry=_entry(FakeCoordinator()),
+        async_add_entities=added.extend,
+        platform=_power_platform(),
+    )
+
+    assert added == []
+    assert displaced == []

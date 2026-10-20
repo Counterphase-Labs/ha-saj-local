@@ -5,8 +5,8 @@ from saj_modbus_mock.profiles import common
 from saj_modbus_mock.profiles.fields import ZERO
 from saj_modbus_mock.registers import Access, Encoding, raw_range
 from saj_modbus_mock.simulation import control as ctl
-from tests.modbus_mock.builders import by_address, by_name, make_scenario
-from tests.modbus_mock.profiles.fakes import isolate
+from tests.mock.builders import by_address, by_name, make_scenario
+from tests.mock.profiles.fakes import isolate
 
 
 @pytest.fixture(autouse=True)

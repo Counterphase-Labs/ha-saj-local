@@ -24,11 +24,12 @@ export default defineConfig({
     test: {
         environment: "jsdom",
         include: ["tests/**/*.test.ts"],
+        reporters: ["agent"],
         coverage: {
             enabled: true,
             provider: "v8",
             include: ["src/**/*.ts"],
-            reporter: ["text"],
+            reporter: [["text", { skipFull: true }]],
             thresholds: {
                 lines: 100,
                 functions: 100,

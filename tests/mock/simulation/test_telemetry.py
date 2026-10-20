@@ -6,7 +6,7 @@ from saj_modbus_mock.simulation.ev_charger import ChargerReadout, ChargerState
 from saj_modbus_mock.simulation.faults import FaultBit, FaultState, PackCodes
 from saj_modbus_mock.simulation.plant import ENERGY_FLOWS
 from saj_modbus_mock.simulation.telemetry import build_telemetry, operating_mode
-from tests.modbus_mock.builders import make_scenario
+from tests.mock.builders import make_scenario
 
 
 def make_sample(**changes):

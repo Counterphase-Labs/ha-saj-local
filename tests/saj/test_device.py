@@ -159,3 +159,22 @@ async def test_identify_treats_all_equipment_as_fitted_until_it_is_detected(
     device = await identify(_client())
 
     assert device.equipment == frozenset(Equipment)
+
+
+@pytest.mark.parametrize("detected", [True, False])
+def test_a_device_description_names_model_type_power_and_how_it_was_found(
+    *, detected: bool
+):
+    device = Device(
+        serial="UNIT-0001",
+        device_type=RECOGNISED_TYPE,
+        rated_power=RATED_POWER,
+        profile=FIRST,
+        detected=detected,
+    )
+
+    description = device.description
+
+    assert FIRST.key in description
+    assert str(RATED_POWER) in description
+    assert description.endswith("detected" if detected else "assumed")

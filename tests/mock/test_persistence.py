@@ -8,7 +8,7 @@ import pytest
 from saj_modbus_mock import persistence
 from saj_modbus_mock.machine import Machine
 from saj_modbus_mock.persistence import Saver, StateStore, scenario_hash
-from tests.modbus_mock.builders import make_scenario
+from tests.mock.builders import make_scenario
 
 SNAPSHOT = {"settings": {"app_mode": 6}, "soc_percent": 41.5}
 

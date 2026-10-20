@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from saj_modbus_mock import profiles
-from tests.modbus_mock.builders import make_scenario
+from tests.mock.builders import make_scenario
 
 
 @pytest.fixture(autouse=True)

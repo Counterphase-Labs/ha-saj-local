@@ -1,1 +1,4 @@
 * text=auto eol=lf
+custom_components/saj_local/frontend/saj-local-*.js -diff
+uv.lock -diff
+frontend/package-lock.json -diff

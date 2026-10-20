@@ -85,6 +85,10 @@ class ConfirmFlow(RepairsFlow):
         del user_input
         return await self.async_step_confirm(None)
 
+    def issue_placeholders(self) -> dict[str, str]:
+        issue = ir.async_get(self.hass).async_get_issue(DOMAIN, self.issue_id)
+        return {} if issue is None else dict(issue.translation_placeholders or {})
+
 
 class ModelFixFlow(ConfirmFlow):
     def __init__(self, *, entry_id: str, key: str, named: str) -> None:
@@ -139,14 +143,18 @@ class ModelFixFlow(ConfirmFlow):
             if validation.errors
             else {}
         )
+        raised_with = self.issue_placeholders()
         return self.async_show_form(
             step_id=STEP_CONFIRM,
             data_schema=vol.Schema({}),
             errors=errors,
             description_placeholders={
+                "selected_model": UNKNOWN_VALUE,
+                "approved_serial": UNKNOWN_VALUE,
+                "model": raised_with.get("detected_model", UNKNOWN_VALUE),
+                "serial": raised_with.get("found_serial", UNKNOWN_VALUE),
+                **raised_with,
                 "installation": entry.title,
-                "model": UNKNOWN_VALUE,
-                "serial": UNKNOWN_VALUE,
                 **validation.placeholders,
             },
         )
@@ -161,12 +169,10 @@ class RefusedFixFlow(ConfirmFlow):
         self, user_input: dict[str, str] | None = None
     ) -> FlowResult:
         if user_input is None:
-            issue = ir.async_get(self.hass).async_get_issue(DOMAIN, self.issue_id)
-            placeholders = {} if issue is None else issue.translation_placeholders
             return self.async_show_form(
                 step_id=STEP_CONFIRM,
                 data_schema=vol.Schema({}),
-                description_placeholders=placeholders,
+                description_placeholders=self.issue_placeholders(),
             )
         entry = self.hass.config_entries.async_get_entry(self._entry_id)
         if entry is None:
