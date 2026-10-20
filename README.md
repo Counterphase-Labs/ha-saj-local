@@ -363,6 +363,10 @@ SAJ, the SAJ logo and all related product names, model names and trademarks are 
 
 The software is provided as is, without warranty of any kind. You use it at your own risk: the authors accept no liability for damage to equipment, loss of data, loss of warranty or any other consequence of using it. This applies in particular to writing settings to your inverter.
 
+## Acknowledgements
+
+H2 support builds on the register research and field testing of stanus74 in [SAJ H2 Modbus](https://github.com/stanus74/home-assistant-saj-h2-modbus). Thank you.
+
 ## Licence
 
 [MIT](LICENSE)
