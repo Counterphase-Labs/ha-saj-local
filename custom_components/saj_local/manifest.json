@@ -5,10 +5,10 @@
   "codeowners": ["@dogmatic69"],
   "config_flow": true,
   "dependencies": ["frontend", "http"],
-  "documentation": "https://github.com/dogmatic69/home-assistant-saj-modbus",
+  "documentation": "https://github.com/Counterphase-Labs/ha-saj-local",
   "integration_type": "hub",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/dogmatic69/home-assistant-saj-modbus/issues",
+  "issue_tracker": "https://github.com/Counterphase-Labs/ha-saj-local/issues",
   "requirements": [],
   "version": "0.1.0"
 }

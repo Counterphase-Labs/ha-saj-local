@@ -3,13 +3,13 @@
 ![SAJ Local](images/header.png)
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
-[![Home Assistant](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdogmatic69%2Fhome-assistant-saj-modbus%2Fmain%2Fhacs.json&query=%24.homeassistant&suffix=%2B&label=Home%20Assistant&logo=homeassistant&logoColor=white&color=41BDF5)](https://www.home-assistant.io)
-[![Release](https://img.shields.io/github/v/release/dogmatic69/home-assistant-saj-modbus)](https://github.com/dogmatic69/home-assistant-saj-modbus/releases)
+[![Home Assistant](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FCounterphase-Labs%2Fha-saj-local%2Fmain%2Fhacs.json&query=%24.homeassistant&suffix=%2B&label=Home%20Assistant&logo=homeassistant&logoColor=white&color=41BDF5)](https://www.home-assistant.io)
+[![Release](https://img.shields.io/github/v/release/Counterphase-Labs/ha-saj-local)](https://github.com/Counterphase-Labs/ha-saj-local/releases)
 [![Active installs](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fanalytics.home-assistant.io%2Fcustom_integrations.json&query=%24.saj_local.total&label=active%20installs&logo=homeassistant&logoColor=white&color=41BDF5)](https://analytics.home-assistant.io)
-[![CI](https://github.com/dogmatic69/home-assistant-saj-modbus/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dogmatic69/home-assistant-saj-modbus/actions/workflows/ci.yml)
-[![Licence](https://img.shields.io/github/license/dogmatic69/home-assistant-saj-modbus)](LICENSE)
+[![CI](https://github.com/Counterphase-Labs/ha-saj-local/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Counterphase-Labs/ha-saj-local/actions/workflows/ci.yml)
+[![Licence](https://img.shields.io/github/license/Counterphase-Labs/ha-saj-local)](LICENSE)
 
-⭐ [Star the project on GitHub](https://github.com/dogmatic69/home-assistant-saj-modbus): your support is a real motivation! 🙏😊
+⭐ [Star the project on GitHub](https://github.com/Counterphase-Labs/ha-saj-local): your support is a real motivation! 🙏😊
 
 Your SAJ solar system in Home Assistant, read straight from the inverter over your own network. No cloud account, no vendor app in the middle, and a polling approach designed to be gentle on the hardware.
 
@@ -118,7 +118,7 @@ Moving an installation between an H2 and an HS3 is done through Configure. Confi
 - AS2, HS2 and other SAJ products are not recognised.
 - Battery and grid power use one sign on every model, so a reading means the same on an HS3 and an H2 and the power flow card can draw the direction without knowing the model. Battery power is positive while the battery discharges and negative while it charges. Grid power is positive while the system sends power to the grid and negative while it takes power from the grid. The same convention is used by the power control targets.
 
-[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dogmatic69&repository=home-assistant-saj-modbus&category=integration)
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Counterphase-Labs&repository=ha-saj-local&category=integration)
 [![Open your Home Assistant instance and start setting up SAJ Local.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=saj_local)
 
 ## How it works
@@ -349,7 +349,7 @@ Every log line starts with the installation's title and the serial masked to its
 
 ## Help and feedback
 
-Questions, bug reports and ideas are welcome on the [issue tracker](https://github.com/dogmatic69/home-assistant-saj-modbus/issues).
+Questions, bug reports and ideas are welcome on the [issue tracker](https://github.com/Counterphase-Labs/ha-saj-local/issues).
 
 ## Contributing
 
