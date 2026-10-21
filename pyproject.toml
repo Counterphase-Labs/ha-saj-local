@@ -1,5 +1,5 @@
 [project]
-name = "home-assistant-saj-modbus"
+name = "ha-saj-local"
 version = "0.1.0"
 description = "Local Home Assistant integration for SAJ inverters over Modbus"
 requires-python = ">=3.14.2"
@@ -34,14 +34,14 @@ lint = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = [".", ".github/scripts", "custom_components/saj_local", "modbus_mock"]
+pythonpath = [".", ".github/scripts", "custom_components/saj_local", "mock"]
 addopts = [
     "-q",
     "--tb=short",
     "--ignore=tests/mock-integration",
     "--ignore=tests/scripts/test_runner_processes.py",
     "--cov=custom_components/saj_local",
-    "--cov=modbus_mock/saj_modbus_mock",
+    "--cov=mock/saj_local_mock",
     "--cov=.github/scripts",
     "--cov-branch",
     "--cov-report=term-missing:skip-covered",
@@ -52,7 +52,7 @@ addopts = [
 python_version = "3.14"
 files = [
     "custom_components/saj_local",
-    "modbus_mock/saj_modbus_mock",
+    "mock/saj_local_mock",
     ".github/scripts",
 ]
 pretty = false
@@ -94,7 +94,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["saj", "saj_modbus_mock"]
+known-first-party = ["saj", "saj_local_mock"]
 
 [tool.ruff.lint.flake8-pytest-style]
 fixture-parentheses = false
@@ -121,7 +121,7 @@ max-complexity = 20
 [tool.complexipy]
 paths = [
     "custom_components/saj_local",
-    "modbus_mock/saj_modbus_mock",
+    "mock/saj_local_mock",
     ".github/scripts",
 ]
 max-complexity-allowed = 20
@@ -131,7 +131,7 @@ failed = true
 snapshot-ignore = true
 
 [tool.importlinter]
-root_packages = ["custom_components.saj_local", "saj_modbus_mock"]
+root_packages = ["custom_components.saj_local", "saj_local_mock"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
@@ -154,5 +154,5 @@ ignore_imports = [
 [[tool.importlinter.contracts]]
 name = "Modbus mock is standalone"
 type = "forbidden"
-source_modules = ["saj_modbus_mock"]
+source_modules = ["saj_local_mock"]
 forbidden_modules = ["homeassistant", "custom_components"]

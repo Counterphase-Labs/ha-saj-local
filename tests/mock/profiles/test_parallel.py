@@ -1,7 +1,7 @@
 import pytest
 
-from saj_modbus_mock.profiles import parallel
-from saj_modbus_mock.registers import Encoding
+from saj_local_mock.profiles import parallel
+from saj_local_mock.registers import Encoding
 from tests.mock.builders import by_address, make_scenario
 from tests.mock.profiles.fakes import isolate
 

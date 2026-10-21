@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 from .fields import I16, U32, Shape, blob, fixed, live, setting
 
 if TYPE_CHECKING:
-    from saj_modbus_mock.registers import Field
-    from saj_modbus_mock.scenario import Scenario
+    from saj_local_mock.registers import Field
+    from saj_local_mock.scenario import Scenario
 
 RUNNING_DATA_WORDS = 6
 RESERVED_WORDS = 12

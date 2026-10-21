@@ -1,4 +1,4 @@
-"""Keeps the running state across restarts. Without a volume it does nothing."""
+"""Keeps the running state across restarts. Without a mounted folder it does nothing."""
 
 import asyncio
 import hashlib
@@ -28,7 +28,7 @@ def scenario_hash(*, scenario: Scenario) -> str:
 
 
 class StateStore:
-    """The state file. Without a volume mounted over its directory it does nothing."""
+    """The state file. Without a mounted folder it does nothing."""
 
     def __init__(
         self,
@@ -43,7 +43,7 @@ class StateStore:
         self.enabled = is_mount(path.parent)
         if not self.enabled:
             LOGGER.warning(
-                "no volume is mounted at %s, so changes will not be kept",
+                "nothing is mounted at %s, so changes will not be kept",
                 path.parent,
             )
 

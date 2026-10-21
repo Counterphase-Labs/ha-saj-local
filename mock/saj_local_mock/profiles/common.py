@@ -2,10 +2,10 @@
 
 from typing import TYPE_CHECKING
 
-from saj_modbus_mock.models import MAX_PV_STRINGS, ModelSpec
-from saj_modbus_mock.registers import Encoding, Field
-from saj_modbus_mock.simulation import control as ctl
-from saj_modbus_mock.simulation.faults import fault_word_key, pack_key
+from saj_local_mock.models import MAX_PV_STRINGS, ModelSpec
+from saj_local_mock.registers import Encoding, Field
+from saj_local_mock.simulation import control as ctl
+from saj_local_mock.simulation.faults import fault_word_key, pack_key
 
 from .fields import (
     I16,
@@ -25,7 +25,7 @@ from .fields import (
 )
 
 if TYPE_CHECKING:
-    from saj_modbus_mock.scenario import Scenario
+    from saj_local_mock.scenario import Scenario
 
 SLOTS = 7
 SLOT_STRIDE = 3

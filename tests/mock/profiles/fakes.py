@@ -1,6 +1,6 @@
 """Stand-ins for the field helpers, so a profile module is tested on its own."""
 
-from saj_modbus_mock.registers import Access, Encoding, Field
+from saj_local_mock.registers import Access, Encoding, Field
 
 HELPER_NAMES = (
     "live",

@@ -2,8 +2,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from saj_modbus_mock.simulation import control as ctl
-from saj_modbus_mock.simulation.control import (
+from saj_local_mock.simulation import control as ctl
+from saj_local_mock.simulation.control import (
     BatteryRequest,
     Controller,
     RequestKind,

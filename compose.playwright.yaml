@@ -1,6 +1,6 @@
-x-modbus-mock: &modbus-mock
+x-mock: &mock
   build:
-    context: ./modbus_mock
+    context: ./mock
   healthcheck:
     test:
       - CMD
@@ -37,15 +37,15 @@ services:
     volumes:
       - homeassistant-config:/config
 
-  modbus-mock:
-    <<: *modbus-mock
+  mock:
+    <<: *mock
     volumes:
-      - ./modbus_mock/scenarios/hs3-battery.yaml:/config/config.yaml:ro
+      - ./mock/scenarios/hs3-battery.yaml:/config/config.yaml:ro
 
-  modbus-mock-h2:
-    <<: *modbus-mock
+  mock-h2:
+    <<: *mock
     volumes:
-      - ./modbus_mock/scenarios/h2-battery.yaml:/config/config.yaml:ro
+      - ./mock/scenarios/h2-battery.yaml:/config/config.yaml:ro
 
   playwright:
     build:
@@ -54,9 +54,9 @@ services:
     depends_on:
       homeassistant:
         condition: service_healthy
-      modbus-mock:
+      mock:
         condition: service_healthy
-      modbus-mock-h2:
+      mock-h2:
         condition: service_healthy
     environment:
       HOME_ASSISTANT_URL: http://homeassistant:8123

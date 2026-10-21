@@ -167,7 +167,7 @@ def test_import_lint_runs_with_the_library_and_mock_on_the_python_path(root, scr
     (command,) = build("import-lint", root, scratch)
 
     assert command.argv == ("uv", "run", "lint-imports")
-    assert command.environment == {"PYTHONPATH": ".:modbus_mock"}
+    assert command.environment == {"PYTHONPATH": ".:mock"}
 
 
 def test_complexipy_is_plain_unless_verbose(root, scratch):
@@ -246,7 +246,7 @@ def test_release_check_runs_the_archive_script_with_the_current_interpreter(
 def test_the_mock_build_builds_the_image_then_checks_it_for_bytecode(root, scratch):
     build_command, bytecode_command = build("mock-build", root, scratch)
 
-    assert build_command.argv == ("docker", "compose", "build", "modbus-mock")
+    assert build_command.argv == ("docker", "compose", "build", "mock")
     assert bytecode_command.argv[:8] == (
         "docker",
         "compose",
@@ -255,7 +255,7 @@ def test_the_mock_build_builds_the_image_then_checks_it_for_bytecode(root, scrat
         "--no-deps",
         "--entrypoint",
         "python",
-        "modbus-mock",
+        "mock",
     )
     assert "__pycache__" in bytecode_command.argv[-1]
 

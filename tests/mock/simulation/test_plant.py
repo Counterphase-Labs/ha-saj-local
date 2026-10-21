@@ -2,18 +2,18 @@ from datetime import timedelta
 
 import pytest
 
-from saj_modbus_mock.registers import EPOCH
-from saj_modbus_mock.simulation import control as ctl
-from saj_modbus_mock.simulation import plant as plant_module
-from saj_modbus_mock.simulation.balance import BalanceResult
-from saj_modbus_mock.simulation.control import Command
-from saj_modbus_mock.simulation.environment import (
+from saj_local_mock.registers import EPOCH
+from saj_local_mock.simulation import control as ctl
+from saj_local_mock.simulation import plant as plant_module
+from saj_local_mock.simulation.balance import BalanceResult
+from saj_local_mock.simulation.control import Command
+from saj_local_mock.simulation.environment import (
     EnvironmentSample,
     LoadConfig,
     Variation,
 )
-from saj_modbus_mock.simulation.ev_charger import HandState
-from saj_modbus_mock.simulation.faults import (
+from saj_local_mock.simulation.ev_charger import HandState
+from saj_local_mock.simulation.faults import (
     Effect,
     FaultBit,
     FaultState,

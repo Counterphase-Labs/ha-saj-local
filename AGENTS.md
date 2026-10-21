@@ -24,9 +24,9 @@ If discussing project requirements, design decisions and similar, what is curren
 
 .github/work/requirements.md is the authoritative source for project requirements. If a plan would deviate from these requirements to be more robust or better suited at the goals, it must be flagged to the user for approval.
 
-Similarly, anything within modbus_mock is not authoritative and must not dictate project requirements or design decisions related to modbus.
+Similarly, anything within `mock/` is not authoritative and must not dictate project requirements or design decisions related to modbus.
 
-`modbus_mock` on the other hand, must not be designed around the integration. It must be built firmly around documented SAJ controller behaviour and specifications.
+`mock/` on the other hand, must not be designed around the integration. It must be built firmly around documented SAJ controller behaviour and specifications.
 
 ## Feedback
 
@@ -72,9 +72,9 @@ A full `make test-python` measures and gates the whole package. When `ARGS` sele
 | --- | --- |
 | `tests/saj` | `custom_components/saj_local/saj`, `custom_components/saj_local/saj/models` |
 | `tests/saj-integration` | `custom_components/saj_local` |
-| `tests/mock` | `modbus_mock/saj_modbus_mock` |
-| `tests/mock/profiles` | `modbus_mock/saj_modbus_mock/profiles` |
-| `tests/mock/simulation` | `modbus_mock/saj_modbus_mock/simulation` |
+| `tests/mock` | `mock/saj_local_mock` |
+| `tests/mock/profiles` | `mock/saj_local_mock/profiles` |
+| `tests/mock/simulation` | `mock/saj_local_mock/simulation` |
 | `tests/scripts` | `.github/scripts` |
 
 Test files with no module of the same name are listed in `.github/scripts/pytest_scope.json`, each with the modules the file tests, and a test file with no known module is rejected until the file is added there. Selecting tests with `-k`, `-m` or `--lf` needs a test file in `ARGS`. `test-modules` runs in `make ci` and gates every module at 100 % line and branch coverage from the unit test files mapped to the module alone, so coverage from the tests of other modules does not count. A module with logic (any function, method or branch) and no unit test file fails the step, and a module with no logic, such as an empty module or a module that only holds a data table, is skipped, because the requirements forbid tests of constants. A module that only passes the gate in the full `test-python` run means other tests cover the module by accident, and that is a real gap to fix. `--no-cov` is never used; `test-isolated` gates coverage the same way as any subset run.
@@ -109,7 +109,7 @@ Verify the pairing on PyPI before committing: the `requires_dist` of `pytest-hom
 ## Repository Layout
 
 - `custom_components/saj_local/`: the integration; `saj/` is the SAJ library, which can be tested without Home Assistant, and `frontend/` holds the built card bundle.
-- `modbus_mock/`: the Modbus simulator of a SAJ controller.
+- `mock/`: the Modbus simulator of a SAJ controller.
 - `frontend/`: the card source, its unit tests, the Playwright browser tests, and the Vite, Vitest, Playwright, ESLint and TypeScript configuration.
 - `tests/`: Python tests in exactly six folders: `tests/saj` (unit tests of the SAJ library), `tests/saj-integration` (unit tests of the Home Assistant integration), `tests/mock` (unit tests of the Modbus mock, with `profiles/` and `simulation/`), `tests/mock-integration` (the container smoke script and the shipped-scenario test of the Modbus mock), `tests/playwright` (the Docker scripts for the browser tests) and `tests/scripts` (the unit tests of the check runner, and its real-process tests in `test_runner_processes.py`). `tests/mock-integration` and `tests/scripts/test_runner_processes.py` are outside the unit run and outside coverage.
 - `.github/scripts/`: the check runner and its helpers behind the make targets.

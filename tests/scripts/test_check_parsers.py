@@ -624,7 +624,7 @@ BRANCH_GAPS = """\
 Name                          Stmts   Miss Branch BrPart  Cover   Missing
 -------------------------------------------------------------------------
 custom_components/saj_local/a.py     100      4     40      3    94%   12-14, 20->25, 44
-/home/user/repo/modbus_mock/b.py      50      0     10      1    98%   7->9
+/home/user/repo/mock/b.py      50      0     10      1    98%   7->9
 -------------------------------------------------------------------------
 TOTAL                            150      4     50      4    95.0%
 """
@@ -638,7 +638,7 @@ def test_pytest_branch_coverage_rows_keep_the_missing_lines_and_branch_arcs():
     assert parsed.summary == "3 passed  95.0% cov"
     assert parsed.details == (
         "custom_components/saj_local/a.py  94%  12-14, 20->25, 44",
-        "/home/user/repo/modbus_mock/b.py  98%  7->9",
+        "/home/user/repo/mock/b.py  98%  7->9",
     )
 
 
@@ -702,10 +702,10 @@ saj is not allowed to import homeassistant:
 Mock is standalone
 ------------------
 
-saj_modbus_mock is not allowed to import custom_components:
+saj_local_mock is not allowed to import custom_components:
 
--   saj_modbus_mock.service -> custom_components.saj_local (l.9)
--   saj_modbus_mock.panel -> custom_components.saj_local.saj (l.2)
+-   saj_local_mock.service -> custom_components.saj_local (l.9)
+-   saj_local_mock.panel -> custom_components.saj_local.saj (l.2)
 """
 )
 
@@ -729,9 +729,9 @@ def test_import_linter_failure_keeps_each_broken_contract_with_its_import_chains
         "saj is not allowed to import homeassistant:",
         "-   saj.device -> homeassistant.core (l.3)",
         "Mock is standalone",
-        "saj_modbus_mock is not allowed to import custom_components:",
-        "-   saj_modbus_mock.service -> custom_components.saj_local (l.9)",
-        "-   saj_modbus_mock.panel -> custom_components.saj_local.saj (l.2)",
+        "saj_local_mock is not allowed to import custom_components:",
+        "-   saj_local_mock.service -> custom_components.saj_local (l.9)",
+        "-   saj_local_mock.panel -> custom_components.saj_local.saj (l.2)",
     )
     assert parsed.findings == (
         Finding(None, None, "Library does not import Home Assistant"),

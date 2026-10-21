@@ -1,6 +1,6 @@
 import pytest
 
-from saj_modbus_mock.exceptions import ControlError, ExceptionCode, ModbusError
+from saj_local_mock.exceptions import ControlError, ExceptionCode, ModbusError
 
 
 @pytest.mark.parametrize("code", list(ExceptionCode))

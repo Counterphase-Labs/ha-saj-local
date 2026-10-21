@@ -1,6 +1,6 @@
 import pytest
 
-from saj_modbus_mock.simulation.battery import MODULE_NOMINAL_VOLTAGE_V, BatteryBank
+from saj_local_mock.simulation.battery import MODULE_NOMINAL_VOLTAGE_V, BatteryBank
 
 
 def bank(*, modules=2, ah=100, soc=0.5, pack_v=400.0):

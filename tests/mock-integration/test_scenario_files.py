@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from saj_modbus_mock.exceptions import ControlError
-from saj_modbus_mock.machine import Machine
-from saj_modbus_mock.scenario import load_scenario
+from saj_local_mock.exceptions import ControlError
+from saj_local_mock.machine import Machine
+from saj_local_mock.scenario import load_scenario
 
-SCENARIO_DIRECTORY = Path(__file__).parents[2] / "modbus_mock" / "scenarios"
+SCENARIO_DIRECTORY = Path(__file__).parents[2] / "mock" / "scenarios"
 SCENARIO_FILES = sorted(SCENARIO_DIRECTORY.glob("*.yaml"))
 
 

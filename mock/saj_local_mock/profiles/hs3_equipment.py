@@ -2,11 +2,11 @@
 
 from typing import TYPE_CHECKING
 
-from saj_modbus_mock.models import MAX_PV_STRINGS
-from saj_modbus_mock.registers import Encoding, Field
-from saj_modbus_mock.simulation import control as ctl
-from saj_modbus_mock.simulation import ev_charger as ev
-from saj_modbus_mock.simulation.faults import fault_word_key
+from saj_local_mock.models import MAX_PV_STRINGS
+from saj_local_mock.registers import Encoding, Field
+from saj_local_mock.simulation import control as ctl
+from saj_local_mock.simulation import ev_charger as ev
+from saj_local_mock.simulation.faults import fault_word_key
 
 from .common import BAUD_RATES, PROTOCOL_VERSION, ems_labels
 from .fields import (
@@ -24,7 +24,7 @@ from .fields import (
 )
 
 if TYPE_CHECKING:
-    from saj_modbus_mock.scenario import Scenario
+    from saj_local_mock.scenario import Scenario
 
 AVERAGE_GROUPS = (
     (0x513E, "grid", "avg_grid_w"),

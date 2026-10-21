@@ -1,3 +1,5 @@
+name: ha-saj-local
+
 services:
   homeassistant:
     image: ghcr.io/home-assistant/home-assistant:2026.9.3
@@ -25,28 +27,24 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  modbus-mock:
+  mock:
     build:
-      context: ./modbus_mock
+      context: ./mock
     volumes:
-      - ./modbus_mock/scenarios/hs3-battery.yaml:/config/config.yaml:ro
-      - modbus-mock-state:/data
+      - ./mock/scenarios/hs3-battery.yaml:/config/config.yaml:ro
+      - ${SAJ_MOCK_STATE_DIR:-./mock/state}/hs3:/data
     ports:
       - "${SAJ_MOCK_HOST_PORT:-5020}:502"
       - "${SAJ_MOCK_PANEL_HOST_PORT:-5080}:8080"
     restart: unless-stopped
 
-  modbus-mock-h2:
+  mock-h2:
     build:
-      context: ./modbus_mock
+      context: ./mock
     volumes:
-      - ./modbus_mock/scenarios/h2-battery.yaml:/config/config.yaml:ro
-      - modbus-mock-h2-state:/data
+      - ./mock/scenarios/h2-battery.yaml:/config/config.yaml:ro
+      - ${SAJ_MOCK_STATE_DIR:-./mock/state}/h2:/data
     ports:
       - "${SAJ_MOCK_H2_HOST_PORT:-5021}:502"
       - "${SAJ_MOCK_H2_PANEL_HOST_PORT:-5081}:8080"
     restart: unless-stopped
-
-volumes:
-  modbus-mock-state:
-  modbus-mock-h2-state:

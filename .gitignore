@@ -25,3 +25,5 @@ config/dashboards/*
 !config/dashboards/saj-hs3.yaml
 !config/dashboards/saj-h2.yaml
 compose.override.yaml
+mock/state/*/*
+!mock/state/*/.gitkeep

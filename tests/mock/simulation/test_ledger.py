@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from saj_modbus_mock.simulation.ledger import EnergyLedger
+from saj_local_mock.simulation.ledger import EnergyLedger
 
 START = datetime(2026, 6, 30, 23, 59, 0, tzinfo=UTC)
 NEXT_DAY = datetime(2026, 7, 1, 0, 0, 0, tzinfo=UTC)

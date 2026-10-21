@@ -4,21 +4,21 @@ from types import SimpleNamespace
 
 import pytest
 
-from saj_modbus_mock.exceptions import ExceptionCode, ModbusError
-from saj_modbus_mock.link import (
+from saj_local_mock.exceptions import ExceptionCode, ModbusError
+from saj_local_mock.link import (
     Action,
     ConnectionDecision,
     LinkFault,
     RequestDecision,
 )
-from saj_modbus_mock.traffic import (
+from saj_local_mock.traffic import (
     Answer,
     Client,
     ConnectionEvent,
     ConnectionReason,
     Operation,
 )
-from saj_modbus_mock.transport import (
+from saj_local_mock.transport import (
     ModbusServer,
     ServerSettings,
     Timing,
@@ -103,7 +103,7 @@ def test_unserviceable_requests_get_an_exception_response(pdu, code):
     ],
 )
 def test_frames_that_do_not_fit_their_function_are_reported_as_malformed(pdu):
-    from saj_modbus_mock.transport import MalformedFrameError
+    from saj_local_mock.transport import MalformedFrameError
 
     with pytest.raises(MalformedFrameError):
         respond_to(pdu=pdu)

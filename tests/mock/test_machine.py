@@ -4,17 +4,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from saj_modbus_mock import machine as machine_module
-from saj_modbus_mock.device import Block
-from saj_modbus_mock.exceptions import ControlError
-from saj_modbus_mock.link import Link, LinkSettings, RefusedBlock
-from saj_modbus_mock.machine import Machine, Wiring
-from saj_modbus_mock.profiles.common import CLEAR_CURRENT_FAULT, CLEAR_FAULT_HISTORY
-from saj_modbus_mock.registers import EPOCH, Access, Encoding, Field
-from saj_modbus_mock.simulation import control as ctl
-from saj_modbus_mock.simulation.environment import LoadConfig, Variation
-from saj_modbus_mock.simulation.ev_charger import HandState
-from saj_modbus_mock.simulation.faults import (
+from saj_local_mock import machine as machine_module
+from saj_local_mock.device import Block
+from saj_local_mock.exceptions import ControlError
+from saj_local_mock.link import Link, LinkSettings, RefusedBlock
+from saj_local_mock.machine import Machine, Wiring
+from saj_local_mock.profiles.common import CLEAR_CURRENT_FAULT, CLEAR_FAULT_HISTORY
+from saj_local_mock.registers import EPOCH, Access, Encoding, Field
+from saj_local_mock.simulation import control as ctl
+from saj_local_mock.simulation.environment import LoadConfig, Variation
+from saj_local_mock.simulation.ev_charger import HandState
+from saj_local_mock.simulation.faults import (
     Effect,
     Equipment,
     FaultBit,

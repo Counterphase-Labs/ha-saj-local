@@ -2,10 +2,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from saj_modbus_mock.simulation.ev_charger import ChargerReadout, ChargerState
-from saj_modbus_mock.simulation.faults import FaultBit, FaultState, PackCodes
-from saj_modbus_mock.simulation.plant import ENERGY_FLOWS
-from saj_modbus_mock.simulation.telemetry import build_telemetry, operating_mode
+from saj_local_mock.simulation.ev_charger import ChargerReadout, ChargerState
+from saj_local_mock.simulation.faults import FaultBit, FaultState, PackCodes
+from saj_local_mock.simulation.plant import ENERGY_FLOWS
+from saj_local_mock.simulation.telemetry import build_telemetry, operating_mode
 from tests.mock.builders import make_scenario
 
 

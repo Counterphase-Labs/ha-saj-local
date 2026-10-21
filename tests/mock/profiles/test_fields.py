@@ -1,6 +1,6 @@
 import pytest
 
-from saj_modbus_mock.profiles.fields import (
+from saj_local_mock.profiles.fields import (
     ZERO,
     Shape,
     blob,
@@ -12,7 +12,7 @@ from saj_modbus_mock.profiles.fields import (
     setting,
     text,
 )
-from saj_modbus_mock.registers import Access, Encoding
+from saj_local_mock.registers import Access, Encoding
 
 
 def test_a_live_field_reads_a_telemetry_source_and_is_read_only():

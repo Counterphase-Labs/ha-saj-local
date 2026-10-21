@@ -3,8 +3,8 @@ import struct
 
 import pytest
 
-from saj_modbus_mock import healthcheck
-from saj_modbus_mock.healthcheck import is_healthy, read_device_type
+from saj_local_mock import healthcheck
+from saj_local_mock.healthcheck import is_healthy, read_device_type
 
 from .builders import make_scenario
 

@@ -28,7 +28,7 @@ Four parts, kept apart on purpose:
 - **SAJ library** (`custom_components/saj_local/saj/`): everything about SAJ devices and Modbus. It must not import Home Assistant, so device logic can be tested with plain inputs. It ships inside the integration; the split is a design boundary, not a package.
 - **Home Assistant integration** (the rest of `custom_components/saj_local/`): config flow, entities, diagnostics, translations. Keep it thin. Logic that would be true without Home Assistant belongs in the library.
 - **Frontend** (`frontend/`): the Lovelace cards. The build output is written into the integration directory because HACS ships that directory as one archive.
-- **Modbus simulator** (`modbus_mock/`): a separate program that shares no code with the others. See [The Modbus simulator](#the-modbus-simulator).
+- **Modbus simulator** (`mock/`): a separate program that shares no code with the others. See [The Modbus simulator](#the-modbus-simulator).
 
 The import contracts under `[tool.importlinter]` in `pyproject.toml` enforce these boundaries in the lint step.
 
@@ -219,7 +219,7 @@ A stand-in SAJ device that Home Assistant or any Modbus client can connect to, s
 
 - **Standalone.** It shares no code with the integration. If both sides used the same register definitions, a mistake in them would be invisible.
 - **Its own Modbus layer.** Real SAJ devices break the standard: odd exception codes, blocks that reject reads across their end, a low client limit. These are what the integration has to cope with, so they are built in.
-- **One container, one device.** Each instance keeps its own state, in its own volume, so instances never affect each other.
+- **One container, one device.** Each instance keeps its own state, in its own folder under `mock/state/`, so instances never affect each other.
 - **Changeable while running.** The scenario is the starting point, not the only input. The control panel and incoming requests change the running system, and the scenario stays the known state to return to.
 - **Deterministic.** Weather and load depend only on the seed and the simulated time. The same scenario, instant and writes give the same values, however often a client polls.
 - **One energy balance.** Only irradiance and load are generated; everything else is derived, so the registers never contradict each other.
@@ -232,17 +232,17 @@ A stand-in SAJ device that Home Assistant or any Modbus client can connect to, s
 | For | Look in |
 | --- | --- |
 | Full design, register coverage and quirks | The design document under [.github/work/](../.github/work/) (`future/` while in progress, then `done/`) |
-| Ready-made systems | [modbus_mock/scenarios/](../modbus_mock/scenarios/) |
-| Valid scenario keys and defaults | `modbus_mock/saj_modbus_mock/scenario.py` |
-| What each model supports | `modbus_mock/saj_modbus_mock/models.py` |
-| Registers | `modbus_mock/saj_modbus_mock/profiles/` |
-| How values evolve | `modbus_mock/saj_modbus_mock/simulation/` |
+| Ready-made systems | [mock/scenarios/](../mock/scenarios/) |
+| Valid scenario keys and defaults | `mock/saj_local_mock/scenario.py` |
+| What each model supports | `mock/saj_local_mock/models.py` |
+| Registers | `mock/saj_local_mock/profiles/` |
+| How values evolve | `mock/saj_local_mock/simulation/` |
 | Services and ports | [compose.yaml](../compose.yaml) |
-| Control panel | `panel.py` (routes), `description.py`, `presets.py` and the page in [modbus_mock/static/](../modbus_mock/static/) |
-| Link faults | `modbus_mock/saj_modbus_mock/link.py` (settings, bounds, decisions) and `transport.py` (carrying them out) |
-| Traffic record | `modbus_mock/saj_modbus_mock/traffic.py` |
-| Fault bits per model | `modbus_mock/saj_modbus_mock/profiles/fault_tables.py` |
-| Saved state | `modbus_mock/saj_modbus_mock/persistence.py` |
+| Control panel | `panel.py` (routes), `description.py`, `presets.py` and the page in [mock/static/](../mock/static/) |
+| Link faults | `mock/saj_local_mock/link.py` (settings, bounds, decisions) and `transport.py` (carrying them out) |
+| Traffic record | `mock/saj_local_mock/traffic.py` |
+| Fault bits per model | `mock/saj_local_mock/profiles/fault_tables.py` |
+| Saved state | `mock/saj_local_mock/persistence.py` |
 
 The transport knows nothing about SAJ, the device owns addresses and access rules, a profile binds registers to simulated quantities, and the simulation does not know how values are transported. Keeping the layers apart is what lets each be unit tested alone.
 
@@ -278,10 +278,10 @@ Watch a value change by dropping `-1`; mbpoll then polls once a second until sto
 Run the simulator's own healthcheck, which needs no client installed:
 
 ```bash
-docker compose exec modbus-mock python -m saj_modbus_mock healthcheck; echo $?
+docker compose exec mock python -m saj_local_mock healthcheck; echo $?
 ```
 
-Writes are kept across restarts when the container has its volume, and reset from the panel. Addresses come from the profiles; the three above are only starting points.
+Writes are kept across restarts in `mock/state/`, which is git-ignored, and reset from the panel or by deleting the folder contents. Addresses come from the profiles; the three above are only starting points.
 
 ### The control panel
 
@@ -357,13 +357,13 @@ Some faults do more than set their bit, where a real system would: an inverter f
 
 **Presets** return the settings, variation, seed, faults and holds to the scenario first, then apply their changes, so each gives the same conditions however the simulator was left. The simulated time, the clock speed, the energy counters and the battery state of charge carry on unless the preset sets them, so Home Assistant does not see the clock jump back or the lifetime totals fall. **Reset** is the one that rewinds everything. Equipment that is not fitted has no presets, and neither does a model whose tables do not name the fault. A preset also returns the link to the scenario, then sets its own link changes, and a lockout is cleared. The link presets are offered on every model: Slow link, Flaky link, Busy module, Module offline and Module locked out. No field report gives the load at which a module locks out, so the threshold of Module locked out is a starting point to change on the page, and is not taken from any limit of the integration.
 
-**Saved state.** Changes are kept across restarts in `/data/state.json`, in a named volume per service in [compose.yaml](../compose.yaml). Link settings and a lockout are saved with it. A state saved for a different scenario is ignored, and logged once, because applying it to another system would be wrong. A state that cannot be read is ignored the same way and the file is kept. Only the settings a client can write are saved, so a change to a fixed register in the code is never masked by an old file, and the energy counters are saved with where each day, month and year started, so a restart is not a counter reset. Without a volume mounted the simulator runs as before and logs one line that changes will not be kept. **Reset** deletes the file and returns to the scenario. The Playwright stack has no volume, so each run starts from its scenario.
+**Saved state.** Changes are kept across restarts in `/data/state.json`, in a bind-mounted folder per service in [compose.yaml](../compose.yaml): `mock/state/hs3/` and `mock/state/h2/`, reset by deleting the folder contents. Link settings and a lockout are saved with it. A state saved for a different scenario is ignored, and logged once, because applying it to another system would be wrong. A state that cannot be read is ignored the same way and the file is kept. Only the settings a client can write are saved, so a change to a fixed register in the code is never masked by an old file, and the energy counters are saved with where each day, month and year started, so a restart is not a counter reset. Without a mounted folder the simulator runs as before and logs one line that changes will not be kept. **Reset** deletes the file and returns to the scenario. The Playwright stack mounts no folder, so each run starts from its scenario.
 
 **Export** downloads the running seed, variation, faults, link and clock as a scenario, so a tuned state can be committed and run again in a fresh simulator with the same variation.
 
 #### Icons
 
-The page's icons are vendored from the Tabler icon set under `modbus_mock/static/vendor/tabler/`, because the simulator must be standalone and load nothing from outside. Only the icons the page uses are kept, as their original SVG files, so the set can be checked against its source. The folder also holds the set's `LICENSE` and a `README.md` naming the release they came from. The page inlines them so they take the text colour; an icon font or an emoji is not used. Any set under the MIT or ISC licence may be vendored this way, with its licence beside it.
+The page's icons are vendored from the Tabler icon set under `mock/static/vendor/tabler/`, because the simulator must be standalone and load nothing from outside. Only the icons the page uses are kept, as their original SVG files, so the set can be checked against its source. The folder also holds the set's `LICENSE` and a `README.md` naming the release they came from. The page inlines them so they take the text colour; an icon font or an emoji is not used. Any set under the MIT or ISC licence may be vendored this way, with its licence beside it.
 
 ### Configuring a scenario
 
@@ -405,9 +405,12 @@ invalid scenario: ev_charger.installed: not available on h2
 
 ```bash
 docker compose run --rm --no-deps -p 5030:502 \
-  -v ./modbus_mock/scenarios/hs3-off-grid.yaml:/config/config.yaml:ro \
-  modbus-mock
+  -v ./mock/scenarios/hs3-off-grid.yaml:/config/config.yaml:ro \
+  -v ./mock/state/off-grid:/data \
+  mock
 ```
+
+The extra `-v` is needed because the `mock` service otherwise brings its `/data` mount of `mock/state/hs3/`, and the first change in the off-grid run would replace the development HS3 `state.json` with off-grid state. The off-grid run keeps its own state in `mock/state/off-grid/` across runs.
 
 Point `-v` at your own file to run a scenario you wrote.
 
@@ -415,24 +418,24 @@ Point `-v` at your own file to run a scenario you wrote.
 
 ```yaml
 services:
-  modbus-mock:
+  mock:
     volumes:
-      - ./modbus_mock/scenarios/hs3-ev.yaml:/config/config.yaml:ro
+      - ./mock/scenarios/hs3-ev.yaml:/config/config.yaml:ro
 
-  modbus-mock-off-grid:
+  mock-off-grid:
     build:
-      context: ./modbus_mock
+      context: ./mock
     volumes:
-      - ./modbus_mock/scenarios/hs3-off-grid.yaml:/config/config.yaml:ro
+      - ./mock/scenarios/hs3-off-grid.yaml:/config/config.yaml:ro
     ports:
       - "5022:502"
 ```
 
-Each service is an independent device with its own state. Home Assistant reaches the new one as `modbus-mock-off-grid`, so several systems can be added to one Home Assistant side by side.
+Each service is an independent device with its own state. Home Assistant reaches the new one as `mock-off-grid`, so several systems can be added to one Home Assistant side by side.
 
 ### Extending it
 
-- **New scenario:** a file in `modbus_mock/scenarios/`. `make mock-smoke` picks it up automatically.
+- **New scenario:** a file in `mock/scenarios/`. `make mock-smoke` picks it up automatically.
 - **New model:** an entry in `models.py`, a profile, and acceptance by the scenario validation.
 - **New quirk:** in the layer that owns it. Framing and connections in the transport, addresses and access in the device, model behaviour in the profile.
 

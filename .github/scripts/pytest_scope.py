@@ -6,7 +6,7 @@ from pathlib import Path
 
 LIBRARY_DIRECTORY = Path("custom_components/saj_local/saj")
 INTEGRATION_DIRECTORY = Path("custom_components/saj_local")
-MOCK_DIRECTORY = Path("modbus_mock/saj_modbus_mock")
+MOCK_DIRECTORY = Path("mock/saj_local_mock")
 SCRIPTS_DIRECTORY = Path(".github/scripts")
 TESTS_DIRECTORY = Path("tests")
 MODULE_DIRECTORIES: dict[Path, tuple[Path, ...]] = {

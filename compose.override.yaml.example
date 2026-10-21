@@ -5,6 +5,6 @@ services:
     environment:
       TZ: Europe/Stockholm
 
-  modbus-mock:
+  mock:
     volumes:
-      - ./modbus_mock/scenarios/hs3-ev.yaml:/config/config.yaml:ro
+      - ./mock/scenarios/hs3-ev.yaml:/config/config.yaml:ro

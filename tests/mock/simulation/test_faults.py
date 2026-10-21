@@ -1,6 +1,6 @@
 import pytest
 
-from saj_modbus_mock.simulation.faults import (
+from saj_local_mock.simulation.faults import (
     BATTERY_STOP,
     Effect,
     Equipment,

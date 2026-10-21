@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from saj_modbus_mock.traffic import (
+from saj_local_mock.traffic import (
     Answer,
     Client,
     ConnectionEvent,

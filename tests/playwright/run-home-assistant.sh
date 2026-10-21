@@ -28,6 +28,6 @@ export PLAYWRIGHT_RESULT_GID="$(id -g)"
 docker compose --project-name "$playwright_project_name" \
     --file "$playwright_compose_file" build
 docker compose --project-name "$playwright_project_name" \
-    --file "$playwright_compose_file" up --detach --wait homeassistant modbus-mock modbus-mock-h2
+    --file "$playwright_compose_file" up --detach --wait homeassistant mock mock-h2
 docker compose --project-name "$playwright_project_name" \
     --file "$playwright_compose_file" run --rm playwright

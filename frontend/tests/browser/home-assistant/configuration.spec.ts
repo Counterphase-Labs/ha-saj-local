@@ -348,11 +348,11 @@ test("an HS3 and an H2 endpoint load, report values, show a solar value on a das
     test.setTimeout(TEST_TIMEOUT_MS);
     await finishOnboarding(page);
 
-    await addIntegration(page, browserFailures, "modbus-mock");
+    await addIntegration(page, browserFailures, "mock");
     await expectCoreEntitiesReportValues(page, [""]);
     await expectPowerFlowCardShowsSolarPower(page);
 
-    await addIntegration(page, browserFailures, "modbus-mock-h2", "h2");
+    await addIntegration(page, browserFailures, "mock-h2", "h2");
     await expectCoreEntitiesReportValues(page, ["", "h2"]);
 
     for (const prefix of ["", "h2"]) {

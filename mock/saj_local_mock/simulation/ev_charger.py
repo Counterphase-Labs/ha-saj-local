@@ -4,11 +4,11 @@ import math
 from datetime import datetime, time, timedelta
 from typing import TYPE_CHECKING
 
-from saj_modbus_mock.registers import EPOCH
-from saj_modbus_mock.scenario import EvSession
+from saj_local_mock.registers import EPOCH
+from saj_local_mock.scenario import EvSession
 
 if TYPE_CHECKING:
-    from saj_modbus_mock.scenario import EvChargerConfig
+    from saj_local_mock.scenario import EvChargerConfig
 
     from .control import Settings
 

@@ -22,10 +22,10 @@
     "custom_components/saj_local/const.py"
   ],
   "tests/mock/profiles/test_profiles.py": [
-    "modbus_mock/saj_modbus_mock/profiles/__init__.py"
+    "mock/saj_local_mock/profiles/__init__.py"
   ],
   "tests/mock/test_main.py": [
-    "modbus_mock/saj_modbus_mock/__main__.py"
+    "mock/saj_local_mock/__main__.py"
   ],
   "tests/saj/test_control_hs3.py": [
     "custom_components/saj_local/saj/control.py",

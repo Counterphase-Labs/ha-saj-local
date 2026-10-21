@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 from .fields import I16, I32, U16, counter_group, fixed, live
 
 if TYPE_CHECKING:
-    from saj_modbus_mock.registers import Field
-    from saj_modbus_mock.scenario import Scenario
+    from saj_local_mock.registers import Field
+    from saj_local_mock.scenario import Scenario
 
 POWER_REGISTERS = (
     (0x4204, 0x420C, "pv_w", U16),

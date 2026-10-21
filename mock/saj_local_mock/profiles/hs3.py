@@ -1,16 +1,16 @@
 from typing import TYPE_CHECKING
 
-from saj_modbus_mock.device import Block
-from saj_modbus_mock.exceptions import ExceptionCode
-from saj_modbus_mock.models import MODELS, ModelSpec
+from saj_local_mock.device import Block
+from saj_local_mock.exceptions import ExceptionCode
+from saj_local_mock.models import MODELS, ModelSpec
 
 from . import common, hs3_equipment, parallel
 from .fields import fixed
 from .undocumented import UNDOCUMENTED_SETTINGS
 
 if TYPE_CHECKING:
-    from saj_modbus_mock.registers import Field
-    from saj_modbus_mock.scenario import Scenario
+    from saj_local_mock.registers import Field
+    from saj_local_mock.scenario import Scenario
 
 SPEC: ModelSpec = MODELS["hs3"]
 APP_MODES = {0: "Self-use", 1: "Time", 2: "Backup", 6: "EMS", 11: "TOU (BMS)"}

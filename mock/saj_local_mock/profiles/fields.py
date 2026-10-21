@@ -1,6 +1,6 @@
 import dataclasses
 
-from saj_modbus_mock.registers import Access, Encoding, Field, FieldValue
+from saj_local_mock.registers import Access, Encoding, Field, FieldValue
 
 ZERO = "zero"
 PHASE_NAMES = ("r", "s", "t")

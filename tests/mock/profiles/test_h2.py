@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from saj_modbus_mock.exceptions import ExceptionCode
-from saj_modbus_mock.profiles import h2
-from saj_modbus_mock.registers import Field
+from saj_local_mock.exceptions import ExceptionCode
+from saj_local_mock.profiles import h2
+from saj_local_mock.registers import Field
 from tests.mock.builders import arguments_of, block_at, by_name, make_scenario
 from tests.mock.profiles.fakes import fake_fixed, fake_text
 

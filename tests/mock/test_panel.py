@@ -5,9 +5,9 @@ from typing import ClassVar
 import pytest
 from aiohttp import web
 
-from saj_modbus_mock import panel as panel_module
-from saj_modbus_mock.exceptions import ControlError
-from saj_modbus_mock.panel import Panel, PanelServer, create_app, refuse_control_errors
+from saj_local_mock import panel as panel_module
+from saj_local_mock.exceptions import ControlError
+from saj_local_mock.panel import Panel, PanelServer, create_app, refuse_control_errors
 
 STATE = {"time": "now"}
 WALL_TIME = 1234.5

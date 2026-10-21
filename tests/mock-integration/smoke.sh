@@ -2,9 +2,10 @@
 set -eu
 
 smoke_repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-smoke_image="saj-modbus-mock-smoke-$$"
-smoke_project_name="saj-modbus-mock-smoke-$$"
+smoke_image="saj-local-mock-smoke-$$"
+smoke_project_name="saj-local-mock-smoke-$$"
 smoke_container=""
+smoke_state_directory=""
 smoke_wait_seconds=60
 smoke_panel_check='
 import json
@@ -35,6 +36,19 @@ assert registers["blocks"], "the register snapshot has no blocks"
 assert "counters" in traffic, "the traffic has no counters"
 assert stylesheet.status == 200, "the stylesheet was not served"
 '
+smoke_save_check='
+import json
+import urllib.request
+
+base = "http://127.0.0.1:8080"
+link = json.load(urllib.request.urlopen(base + "/api/state", timeout=3))["link"]
+request = urllib.request.Request(
+    base + "/api/link",
+    data=json.dumps(link).encode(),
+    headers={"Content-Type": "application/json"},
+)
+urllib.request.urlopen(request, timeout=3)
+'
 
 export SAJ_MOCK_HOST_PORT=0
 export SAJ_MOCK_H2_HOST_PORT=0
@@ -51,6 +65,9 @@ smoke_cleanup() {
         --file "$smoke_repository_root/compose.yaml" down --volumes \
         --remove-orphans --rmi local >/dev/null 2>&1 || true
     docker image rm --force "$smoke_image" >/dev/null 2>&1 || true
+    if [ -n "$smoke_state_directory" ]; then
+        rm -rf "$smoke_state_directory"
+    fi
     exit "$smoke_exit_status"
 }
 
@@ -72,8 +89,12 @@ smoke_wait_until_healthy() {
 
 trap smoke_cleanup EXIT HUP INT TERM
 
-docker build --quiet --tag "$smoke_image" "$smoke_repository_root/modbus_mock" >/dev/null
-for smoke_scenario in "$smoke_repository_root"/modbus_mock/scenarios/*.yaml; do
+smoke_state_directory=$(mktemp -d)
+mkdir "$smoke_state_directory/hs3" "$smoke_state_directory/h2"
+export SAJ_MOCK_STATE_DIR="$smoke_state_directory"
+
+docker build --quiet --tag "$smoke_image" "$smoke_repository_root/mock" >/dev/null
+for smoke_scenario in "$smoke_repository_root"/mock/scenarios/*.yaml; do
     echo "scenario $(basename "$smoke_scenario")"
     smoke_container=$(docker run --detach \
         --health-interval 1s --health-start-period 1s \
@@ -87,12 +108,32 @@ done
 echo "compose services"
 docker compose --project-name "$smoke_project_name" \
     --file "$smoke_repository_root/compose.yaml" up --detach --build --wait \
-    --no-deps modbus-mock modbus-mock-h2
-for smoke_service in modbus-mock modbus-mock-h2; do
+    --no-deps mock mock-h2
+for smoke_service in mock mock-h2; do
     docker compose --project-name "$smoke_project_name" \
         --file "$smoke_repository_root/compose.yaml" exec -T "$smoke_service" \
-        python -m saj_modbus_mock healthcheck
+        python -m saj_local_mock healthcheck
     docker compose --project-name "$smoke_project_name" \
         --file "$smoke_repository_root/compose.yaml" exec -T "$smoke_service" \
         python -c "$smoke_panel_check"
+done
+for smoke_service in mock mock-h2; do
+    case "$smoke_service" in
+    mock) smoke_state_file="$smoke_state_directory/hs3/state.json" ;;
+    mock-h2) smoke_state_file="$smoke_state_directory/h2/state.json" ;;
+    esac
+    docker compose --project-name "$smoke_project_name" \
+        --file "$smoke_repository_root/compose.yaml" exec -T "$smoke_service" \
+        python -c "$smoke_save_check"
+    smoke_elapsed=0
+    while [ ! -f "$smoke_state_file" ]; do
+        if [ "$smoke_elapsed" -ge 10 ]; then
+            echo "$smoke_service did not save its state to $smoke_state_file" >&2
+            docker compose --project-name "$smoke_project_name" \
+                --file "$smoke_repository_root/compose.yaml" logs "$smoke_service" >&2 || true
+            exit 1
+        fi
+        sleep 0.5
+        smoke_elapsed=$((smoke_elapsed + 1))
+    done
 done

@@ -1,9 +1,9 @@
 import pytest
 
-from saj_modbus_mock import presets
-from saj_modbus_mock.presets import Fitted, Needs
-from saj_modbus_mock.simulation.environment import PARAMETERS_BY_NAME, checked_parameter
-from saj_modbus_mock.simulation.faults import Equipment
+from saj_local_mock import presets
+from saj_local_mock.presets import Fitted, Needs
+from saj_local_mock.simulation.environment import PARAMETERS_BY_NAME, checked_parameter
+from saj_local_mock.simulation.faults import Equipment
 
 EVERYTHING = Fitted(battery=True, meter_a=True, meter_b=True, ev_charger=True)
 NOTHING = Fitted(battery=False, meter_a=False, meter_b=False, ev_charger=False)

@@ -3,9 +3,9 @@
 import dataclasses
 from datetime import UTC, datetime
 
-from saj_modbus_mock.link import LinkSettings
-from saj_modbus_mock.models import MODELS
-from saj_modbus_mock.scenario import (
+from saj_local_mock.link import LinkSettings
+from saj_local_mock.models import MODELS
+from saj_local_mock.scenario import (
     BatteryConfig,
     DeviceConfig,
     EvChargerConfig,
@@ -17,8 +17,8 @@ from saj_modbus_mock.scenario import (
     SimulationConfig,
     SiteConfig,
 )
-from saj_modbus_mock.simulation.environment import Variation
-from saj_modbus_mock.simulation.faults import FaultState
+from saj_local_mock.simulation.environment import Variation
+from saj_local_mock.simulation.faults import FaultState
 
 START = datetime(2026, 6, 21, 5, 0, tzinfo=UTC)
 

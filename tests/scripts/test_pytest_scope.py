@@ -19,7 +19,7 @@ from pytest_scope import (
 
 INTEGRATION = "custom_components/saj_local"
 LIBRARY = f"{INTEGRATION}/saj"
-MOCK = "modbus_mock/saj_modbus_mock"
+MOCK = "mock/saj_local_mock"
 
 
 @pytest.fixture

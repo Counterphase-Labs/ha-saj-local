@@ -1,6 +1,6 @@
 import pytest
 
-from saj_modbus_mock.link import (
+from saj_local_mock.link import (
     LINK_PARAMETERS,
     Action,
     Link,

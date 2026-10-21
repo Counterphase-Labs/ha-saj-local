@@ -1,6 +1,6 @@
 import pytest
 
-from saj_modbus_mock.registers import (
+from saj_local_mock.registers import (
     Access,
     Encoding,
     Field,

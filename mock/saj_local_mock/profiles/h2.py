@@ -1,15 +1,15 @@
 from typing import TYPE_CHECKING
 
-from saj_modbus_mock.device import Block
-from saj_modbus_mock.exceptions import ExceptionCode
-from saj_modbus_mock.models import MODELS, ModelSpec
+from saj_local_mock.device import Block
+from saj_local_mock.exceptions import ExceptionCode
+from saj_local_mock.models import MODELS, ModelSpec
 
 from . import common, h2_extras, parallel
 from .fields import fixed, text
 
 if TYPE_CHECKING:
-    from saj_modbus_mock.registers import Field
-    from saj_modbus_mock.scenario import Scenario
+    from saj_local_mock.registers import Field
+    from saj_local_mock.scenario import Scenario
 
 SPEC: ModelSpec = MODELS["h2"]
 APP_MODES = {

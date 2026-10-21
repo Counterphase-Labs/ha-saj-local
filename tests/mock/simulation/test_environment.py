@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from saj_modbus_mock.simulation import environment as env
+from saj_local_mock.simulation import environment as env
 
 SUMMER_NOON = datetime(2026, 6, 21, 12, 0, tzinfo=UTC)
 SUMMER_NIGHT = datetime(2026, 6, 21, 1, 0, tzinfo=UTC)

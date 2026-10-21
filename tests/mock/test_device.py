@@ -1,9 +1,9 @@
 import pytest
 
-from saj_modbus_mock import device as device_module
-from saj_modbus_mock.device import Block, Device, initial_settings
-from saj_modbus_mock.exceptions import ControlError, ExceptionCode, ModbusError
-from saj_modbus_mock.registers import Access, Encoding, Field
+from saj_local_mock import device as device_module
+from saj_local_mock.device import Block, Device, initial_settings
+from saj_local_mock.exceptions import ControlError, ExceptionCode, ModbusError
+from saj_local_mock.registers import Access, Encoding, Field
 
 TELEMETRY = {"pressure": 12.5}
 BAD_MONTH = 13

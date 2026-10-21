@@ -38,10 +38,10 @@ HOME_ASSISTANT_REPORT = "frontend/playwright-report/home-assistant"
 HASSFEST_IMAGE = "ghcr.io/home-assistant/hassfest"
 ISOLATED_TEST_PATHS = ("tests/saj", "tests/mock")
 ISOLATED_ENVIRONMENT = {"UV_PROJECT_ENVIRONMENT": ".venv-isolated"}
-IMPORT_LINT_ENVIRONMENT = {"PYTHONPATH": ".:modbus_mock"}
+IMPORT_LINT_ENVIRONMENT = {"PYTHONPATH": ".:mock"}
 UNCOVERED_ADDOPTS = "-q --tb=short"
 MOCK_INTEGRATION_DIRECTORY = "tests/mock-integration"
-MOCK_SERVICE = "modbus-mock"
+MOCK_SERVICE = "mock"
 MOCK_SMOKE_SCRIPT = f"{MOCK_INTEGRATION_DIRECTORY}/smoke.sh"
 MOCK_BYTECODE_CHECK = (
     "import pathlib, sys; "

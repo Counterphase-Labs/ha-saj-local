@@ -5,9 +5,9 @@ import logging
 
 import pytest
 
-from saj_modbus_mock import persistence
-from saj_modbus_mock.machine import Machine
-from saj_modbus_mock.persistence import Saver, StateStore, scenario_hash
+from saj_local_mock import persistence
+from saj_local_mock.machine import Machine
+from saj_local_mock.persistence import Saver, StateStore, scenario_hash
 from tests.mock.builders import make_scenario
 
 SNAPSHOT = {"settings": {"app_mode": 6}, "soc_percent": 41.5}
@@ -214,7 +214,7 @@ def test_without_a_volume_one_line_is_logged_and_nothing_is_kept_or_loaded(
     assert state.load() is None
     assert path.read_text(encoding="utf-8") == "{}"
     assert [record.getMessage() for record in caplog.records] == [
-        f"no volume is mounted at {tmp_path}, so changes will not be kept"
+        f"nothing is mounted at {tmp_path}, so changes will not be kept"
     ]
 
 

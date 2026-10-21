@@ -2,10 +2,10 @@ from datetime import UTC, datetime, time
 
 import pytest
 
-from saj_modbus_mock.registers import EPOCH
-from saj_modbus_mock.scenario import EvChargerConfig, EvSession
-from saj_modbus_mock.simulation import ev_charger as ev
-from saj_modbus_mock.simulation.ev_charger import ChargerState, EvCharger
+from saj_local_mock.registers import EPOCH
+from saj_local_mock.scenario import EvChargerConfig, EvSession
+from saj_local_mock.simulation import ev_charger as ev
+from saj_local_mock.simulation.ev_charger import ChargerState, EvCharger
 
 SUNDAY_EVENING = datetime(2026, 6, 21, 22, 30, tzinfo=UTC)
 SUNDAY_NOON = datetime(2026, 6, 21, 12, 0, tzinfo=UTC)

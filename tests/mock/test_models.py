@@ -1,6 +1,6 @@
 import pytest
 
-from saj_modbus_mock.models import H2, HS3, MODELS
+from saj_local_mock.models import H2, HS3, MODELS
 
 
 @pytest.mark.parametrize("name", [HS3, H2])

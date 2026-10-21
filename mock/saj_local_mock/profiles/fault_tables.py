@@ -9,8 +9,8 @@ contradicts its Chinese, the Chinese meaning is used.
 import dataclasses
 from typing import TYPE_CHECKING
 
-from saj_modbus_mock.models import H2, HS3
-from saj_modbus_mock.simulation.faults import (
+from saj_local_mock.models import H2, HS3
+from saj_local_mock.simulation.faults import (
     BATTERY_STOP,
     BITS_PER_REGISTER,
     REGISTERS,
@@ -23,7 +23,7 @@ from saj_modbus_mock.simulation.faults import (
 )
 
 if TYPE_CHECKING:
-    from saj_modbus_mock.scenario import Scenario
+    from saj_local_mock.scenario import Scenario
 
 NO_SOURCES = ""
 NO_CHARGE = frozenset({Effect.NO_CHARGE})

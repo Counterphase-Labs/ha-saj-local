@@ -3,15 +3,15 @@ from datetime import UTC, datetime, time
 import pytest
 import yaml
 
-from saj_modbus_mock.link import LinkSettings, RefusedBlock
-from saj_modbus_mock.scenario import (
+from saj_local_mock.link import LinkSettings, RefusedBlock
+from saj_local_mock.scenario import (
     ScenarioError,
     dump_scenario,
     load_scenario,
     parse_scenario,
 )
-from saj_modbus_mock.simulation.environment import Variation
-from saj_modbus_mock.simulation.faults import FaultBit, FaultState, PackCodes
+from saj_local_mock.simulation.environment import Variation
+from saj_local_mock.simulation.faults import FaultBit, FaultState, PackCodes
 
 HS3 = {"device": {"model": "hs3"}}
 H2 = {"device": {"model": "h2"}}

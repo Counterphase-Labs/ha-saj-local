@@ -6,9 +6,9 @@ from typing import ClassVar
 
 import pytest
 
-from saj_modbus_mock import __main__ as entry_point
-from saj_modbus_mock import scenario as scenario_module
-from saj_modbus_mock.scenario import ScenarioError
+from saj_local_mock import __main__ as entry_point
+from saj_local_mock import scenario as scenario_module
+from saj_local_mock.scenario import ScenarioError
 
 from .builders import make_scenario
 
@@ -165,7 +165,7 @@ def test_main_reads_the_command_line_when_no_arguments_are_given(loaded, monkeyp
         return True
 
     monkeypatch.setattr(entry_point, "is_healthy", verdict)
-    monkeypatch.setattr(sys, "argv", ["saj_modbus_mock", "healthcheck"])
+    monkeypatch.setattr(sys, "argv", ["saj_local_mock", "healthcheck"])
 
     assert entry_point.main() == 0
 
@@ -175,9 +175,9 @@ def test_running_the_module_exits_with_the_status_of_main(monkeypatch):
         raise ScenarioError(key="device.model", reason="is required")
 
     monkeypatch.setattr(scenario_module, "load_scenario", refuse)
-    monkeypatch.delitem(sys.modules, "saj_modbus_mock.__main__", raising=False)
+    monkeypatch.delitem(sys.modules, "saj_local_mock.__main__", raising=False)
 
     with pytest.raises(SystemExit) as caught:
-        runpy.run_module("saj_modbus_mock", run_name="__main__")
+        runpy.run_module("saj_local_mock", run_name="__main__")
 
     assert caught.value.code == entry_point.EXIT_INVALID_SCENARIO

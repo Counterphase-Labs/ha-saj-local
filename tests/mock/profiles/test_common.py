@@ -1,10 +1,10 @@
 import pytest
 
-from saj_modbus_mock.models import MODELS
-from saj_modbus_mock.profiles import common
-from saj_modbus_mock.profiles.fields import ZERO
-from saj_modbus_mock.registers import Access, Encoding, raw_range
-from saj_modbus_mock.simulation import control as ctl
+from saj_local_mock.models import MODELS
+from saj_local_mock.profiles import common
+from saj_local_mock.profiles.fields import ZERO
+from saj_local_mock.registers import Access, Encoding, raw_range
+from saj_local_mock.simulation import control as ctl
 from tests.mock.builders import by_address, by_name, make_scenario
 from tests.mock.profiles.fakes import isolate
 

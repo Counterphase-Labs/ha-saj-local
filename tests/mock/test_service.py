@@ -5,12 +5,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from saj_modbus_mock import profiles
-from saj_modbus_mock import service as service_module
-from saj_modbus_mock.exceptions import ControlError
-from saj_modbus_mock.link import LinkSettings
-from saj_modbus_mock.service import MockService
-from saj_modbus_mock.traffic import Answer, Client, Operation, RequestRecord
+from saj_local_mock import profiles
+from saj_local_mock import service as service_module
+from saj_local_mock.exceptions import ControlError
+from saj_local_mock.link import LinkSettings
+from saj_local_mock.service import MockService
+from saj_local_mock.traffic import Answer, Client, Operation, RequestRecord
 
 from .builders import make_scenario
 

@@ -2,7 +2,7 @@ import dataclasses
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from saj_modbus_mock.registers import EPOCH
+from saj_local_mock.registers import EPOCH
 
 from . import control
 from .balance import BalanceInput, BalanceResult, solve_balance
@@ -25,7 +25,7 @@ from .ledger import EnergyLedger
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from saj_modbus_mock.scenario import Scenario
+    from saj_local_mock.scenario import Scenario
 
 # Integrated state moves in steps this long, aligned to the simulated clock.
 INTEGRATION_STEP_S = 10

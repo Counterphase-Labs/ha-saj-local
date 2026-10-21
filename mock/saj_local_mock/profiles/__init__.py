@@ -1,14 +1,14 @@
 from typing import TYPE_CHECKING
 
-from saj_modbus_mock.models import HS3
+from saj_local_mock.models import HS3
 
 from . import h2, hs3
 from .fault_tables import build_fault_map
 
 if TYPE_CHECKING:
-    from saj_modbus_mock.device import Block
-    from saj_modbus_mock.exceptions import ExceptionCode
-    from saj_modbus_mock.scenario import Scenario
+    from saj_local_mock.device import Block
+    from saj_local_mock.exceptions import ExceptionCode
+    from saj_local_mock.scenario import Scenario
 
 
 def build_blocks(*, scenario: Scenario) -> tuple[Block, ...]:

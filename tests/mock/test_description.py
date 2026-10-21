@@ -2,14 +2,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from saj_modbus_mock import description
-from saj_modbus_mock.device import Block
-from saj_modbus_mock.exceptions import ExceptionCode
-from saj_modbus_mock.link import LinkSettings, RefusedBlock
-from saj_modbus_mock.presets import Fitted
-from saj_modbus_mock.registers import Access, Encoding, Field
-from saj_modbus_mock.simulation.environment import LoadConfig, Variation
-from saj_modbus_mock.simulation.faults import (
+from saj_local_mock import description
+from saj_local_mock.device import Block
+from saj_local_mock.exceptions import ExceptionCode
+from saj_local_mock.link import LinkSettings, RefusedBlock
+from saj_local_mock.presets import Fitted
+from saj_local_mock.registers import Access, Encoding, Field
+from saj_local_mock.simulation.environment import LoadConfig, Variation
+from saj_local_mock.simulation.faults import (
     Effect,
     Equipment,
     FaultBit,

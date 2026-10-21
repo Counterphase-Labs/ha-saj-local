@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from saj_modbus_mock.clock import Clock
+from saj_local_mock.clock import Clock
 
 START = datetime(2026, 6, 21, 5, 0, tzinfo=UTC)
 

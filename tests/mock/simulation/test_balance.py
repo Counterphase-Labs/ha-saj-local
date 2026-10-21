@@ -2,8 +2,8 @@ import dataclasses
 
 import pytest
 
-from saj_modbus_mock.simulation.balance import BalanceInput, solve_balance
-from saj_modbus_mock.simulation.control import BatteryRequest, Command, RequestKind
+from saj_local_mock.simulation.balance import BalanceInput, solve_balance
+from saj_local_mock.simulation.control import BatteryRequest, Command, RequestKind
 
 BASE = BalanceInput(
     pv_available_w=0.0,

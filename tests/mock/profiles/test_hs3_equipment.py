@@ -1,10 +1,10 @@
 import pytest
 
-from saj_modbus_mock.profiles import hs3_equipment as eq
-from saj_modbus_mock.profiles.fields import ZERO
-from saj_modbus_mock.registers import Access, Encoding
-from saj_modbus_mock.simulation import control as ctl
-from saj_modbus_mock.simulation import ev_charger as ev
+from saj_local_mock.profiles import hs3_equipment as eq
+from saj_local_mock.profiles.fields import ZERO
+from saj_local_mock.registers import Access, Encoding
+from saj_local_mock.simulation import control as ctl
+from saj_local_mock.simulation import ev_charger as ev
 from tests.mock.builders import by_address, by_name, make_scenario
 from tests.mock.profiles.fakes import isolate
 
