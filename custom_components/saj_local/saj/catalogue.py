@@ -378,7 +378,8 @@ def _register(
 
 def _enabled_by_default(*, definition: Definition, evidence: Evidence) -> bool:
     return (
-        evidence in ENABLING_EVIDENCE
+        definition.writable
+        or evidence in ENABLING_EVIDENCE
         or definition.quantity is Quantity.PROBLEM
         or (
             definition.equipment is not None

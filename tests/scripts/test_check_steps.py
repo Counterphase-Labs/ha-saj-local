@@ -243,6 +243,15 @@ def test_release_check_runs_the_archive_script_with_the_current_interpreter(
     assert command.argv[1].endswith("release_check.py")
 
 
+def test_freeze_check_runs_the_comparison_script_in_the_project_environment(
+    root, scratch
+):
+    (command,) = build("freeze-check", root, scratch)
+
+    assert command.argv[:3] == ("uv", "run", "python")
+    assert command.argv[3].endswith("freeze_check.py")
+
+
 def test_the_mock_build_builds_the_image_then_checks_it_for_bytecode(root, scratch):
     build_command, bytecode_command = build("mock-build", root, scratch)
 
@@ -324,6 +333,7 @@ def test_every_check_step_has_a_unique_name_and_the_checks_run_in_order():
         "build",
         "test-browser-controlled",
         "release-check",
+        "freeze-check",
         "mock-build",
         "mock-smoke",
         "validate",

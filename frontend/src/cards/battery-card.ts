@@ -27,8 +27,8 @@ const POWER_SEPARATOR = " · ";
 
 const MARKER_KEYS: readonly string[] = [
     "backup_reserve_soc",
-    "battery_charge_limit",
-    "battery_discharge_limit_on_grid",
+    "battery_charge_soc_limit",
+    "battery_discharge_soc_limit_on_grid",
 ];
 
 interface ReadingKey {

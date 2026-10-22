@@ -182,8 +182,8 @@ describe("multiSelectField", () => {
             { value: "b", label: "B" },
         ];
 
-        expect(multiSelectField({ name: "kinds", options })).toEqual({
-            name: "kinds",
+        expect(multiSelectField({ name: "slot_kinds", options })).toEqual({
+            name: "slot_kinds",
             default: ["a", "b"],
             selector: { select: { options, multiple: true, mode: "list" } },
         });

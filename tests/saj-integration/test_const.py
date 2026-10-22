@@ -22,7 +22,6 @@ from custom_components.saj_local import const
         "select",
         "switch",
         "time",
-        "text",
         "button",
     ],
 )
@@ -44,7 +43,6 @@ def test_every_entity_domain_is_a_platform():
         "select",
         "switch",
         "time",
-        "text",
         "button",
     }
 
@@ -186,7 +184,7 @@ def _subentry(subentry_id, *, kind="polling_group", interval=10, keys=("a",)):
     return SimpleNamespace(
         subentry_id=subentry_id,
         subentry_type=kind,
-        data={"scan_interval": interval, "sensors": list(keys)},
+        data={"scan_interval": interval, "keys": list(keys)},
     )
 
 
@@ -247,17 +245,17 @@ def _schedule_subentry(subentry_id, *, kind="power_schedule", function="battery"
     return SimpleNamespace(
         subentry_id=subentry_id,
         subentry_type=kind,
-        data={"function": function, "schedule": f"schedule.{subentry_id}"},
+        data={"function": function, "schedule": f"registry-{subentry_id}"},
     )
 
 
 @pytest.mark.parametrize(
     ("excluding", "expected"),
     [
-        (None, [("battery", "schedule.s1"), ("grid", "schedule.s2")]),
-        ("s1", [("grid", "schedule.s2")]),
-        ("s2", [("battery", "schedule.s1")]),
-        ("unknown", [("battery", "schedule.s1"), ("grid", "schedule.s2")]),
+        (None, [("battery", "registry-s1"), ("grid", "registry-s2")]),
+        ("s1", [("grid", "registry-s2")]),
+        ("s2", [("battery", "registry-s1")]),
+        ("unknown", [("battery", "registry-s1"), ("grid", "registry-s2")]),
     ],
 )
 def test_power_schedules_cover_schedule_subentries_only_and_can_leave_one_out(
@@ -273,4 +271,4 @@ def test_power_schedules_cover_schedule_subentries_only_and_can_leave_one_out(
 
     schedules = const.power_schedules(entry=entry, excluding=excluding)
 
-    assert [(item.function.value, item.entity_id) for item in schedules] == expected
+    assert [(item.function.value, item.registry_id) for item in schedules] == expected

@@ -38,11 +38,11 @@ from .const import (
     CONF_FITTED_EQUIPMENT,
     CONF_FUNCTION,
     CONF_HIGHEST_PACK_COUNT,
+    CONF_KEYS,
     CONF_MODEL,
     CONF_PREFIX,
     CONF_SCAN_INTERVAL,
     CONF_SCHEDULE,
-    CONF_SENSORS,
     CONF_UNIT_ID,
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
@@ -113,6 +113,7 @@ BLOCK_SELECTOR = "block"
 ERROR_CONTROL_NOT_ALLOWED = "control_not_allowed"
 ERROR_FUNCTION_SCHEDULED = "function_already_scheduled"
 ERROR_SCHEDULE_IN_USE = "schedule_in_use"
+ERROR_SCHEDULE_NOT_REGISTERED = "schedule_not_registered"
 BASE_ERROR = "base"
 ENTITY_STATE_SELECTOR = "entity_state"
 EQUIPMENT_SETTING_TRANSLATION_KEY = "equipment_setting"
@@ -731,11 +732,11 @@ class EntryChanges:
 class PollingGroup:
     name: str
     interval: int
-    sensors: tuple[str, ...]
+    keys: tuple[str, ...]
 
     @property
     def data(self) -> dict[str, Any]:
-        return {CONF_SCAN_INTERVAL: self.interval, CONF_SENSORS: list(self.sensors)}
+        return {CONF_SCAN_INTERVAL: self.interval, CONF_KEYS: list(self.keys)}
 
 
 @dataclass(frozen=True)
@@ -982,7 +983,7 @@ class SajPollingGroupFlow(ConfigSubentryFlow):
         if pending is None:
             return self.async_abort(reason=ABORT_NOT_PENDING)
         context = await self._context(subentry=pending.subentry)
-        keys = frozenset(pending.group.sensors)
+        keys = frozenset(pending.group.keys)
         saved = Cadence(interval=pending.group.interval, keys=keys)
         excluding = None if pending.subentry is None else pending.subentry.subentry_id
         installation = context.installation
@@ -1029,6 +1030,7 @@ class SajPowerScheduleFlow(ConfigSubentryFlow):
         if user_input is not None:
             schedule, errors = validate_schedule(
                 user_input=user_input,
+                registry=er.async_get(self.hass),
                 allowed=entry.options.get(CONF_ALLOW_CONTROL, False),
                 others=power_schedules(
                     entry=entry,
@@ -1041,7 +1043,11 @@ class SajPowerScheduleFlow(ConfigSubentryFlow):
             step_id="user" if subentry is None else "reconfigure",
             data_schema=_schedule_schema(
                 functions=power_functions(fit=_stored_fit(entry=entry)),
-                defaults=_schedule_defaults(subentry=subentry, submitted=user_input),
+                defaults=_schedule_defaults(
+                    subentry=subentry,
+                    submitted=user_input,
+                    registry=er.async_get(self.hass),
+                ),
             ),
             errors=errors,
         )
@@ -1051,7 +1057,7 @@ class SajPowerScheduleFlow(ConfigSubentryFlow):
     ) -> SubentryFlowResult:
         titles = await selector_options(hass=self.hass, selector_name=FUNCTION_SELECTOR)
         title = titles[schedule.function]
-        data = {CONF_FUNCTION: schedule.function, CONF_SCHEDULE: schedule.entity_id}
+        data = {CONF_FUNCTION: schedule.function, CONF_SCHEDULE: schedule.registry_id}
         if subentry is None:
             return self.async_create_entry(title=title, data=data)
         return self.async_update_and_abort(
@@ -1062,31 +1068,41 @@ class SajPowerScheduleFlow(ConfigSubentryFlow):
 def validate_schedule(
     *,
     user_input: Mapping[str, Any],
+    registry: er.EntityRegistry,
     allowed: bool,
     others: Collection[PowerSchedule],
 ) -> tuple[PowerSchedule | None, dict[str, str]]:
     function = PowerFunction(user_input[CONF_FUNCTION])
-    entity_id = user_input[CONF_SCHEDULE]
+    registered = registry.async_get(user_input[CONF_SCHEDULE])
     errors: dict[str, str] = {}
     if not allowed:
         errors[BASE_ERROR] = ERROR_CONTROL_NOT_ALLOWED
     if any(other.function == function for other in others):
         errors[CONF_FUNCTION] = ERROR_FUNCTION_SCHEDULED
-    if any(other.entity_id == entity_id for other in others):
+    if registered is None:
+        errors[CONF_SCHEDULE] = ERROR_SCHEDULE_NOT_REGISTERED
+    elif any(other.registry_id == registered.id for other in others):
         errors[CONF_SCHEDULE] = ERROR_SCHEDULE_IN_USE
-    if errors:
+    if registered is None or errors:
         return None, errors
-    return PowerSchedule(function=function, entity_id=entity_id), errors
+    return PowerSchedule(function=function, registry_id=registered.id), errors
 
 
 def _schedule_defaults(
-    *, subentry: ConfigSubentry | None, submitted: Mapping[str, Any] | None
+    *,
+    subentry: ConfigSubentry | None,
+    submitted: Mapping[str, Any] | None,
+    registry: er.EntityRegistry,
 ) -> dict[str, Any]:
     if submitted is not None:
         return dict(submitted)
     if subentry is None:
         return {}
-    return dict(subentry.data)
+    registered = registry.async_get(subentry.data[CONF_SCHEDULE])
+    shown = {CONF_FUNCTION: subentry.data[CONF_FUNCTION]}
+    if registered is not None:
+        shown[CONF_SCHEDULE] = registered.entity_id
+    return shown
 
 
 def _schedule_schema(
@@ -1119,15 +1135,15 @@ def validate_group(
     interval = _normalized_interval(user_input=user_input)
     if interval is None:
         errors[CONF_SCAN_INTERVAL] = "invalid_scan_interval"
-    sensors = tuple(user_input.get(CONF_SENSORS, ()))
-    if not sensors:
-        errors[CONF_SENSORS] = ERROR_NO_SENSORS_SELECTED
-    elif not set(claimed).isdisjoint(sensors):
-        errors[CONF_SENSORS] = ERROR_SENSOR_IN_OTHER_GROUP
+    keys = tuple(user_input.get(CONF_KEYS, ()))
+    if not keys:
+        errors[CONF_KEYS] = ERROR_NO_SENSORS_SELECTED
+    elif not set(claimed).isdisjoint(keys):
+        errors[CONF_KEYS] = ERROR_SENSOR_IN_OTHER_GROUP
     if interval is None or errors:
         return None, errors
     return (
-        PollingGroup(name=user_input[CONF_NAME], interval=interval, sensors=sensors),
+        PollingGroup(name=user_input[CONF_NAME], interval=interval, keys=keys),
         errors,
     )
 
@@ -1191,7 +1207,7 @@ def _group_defaults(
     return {
         CONF_NAME: subentry.title,
         CONF_SCAN_INTERVAL: subentry.data[CONF_SCAN_INTERVAL],
-        CONF_SENSORS: [key for key in subentry.data[CONF_SENSORS] if key in selectable],
+        CONF_KEYS: [key for key in subentry.data[CONF_KEYS] if key in selectable],
     }
 
 
@@ -1211,7 +1227,7 @@ def _group_schema(
                 default=defaults.get(CONF_SCAN_INTERVAL, MIN_INTERVAL),
             ): _number_box(),
             vol.Required(
-                CONF_SENSORS, default=defaults.get(CONF_SENSORS, [])
+                CONF_KEYS, default=defaults.get(CONF_KEYS, [])
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[

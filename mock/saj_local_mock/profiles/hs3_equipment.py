@@ -79,7 +79,12 @@ EMS_ENABLE_INITIAL = 0
 
 def _average_group(*, start: int, group: str, total_key: str) -> list[Field]:
     fields = [
-        live(address=start, name=f"average_{group}_total", source=total_key, enc=I32)
+        live(
+            address=start,
+            name=f"five_minute_average_{group}_total",
+            source=total_key,
+            enc=I32,
+        )
     ]
     for phase, name in enumerate("rst"):
         base = start + AVERAGE_TOTAL_WORDS + AVERAGE_PHASE_REGISTERS * phase
@@ -88,26 +93,26 @@ def _average_group(*, start: int, group: str, total_key: str) -> list[Field]:
         fields += [
             live(
                 address=base,
-                name=f"average_{group}_{name}_power",
+                name=f"five_minute_average_{group}_{name}_power",
                 source=f"{prefix}_w" if known else ZERO,
                 enc=I32,
             ),
             live(
                 address=base + 2,
-                name=f"average_{group}_{name}_voltage",
+                name=f"five_minute_average_{group}_{name}_voltage",
                 source=f"{prefix}_v" if known else ZERO,
                 scale=0.1,
             ),
             live(
                 address=base + 3,
-                name=f"average_{group}_{name}_current",
+                name=f"five_minute_average_{group}_{name}_current",
                 source=f"{prefix}_a" if known else ZERO,
                 enc=I16,
                 scale=0.01,
             ),
             live(
                 address=base + 4,
-                name=f"average_{group}_{name}_frequency",
+                name=f"five_minute_average_{group}_{name}_frequency",
                 source=f"{prefix}_hz" if known else ZERO,
                 scale=0.01,
             ),
@@ -122,7 +127,7 @@ def average_fields() -> list[Field]:
     fields.append(
         live(
             address=AVERAGE_PV_TOTAL,
-            name="average_pv_total",
+            name="five_minute_average_pv_total",
             source="avg_pv_w",
             enc=I32,
         )
@@ -134,19 +139,19 @@ def average_fields() -> list[Field]:
         fields += [
             live(
                 address=base,
-                name=f"average_pv{index}_voltage",
+                name=f"five_minute_average_pv{index}_voltage",
                 source=f"avg_pv{index}_v",
                 scale=0.1,
             ),
             live(
                 address=base + 1,
-                name=f"average_pv{index}_current",
+                name=f"five_minute_average_pv{index}_current",
                 source=f"avg_pv{index}_a",
                 scale=0.01,
             ),
             live(
                 address=base + 2,
-                name=f"average_pv{index}_power",
+                name=f"five_minute_average_pv{index}_power",
                 source=f"avg_pv{index}_w",
                 enc=U32,
             ),
@@ -154,44 +159,44 @@ def average_fields() -> list[Field]:
     fields += [
         live(
             address=AVERAGE_BATTERY,
-            name="average_battery_power",
+            name="five_minute_average_battery_power",
             source="avg_battery_w",
             enc=I32,
         ),
         live(
             address=AVERAGE_BATTERY + 2,
-            name="average_battery_soc",
+            name="five_minute_average_battery_soc",
             source="avg_soc_percent",
             scale=0.01,
         ),
         live(
             address=AVERAGE_BATTERY + 3,
-            name="average_battery_one_power",
+            name="five_minute_average_battery_one_power",
             source="avg_battery_w",
             enc=I32,
         ),
         live(
             address=AVERAGE_BATTERY + 5,
-            name="average_battery_one_voltage",
+            name="five_minute_average_battery_one_voltage",
             source="avg_battery_v",
             scale=0.1,
         ),
         live(
             address=AVERAGE_BATTERY + 6,
-            name="average_battery_one_current",
+            name="five_minute_average_battery_one_current",
             source="avg_battery_a",
             enc=I16,
             scale=0.01,
         ),
         live(
             address=AVERAGE_BATTERY + 7,
-            name="average_battery_one_soc",
+            name="five_minute_average_battery_one_soc",
             source="avg_soc_percent",
             scale=0.01,
         ),
         live(
             address=AVERAGE_BATTERY + 8,
-            name="average_battery_one_temperature",
+            name="five_minute_average_battery_one_temperature",
             source="avg_battery_temp_c",
             enc=I16,
             scale=0.1,

@@ -7,7 +7,9 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, NoReturn
 
 from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import (
+    async_track_entity_registry_updated_event,
     async_track_state_change_event,
     async_track_time_interval,
 )
@@ -105,6 +107,7 @@ if TYPE_CHECKING:
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import Event, EventStateChangedData, HomeAssistant
+    from homeassistant.helpers.entity_registry import EventEntityRegistryUpdatedData
 
     from .const import PowerSchedule
     from .saj.codec import Range, Value
@@ -194,7 +197,8 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         self._started: dict[PowerFunction, int | None] = {}
         self._stopping: set[PowerFunction] = set()
         self._closed = False
-        self._stop_listening: Callable[[], None] | None = None
+        self.schedule_entities: dict[PowerFunction, str] = {}
+        self._schedule_trackers: list[Callable[[], None]] = []
         self._stop_retry: Callable[[], None] | None = None
         self._store = power_control_store(hass=hass, entry_id=entry.entry_id)
         self.writes = WriteStatistics()
@@ -826,12 +830,41 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
     async def async_follow_schedules(self) -> None:
         if not self.schedules:
             return
-        self._stop_listening = async_track_state_change_event(
-            self.hass,
-            [schedule.entity_id for schedule in self.schedules],
-            self._schedule_changed,
-        )
+        self._track_schedules()
         await self._follow()
+
+    def _track_schedules(self) -> None:
+        self._untrack_schedules()
+        registry = er.async_get(self.hass)
+        self.schedule_entities = {
+            schedule.function: entry.entity_id
+            for schedule in self.schedules
+            if (entry := registry.async_get(schedule.registry_id)) is not None
+        }
+        entity_ids = list(self.schedule_entities.values())
+        self._schedule_trackers = [
+            async_track_state_change_event(
+                self.hass, entity_ids, self._schedule_changed
+            ),
+            async_track_entity_registry_updated_event(
+                self.hass, entity_ids, self._schedule_entity_updated
+            ),
+        ]
+
+    def _untrack_schedules(self) -> None:
+        for stop in self._schedule_trackers:
+            stop()
+        self._schedule_trackers = []
+
+    @callback
+    def _schedule_entity_updated(
+        self, event: Event[EventEntityRegistryUpdatedData]
+    ) -> None:
+        if event.data["action"] == "update" and "old_entity_id" not in event.data:
+            return
+        self._log.debug("Schedule helper registry entry %s", event.data["action"])
+        self._track_schedules()
+        self.hass.async_create_task(self._follow(), name="SAJ power control schedule")
 
     @callback
     def _schedule_changed(self, event: Event[EventStateChangedData]) -> None:
@@ -839,9 +872,9 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         self._log.debug(
             "Schedule helper for %s changed to %s",
             next(
-                schedule.function
-                for schedule in self.schedules
-                if schedule.entity_id == event.data["entity_id"]
+                function
+                for function, entity_id in self.schedule_entities.items()
+                if entity_id == event.data["entity_id"]
             ),
             "removed" if state is None else state.state,
         )
@@ -850,7 +883,8 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
     def _wishes(self) -> dict[PowerFunction, Wish]:
         wishes: dict[PowerFunction, Wish] = {}
         for schedule in self.schedules:
-            state = self.hass.states.get(schedule.entity_id)
+            entity_id = self.schedule_entities.get(schedule.function)
+            state = None if entity_id is None else self.hass.states.get(entity_id)
             on = state is not None and state.state == SCHEDULE_ON
             wishes[schedule.function] = Wish(
                 on=on,
@@ -1006,9 +1040,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
 
     def _stop_following(self) -> None:
         self._closed = True
-        if self._stop_listening is not None:
-            self._stop_listening()
-            self._stop_listening = None
+        self._untrack_schedules()
         if self._stop_retry is not None:
             self._stop_retry()
             self._stop_retry = None

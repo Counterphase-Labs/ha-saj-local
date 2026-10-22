@@ -2,13 +2,15 @@ from dataclasses import replace
 
 import pytest
 
-from saj.codec import BitRange, Encoding, Range
+from saj.codec import BitRange, Encoding, Range, decode
 from saj.definitions import (
+    COMMISSIONING_KEYS,
     DEFINITIONS,
     FAMILIES,
     FAMILY_BY_NAME,
     FAULT_DEFINITIONS,
     FAULT_KEYS,
+    HEADER_DERIVED_KEYS,
     Access,
     Category,
     Combination,
@@ -262,6 +264,7 @@ def test_every_shipped_family_has_a_unique_name_and_is_found_by_it():
         ({"kind": EntityKind.NUMBER}, None),
         ({"key": "rs485_address"}, Category.DIAGNOSTIC),
         ({"key": "settings_sequence"}, Category.DIAGNOSTIC),
+        ({"diagnostic": True}, Category.DIAGNOSTIC),
         (
             {"key": "battery_protocol", "kind": EntityKind.SELECT},
             Category.DIAGNOSTIC,
@@ -272,6 +275,60 @@ def test_settings_are_configuration_and_versions_and_commissioning_diagnostic(
     changes, category
 ):
     assert replace(_definition("test_row"), **changes).category is category
+
+
+def test_a_negated_definition_reads_the_opposite_sign_of_the_register():
+    definition = replace(_definition("test_row"), encoding=Encoding.I16, negated=True)
+
+    assert decode(words=[600], encoding_format=definition.format) == -600
+
+
+def test_only_the_five_minute_average_grid_power_is_negated_among_the_averages():
+    assert {
+        definition.key
+        for definition in DEFINITIONS
+        if definition.key.startswith("five_minute_average_") and definition.negated
+    } == {"five_minute_average_grid_power"}
+
+
+def test_the_parallel_meter_b_power_reads_the_register_sign_as_a_solar_meter():
+    definition = next(
+        definition
+        for definition in DEFINITIONS
+        if definition.key == "parallel_meter_b_power"
+    )
+
+    assert decode(words=[0xFFFF, 0xFC18], encoding_format=definition.format) == -1000
+
+
+def test_meter_a_phase_powers_are_negated_and_meter_b_phase_powers_are_not():
+    expected = {
+        f"meter_{meter}_l{phase}_power": meter == "a"
+        for meter in "ab"
+        for phase in (1, 2, 3)
+    }
+
+    assert {
+        definition.key: definition.negated
+        for definition in DEFINITIONS
+        if definition.key in expected
+    } == expected
+
+
+def test_the_commissioning_settings_are_read_only_sensors():
+    commissioning = [
+        definition
+        for definition in DEFINITIONS
+        if definition.key in COMMISSIONING_KEYS | HEADER_DERIVED_KEYS
+    ]
+
+    assert {definition.key for definition in commissioning} == (
+        COMMISSIONING_KEYS | HEADER_DERIVED_KEYS
+    )
+    assert all(
+        definition.kind is EntityKind.SENSOR and not definition.writable
+        for definition in commissioning
+    )
 
 
 @pytest.mark.parametrize(

@@ -88,7 +88,7 @@ afterEach(() => {
     document.body.replaceChildren();
 });
 
-describe("saj-local-weekdays support", () => {
+describe("saj-local-weekdays-feature support", () => {
     const supported = (
         entityId: string | undefined,
         owner: { deviceId: string; key: string } | null,
@@ -144,7 +144,7 @@ describe("saj-local-weekdays support", () => {
     });
 });
 
-describe("saj-local-weekdays", () => {
+describe("saj-local-weekdays-feature", () => {
     it("draws the weekday buttons with the entity name as the hidden label and the entity's weekdays", async () => {
         const feature = await mountFeature();
         const buttons = firstIn(feature, "saj-weekday-buttons");
@@ -316,7 +316,7 @@ describe("saj-local-weekdays", () => {
     });
 });
 
-describe("saj-local-weekdays contracts", () => {
+describe("saj-local-weekdays-feature contracts", () => {
     it("keeps its configuration and offers a stub for the feature picker", async () => {
         const feature = await mountFeature();
         const stub = SajWeekdaysFeature.getStubConfig();

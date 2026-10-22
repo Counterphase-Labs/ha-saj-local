@@ -52,11 +52,11 @@ const TAG = "saj-local-schedule-card";
 describeCardPicker({
     tag: TAG,
     card: SajScheduleCard,
-    startingOptions: { kinds: SLOT_KINDS },
+    startingOptions: { slot_kinds: SLOT_KINDS },
 });
 
 const charge = fakeSlot({ kind: "charge", number: 1 });
-const ev = fakeSlot({ kind: "ev", number: 1 });
+const ev = fakeSlot({ kind: "ev_charger", number: 1 });
 
 const plan = (slots = [charge], leftOut = 0): void => {
     vi.mocked(scheduleOf).mockReturnValue({ slots, leftOut });
@@ -110,7 +110,7 @@ describe("saj-local-schedule-card slots", () => {
     it("draws one row per slot with its number, times, days and power", async () => {
         plan([
             fakeSlot({ kind: "charge", number: 1, days: "5" }),
-            fakeSlot({ kind: "ev", number: 2 }),
+            fakeSlot({ kind: "ev_charger", number: 2 }),
         ]);
 
         const card = await mountSchedule();
@@ -162,14 +162,14 @@ describe("saj-local-schedule-card slots", () => {
 
         expect(
             elementsIn(card, "h3").map((heading) => heading.textContent),
-        ).toEqual(["option_kind_charge", "option_kind_ev"]);
+        ).toEqual(["option_kind_charge", "option_kind_ev_charger"]);
     });
 
     it("asks for the slots of the chosen kinds only", async () => {
-        await mountSchedule({ config: { kinds: ["ev"] } });
+        await mountSchedule({ config: { slot_kinds: ["ev_charger"] } });
 
         const options = vi.mocked(scheduleOf).mock.calls[0]?.[0];
-        expect(options?.kinds).toEqual(["ev"]);
+        expect(options?.kinds).toEqual(["ev_charger"]);
         expect(options?.entities).toBeInstanceOf(Map);
     });
 
@@ -205,7 +205,11 @@ describe("saj-local-schedule-card slots", () => {
         await expandAll(card);
         expect(scheduleOf).not.toHaveBeenCalled();
 
-        card.setConfig({ type: TAG, device: "saj_1", kinds: ["ev"] } as never);
+        card.setConfig({
+            type: TAG,
+            device: "saj_1",
+            slot_kinds: ["ev_charger"],
+        } as never);
         await card.updateComplete;
         expect(scheduleOf).toHaveBeenCalledTimes(1);
     });
@@ -522,11 +526,14 @@ describe("saj-local-schedule-card contracts", () => {
             fields: [
                 {
                     kind: "multi",
-                    name: "kinds",
+                    name: "slot_kinds",
                     options: [
                         { value: "charge", label: "option_kind_charge" },
                         { value: "discharge", label: "option_kind_discharge" },
-                        { value: "ev", label: "option_kind_ev" },
+                        {
+                            value: "ev_charger",
+                            label: "option_kind_ev_charger",
+                        },
                     ],
                 },
                 { kind: "boolean", name: "show_timeline", fallback: true },

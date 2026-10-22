@@ -94,7 +94,7 @@ def _snapshot(registry: er.EntityRegistry, entry: ConfigEntry) -> dict[str, tupl
     }
 
 
-async def _save_group(hass, entry, *, name, sensors, subentry_id=None):
+async def _save_group(hass, entry, *, name, keys, subentry_id=None):
     manager = hass.config_entries.subentries
     context = {"source": "user"}
     if subentry_id is not None:
@@ -105,7 +105,7 @@ async def _save_group(hass, entry, *, name, sensors, subentry_id=None):
     assert result["type"] is FlowResultType.FORM
     result = await manager.async_configure(
         result["flow_id"],
-        {"name": name, "scan_interval": 10, "sensors": list(sensors)},
+        {"name": name, "scan_interval": 10, "keys": list(keys)},
     )
     assert result["type"] is FlowResultType.MENU
     result = await manager.async_configure(
@@ -122,8 +122,8 @@ def _group_id(entry, title):
     )
 
 
-def _sensors_of(entry, title):
-    return set(entry.subentries[_group_id(entry, title)].data["sensors"])
+def _keys_of(entry, title):
+    return set(entry.subentries[_group_id(entry, title)].data["keys"])
 
 
 async def test_moving_and_removing_sensors_and_deleting_groups_leave_entities_alone(
@@ -132,15 +132,15 @@ async def test_moving_and_removing_sensors_and_deleting_groups_leave_entities_al
     before = _snapshot(entities, entry)
     assert len(before) == len(KEYS)
 
-    await _save_group(hass, entry, name="Fast", sensors=["pv_power", "battery_power"])
-    await _save_group(hass, entry, name="Slow", sensors=["grid_power"])
+    await _save_group(hass, entry, name="Fast", keys=["pv_power", "battery_power"])
+    await _save_group(hass, entry, name="Slow", keys=["grid_power"])
     assert _snapshot(entities, entry) == before
 
     await _save_group(
         hass,
         entry,
         name="Fast",
-        sensors=["battery_power"],
+        keys=["battery_power"],
         subentry_id=_group_id(entry, "Fast"),
     )
     assert _snapshot(entities, entry) == before
@@ -148,20 +148,20 @@ async def test_moving_and_removing_sensors_and_deleting_groups_leave_entities_al
         hass,
         entry,
         name="Slow",
-        sensors=["grid_power", "pv_power"],
+        keys=["grid_power", "pv_power"],
         subentry_id=_group_id(entry, "Slow"),
     )
-    assert _sensors_of(entry, "Slow") == {"grid_power", "pv_power"}
+    assert _keys_of(entry, "Slow") == {"grid_power", "pv_power"}
     assert _snapshot(entities, entry) == before
 
     await _save_group(
         hass,
         entry,
         name="Slow",
-        sensors=["grid_power"],
+        keys=["grid_power"],
         subentry_id=_group_id(entry, "Slow"),
     )
-    assert _sensors_of(entry, "Slow") == {"grid_power"}
+    assert _keys_of(entry, "Slow") == {"grid_power"}
     assert _snapshot(entities, entry) == before
 
     for title in ("Fast", "Slow"):
@@ -178,7 +178,7 @@ async def test_replacing_the_model_while_groups_exist_leaves_entities_alone(
     hass, monkeypatch, entry, entities, swap
 ):
     start, end, end_serial = swap
-    await _save_group(hass, entry, name="Fast", sensors=["pv_power", "battery_power"])
+    await _save_group(hass, entry, name="Fast", keys=["pv_power", "battery_power"])
     before = _snapshot(entities, entry)
     groups_before = {key: dict(value.data) for key, value in entry.subentries.items()}
     replacement = Device(

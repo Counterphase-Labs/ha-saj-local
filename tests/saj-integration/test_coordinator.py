@@ -222,7 +222,8 @@ def _coordinator(
     coordinator.outstanding = {}
     coordinator._closed = False
     coordinator._stopping = set()
-    coordinator._stop_listening = None
+    coordinator.schedule_entities = {}
+    coordinator._schedule_trackers = []
     coordinator._stop_retry = None
     active_contexts = contexts or set()
     coordinator.async_contexts = lambda: iter(active_contexts)
@@ -334,9 +335,9 @@ def test_constructor_builds_the_poller_from_the_default_interval_and_polling_gro
 ):
     entry = _entry(
         subentries=[
-            ("polling_group", {"scan_interval": 10, "sensors": ["pv_power"]}),
-            ("something_else", {"scan_interval": 5, "sensors": ["grid_power"]}),
-            ("polling_group", {"scan_interval": 120, "sensors": ["battery_soc"]}),
+            ("polling_group", {"scan_interval": 10, "keys": ["pv_power"]}),
+            ("something_else", {"scan_interval": 5, "keys": ["grid_power"]}),
+            ("polling_group", {"scan_interval": 120, "keys": ["battery_soc"]}),
         ]
     )
 

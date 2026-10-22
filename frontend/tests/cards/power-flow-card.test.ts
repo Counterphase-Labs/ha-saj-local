@@ -149,10 +149,10 @@ describe("power flow card nodes", () => {
     it.each([
         { config: {}, expected: ["ev_charger", "backup_load", "meter_b"] },
         {
-            config: { show_optional: true },
+            config: { show_optional_equipment: true },
             expected: ["ev_charger", "backup_load", "meter_b"],
         },
-        { config: { show_optional: false }, expected: [] },
+        { config: { show_optional_equipment: false }, expected: [] },
     ])(
         "draws the optional equipment with $config",
         async ({ config, expected }) => {
@@ -559,7 +559,11 @@ describe("power flow card contracts", () => {
         expect(SajLocalPowerFlowCard.getConfigForm()).toEqual({
             fields: [
                 { kind: "boolean", name: "show_strings", fallback: false },
-                { kind: "boolean", name: "show_optional", fallback: true },
+                {
+                    kind: "boolean",
+                    name: "show_optional_equipment",
+                    fallback: true,
+                },
                 {
                     kind: "select",
                     name: "scope",

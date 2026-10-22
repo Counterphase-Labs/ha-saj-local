@@ -15,8 +15,18 @@ export const APPLICATION_MODE_KEY = "application_mode";
 
 const MINUTES_PER_HOUR = 60;
 
-export type SlotKind = "charge" | "discharge" | "ev";
-export const SLOT_KINDS: readonly SlotKind[] = ["charge", "discharge", "ev"];
+export type SlotKind = "charge" | "discharge" | "ev_charger";
+export const SLOT_KINDS: readonly SlotKind[] = [
+    "charge",
+    "discharge",
+    "ev_charger",
+];
+
+const STEM_PREFIXES: Record<SlotKind, string> = {
+    charge: "charge",
+    discharge: "discharge",
+    ev_charger: "ev",
+};
 
 const BASE_SUFFIXES = ["start", "end", "days", "power"] as const;
 const SWITCHED_SUFFIXES = [...BASE_SUFFIXES, "enabled"] as const;
@@ -56,7 +66,7 @@ export interface TimelineBar {
 }
 
 const suffixesOf = (kind: SlotKind): readonly string[] =>
-    kind === "ev" ? EV_SUFFIXES : SWITCHED_SUFFIXES;
+    kind === "ev_charger" ? EV_SUFFIXES : SWITCHED_SUFFIXES;
 
 const slotNumbers = (): number[] =>
     Array.from({ length: SLOT_COUNT }, (_, index) => index + 1);
@@ -67,7 +77,7 @@ export const slotStem = ({
 }: {
     kind: SlotKind;
     number: number;
-}): string => `${kind}_slot_${String(number)}`;
+}): string => `${STEM_PREFIXES[kind]}_slot_${String(number)}`;
 
 const buildSlot = ({
     entities,
@@ -206,7 +216,9 @@ export const timeOfUseNoticeRequired = ({
     slots: readonly Slot[];
 }): boolean => {
     const mode = entities.get(APPLICATION_MODE_KEY);
-    const showsTimeOfUseSlots = slots.some((slot) => slot.kind !== "ev");
+    const showsTimeOfUseSlots = slots.some(
+        (slot) => slot.kind !== "ev_charger",
+    );
     return (
         showsTimeOfUseSlots &&
         mode !== undefined &&

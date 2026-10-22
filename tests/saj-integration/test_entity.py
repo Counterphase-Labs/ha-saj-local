@@ -12,7 +12,6 @@ from custom_components.saj_local import (
     select,
     sensor,
     switch,
-    text,
 )
 from custom_components.saj_local import time as time_platform
 from custom_components.saj_local.binary_sensor import CONTROL_ALLOWED_KEY
@@ -40,7 +39,6 @@ PLATFORM_MODULES = {
     EntityKind.SELECT: select,
     EntityKind.SWITCH: switch,
     EntityKind.TIME: time_platform,
-    EntityKind.TEXT: text,
     EntityKind.BUTTON: button,
 }
 ENTITY_CLASSES = {
@@ -50,7 +48,6 @@ ENTITY_CLASSES = {
     EntityKind.SELECT: select.SajSelect,
     EntityKind.SWITCH: switch.SajSwitch,
     EntityKind.TIME: time_platform.SajTime,
-    EntityKind.TEXT: text.SajText,
     EntityKind.BUTTON: button.SajButton,
 }
 ALL_KINDS = list(PLATFORM_MODULES)
@@ -152,7 +149,6 @@ def test_only_a_core_row_is_enabled_by_default(kind, *, core):
         (EntityKind.SELECT, {"key": "battery_protocol"}, "diagnostic"),
         (EntityKind.SWITCH, {}, "config"),
         (EntityKind.TIME, {}, "config"),
-        (EntityKind.TEXT, {"quantity": Quantity.ADDRESS}, "diagnostic"),
         (EntityKind.BUTTON, {}, "config"),
     ],
 )
@@ -464,23 +460,21 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
             HS3,
             0x1610,
             {
-                "sensor": 427,
+                "sensor": 425,
                 "binary_sensor": 129,
-                "number": 77,
-                "select": 19,
-                "switch": 37,
+                "number": 65,
+                "select": 13,
+                "switch": 33,
                 "time": 42,
-                "text": 5,
-                "button": 5,
+                "button": 4,
             },
             {
                 "sensor": 47,
                 "binary_sensor": 129,
-                "number": 2,
+                "number": 4,
                 "select": 2,
                 "switch": 0,
                 "time": 0,
-                "text": 0,
                 "button": 0,
             },
         ),
@@ -488,23 +482,21 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
             H2,
             0x005A,
             {
-                "sensor": 271,
+                "sensor": 309,
                 "binary_sensor": 73,
-                "number": 79,
-                "select": 11,
+                "number": 44,
+                "select": 4,
                 "switch": 17,
                 "time": 28,
-                "text": 0,
-                "button": 4,
+                "button": 3,
             },
             {
                 "sensor": 41,
                 "binary_sensor": 73,
-                "number": 3,
+                "number": 4,
                 "select": 1,
                 "switch": 0,
                 "time": 0,
-                "text": 0,
                 "button": 0,
             },
         ),

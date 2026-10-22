@@ -1386,7 +1386,7 @@ def _group(subentry_id, keys, *, interval=10, title="Group"):
         subentry_id=subentry_id,
         subentry_type="polling_group",
         title=title,
-        data={"scan_interval": interval, "sensors": list(keys)},
+        data={"scan_interval": interval, "keys": list(keys)},
     )
 
 
@@ -1462,7 +1462,7 @@ def _group_flow(
 
 def _offered(form):
     schema = form["data_schema"]
-    selector = schema.schema[_marker(schema, "sensors")]
+    selector = schema.schema[_marker(schema, "keys")]
     return {option["value"]: option["label"] for option in selector.config["options"]}
 
 
@@ -1470,7 +1470,7 @@ def _group_input(**changes):
     return {
         "name": "Power",
         "scan_interval": 10,
-        "sensors": ["pv_power"],
+        "keys": ["pv_power"],
         **changes,
     }
 
@@ -1493,7 +1493,7 @@ async def test_add_and_edit_show_the_same_three_field_form(monkeypatch):
     added = await add.async_step_user()
     edited = await edit.async_step_reconfigure()
 
-    assert _field_names(added["data_schema"]) == ["name", "scan_interval", "sensors"]
+    assert _field_names(added["data_schema"]) == ["name", "scan_interval", "keys"]
     assert _field_names(edited["data_schema"]) == _field_names(added["data_schema"])
     assert added["step_id"] == "user"
     assert edited["step_id"] == "reconfigure"
@@ -1508,7 +1508,7 @@ async def test_a_new_group_starts_at_the_shortest_interval_with_nothing_selected
     schema = (await flow.async_step_user())["data_schema"]
 
     assert _marker(schema, "scan_interval").default() == config_flow.MIN_INTERVAL
-    assert _marker(schema, "sensors").default() == []
+    assert _marker(schema, "keys").default() == []
 
 
 async def test_the_form_requires_a_name_and_trims_it(monkeypatch):
@@ -1519,7 +1519,7 @@ async def test_the_form_requires_a_name_and_trims_it(monkeypatch):
     with pytest.raises(config_flow.vol.Invalid):
         schema(_group_input(name="   "))
     with pytest.raises(config_flow.vol.Invalid):
-        schema({"scan_interval": 10, "sensors": []})
+        schema({"scan_interval": 10, "keys": []})
 
 
 @pytest.mark.parametrize("editing", [False, True])
@@ -1574,7 +1574,7 @@ async def test_a_valid_submission_is_not_saved_until_the_save_choice(monkeypatch
     flow, _ = _group_flow(monkeypatch)
 
     review = await flow.async_step_user(
-        _group_input(scan_interval=15.0, sensors=["pv_power", "grid_power"])
+        _group_input(scan_interval=15.0, keys=["pv_power", "grid_power"])
     )
 
     assert review["type"] == "menu"
@@ -1588,7 +1588,7 @@ async def test_a_valid_submission_is_not_saved_until_the_save_choice(monkeypatch
     assert saved == {
         "type": "create_entry",
         "title": "Power",
-        "data": {"scan_interval": 15, "sensors": ["pv_power", "grid_power"]},
+        "data": {"scan_interval": 15, "keys": ["pv_power", "grid_power"]},
     }
     assert type(saved["data"]["scan_interval"]) is int
     assert flow.updates == []
@@ -1600,7 +1600,7 @@ async def test_the_result_step_shows_the_group_requests_and_the_load_before_and_
     flow, _ = _group_flow(monkeypatch)
 
     review = await flow.async_step_user(
-        _group_input(scan_interval=10, sensors=["pv_power", "grid_power"])
+        _group_input(scan_interval=10, keys=["pv_power", "grid_power"])
     )
 
     assert review["description_placeholders"] == {
@@ -1616,7 +1616,7 @@ async def test_only_enabled_entities_cost_requests_in_the_result_step(monkeypatc
     _nothing_enabled.keys = frozenset({"pv_power"})
 
     review = await flow.async_step_user(
-        _group_input(scan_interval=10, sensors=["pv_power", "grid_power"])
+        _group_input(scan_interval=10, keys=["pv_power", "grid_power"])
     )
 
     assert review["description_placeholders"]["requests"] == "1"
@@ -1630,7 +1630,7 @@ async def test_the_result_step_of_an_edit_replaces_the_group_in_the_load_after(
     flow, entry = _group_flow(monkeypatch, subentries=[group], editing="g1")
 
     review = await flow.async_step_reconfigure(
-        _group_input(name="New", scan_interval=30, sensors=["grid_power"])
+        _group_input(name="New", scan_interval=30, keys=["grid_power"])
     )
 
     assert review["step_id"] == "review_group"
@@ -1650,7 +1650,7 @@ async def test_the_result_step_of_an_edit_replaces_the_group_in_the_load_after(
     assert update["entry"] is entry
     assert update["subentry"] is group
     assert update["title"] == "New"
-    assert update["data"] == {"scan_interval": 30, "sensors": ["grid_power"]}
+    assert update["data"] == {"scan_interval": 30, "keys": ["grid_power"]}
 
 
 @pytest.mark.parametrize(
@@ -1664,7 +1664,7 @@ async def test_the_result_step_says_so_when_the_load_with_the_group_is_over_the_
     entry.options["scan_interval"] = 12
     keys = [f"key_{index}" for index in range(key_count)]
 
-    review = await flow.async_step_user(_group_input(scan_interval=12, sensors=keys))
+    review = await flow.async_step_user(_group_input(scan_interval=12, keys=keys))
 
     assert review["step_id"] == step_id
     assert review["menu_options"] == ["save_group", "change_selection"]
@@ -1682,7 +1682,7 @@ async def test_change_selection_returns_to_the_form_with_the_submission_kept(
         monkeypatch, subentries=[group], editing="g1" if editing else None
     )
     step = flow.async_step_reconfigure if editing else flow.async_step_user
-    submitted = _group_input(name="Mine", scan_interval=25, sensors=["pv_power"])
+    submitted = _group_input(name="Mine", scan_interval=25, keys=["pv_power"])
     await step(submitted)
 
     form = await flow.async_step_change_selection()
@@ -1692,7 +1692,7 @@ async def test_change_selection_returns_to_the_form_with_the_submission_kept(
     schema = form["data_schema"]
     assert _marker(schema, "name").default() == "Mine"
     assert _marker(schema, "scan_interval").default() == 25
-    assert _marker(schema, "sensors").default() == ["pv_power"]
+    assert _marker(schema, "keys").default() == ["pv_power"]
     assert form["description_placeholders"] == {"load": "7", "budget": "40"}
     assert flow.created == []
     assert flow.updates == []
@@ -1705,9 +1705,7 @@ async def test_the_result_step_shows_the_same_figures_when_it_is_entered_again(
     monkeypatch, step
 ):
     flow, _ = _group_flow(monkeypatch)
-    review = await flow.async_step_user(
-        _group_input(sensors=["pv_power", "grid_power"])
-    )
+    review = await flow.async_step_user(_group_input(keys=["pv_power", "grid_power"]))
 
     again = await getattr(flow, step)({})
 
@@ -1716,17 +1714,15 @@ async def test_the_result_step_shows_the_same_figures_when_it_is_entered_again(
 
 async def test_a_changed_selection_goes_through_the_result_step_again(monkeypatch):
     flow, _ = _group_flow(monkeypatch)
-    await flow.async_step_user(_group_input(sensors=["pv_power"]))
+    await flow.async_step_user(_group_input(keys=["pv_power"]))
     await flow.async_step_change_selection()
 
-    review = await flow.async_step_user(
-        _group_input(sensors=["pv_power", "grid_power"])
-    )
+    review = await flow.async_step_user(_group_input(keys=["pv_power", "grid_power"]))
 
     assert review["description_placeholders"]["requests"] == "2"
     assert flow.created == []
     saved = await flow.async_step_save_group()
-    assert saved["data"]["sensors"] == ["pv_power", "grid_power"]
+    assert saved["data"]["keys"] == ["pv_power", "grid_power"]
 
 
 @pytest.mark.parametrize(
@@ -1782,10 +1778,10 @@ async def test_a_submission_without_sensors_is_reported_on_the_sensors_field(
 ):
     flow, _ = _group_flow(monkeypatch)
 
-    result = await flow.async_step_user(_group_input(sensors=[]))
+    result = await flow.async_step_user(_group_input(keys=[]))
 
     assert result["type"] == "form"
-    assert result["errors"] == {"sensors": "no_sensors_selected"}
+    assert result["errors"] == {"keys": "no_sensors_selected"}
 
 
 async def test_a_sensor_owned_by_another_group_is_rejected_on_the_sensors_field(
@@ -1794,11 +1790,9 @@ async def test_a_sensor_owned_by_another_group_is_rejected_on_the_sensors_field(
     other = _group("g2", ["pv_power"])
     flow, _ = _group_flow(monkeypatch, subentries=[other])
 
-    result = await flow.async_step_user(
-        _group_input(sensors=["pv_power", "grid_power"])
-    )
+    result = await flow.async_step_user(_group_input(keys=["pv_power", "grid_power"]))
 
-    assert result["errors"] == {"sensors": "sensor_in_other_group"}
+    assert result["errors"] == {"keys": "sensor_in_other_group"}
 
 
 async def test_every_error_is_reported_together_and_the_submission_is_redisplayed(
@@ -1807,12 +1801,12 @@ async def test_every_error_is_reported_together_and_the_submission_is_redisplaye
     flow, _ = _group_flow(monkeypatch)
 
     result = await flow.async_step_user(
-        _group_input(name="Mine", scan_interval=3, sensors=[])
+        _group_input(name="Mine", scan_interval=3, keys=[])
     )
 
     assert result["errors"] == {
         "scan_interval": "invalid_scan_interval",
-        "sensors": "no_sensors_selected",
+        "keys": "no_sensors_selected",
     }
     schema = result["data_schema"]
     assert _marker(schema, "name").default() == "Mine"
@@ -1856,7 +1850,7 @@ async def test_editing_a_group_that_holds_every_entity_still_shows_the_form(
     form = await flow.async_step_reconfigure()
 
     assert set(_offered(form)) == {"pv_power", "grid_power", "battery_soc"}
-    assert _marker(form["data_schema"], "sensors").default() == [
+    assert _marker(form["data_schema"], "keys").default() == [
         "pv_power",
         "grid_power",
         "battery_soc",
@@ -1961,12 +1955,12 @@ async def test_a_group_may_hold_enabled_entities_of_several_domains(monkeypatch)
     _nothing_enabled.keys = frozenset(keys)
 
     form = await flow.async_step_user()
-    review = await flow.async_step_user(_group_input(sensors=keys))
+    review = await flow.async_step_user(_group_input(keys=keys))
     saved = await flow.async_step_save_group()
 
     assert set(_offered(form)) == set(keys)
     assert review["description_placeholders"]["requests"] == "4"
-    assert saved["data"]["sensors"] == keys
+    assert saved["data"]["keys"] == keys
 
 
 async def test_editing_works_while_the_entry_is_not_loaded(monkeypatch):
@@ -1986,12 +1980,12 @@ async def test_stale_entities_are_hidden_when_editing_and_dropped_on_save(monkey
     flow, _ = _group_flow(monkeypatch, subentries=[group], editing="g1")
 
     form = await flow.async_step_reconfigure()
-    shown = _marker(form["data_schema"], "sensors").default()
-    await flow.async_step_reconfigure(_group_input(sensors=shown))
+    shown = _marker(form["data_schema"], "keys").default()
+    await flow.async_step_reconfigure(_group_input(keys=shown))
     await flow.async_step_save_group()
 
     assert shown == ["pv_power"]
-    assert flow.updates[0]["data"]["sensors"] == ["pv_power"]
+    assert flow.updates[0]["data"]["keys"] == ["pv_power"]
 
 
 async def test_groups_of_other_subentry_types_do_not_own_entities(monkeypatch):

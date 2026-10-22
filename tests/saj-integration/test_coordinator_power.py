@@ -71,7 +71,9 @@ def _timers(recorder, name: str) -> list[dict]:
 def _schedule(coordinator, function, entity_id, state, **attributes):
     coordinator.schedules = (
         *coordinator.schedules,
-        PowerSchedule(function=function, entity_id=entity_id),
+        PowerSchedule(
+            function=function, registry_id=coordinator.hass.registry.register(entity_id)
+        ),
     )
     coordinator.hass.states.set(entity_id, state, **attributes)
 
@@ -744,6 +746,75 @@ async def test_a_schedule_change_runs_the_controller_in_the_background(recorder)
     coordinator._schedule_changed(_state_change(NIGHT, "on"))
 
     assert [name for _, name in recorder.tasks] == ["SAJ power control schedule"]
+
+
+RENAMED_NIGHT = "schedule.renamed_night"
+
+
+def _registry_event(action, **data):
+    return SimpleNamespace(data={"action": action, **data})
+
+
+async def test_a_renamed_schedule_helper_is_followed_under_its_new_entity_id(recorder):
+    coordinator = build(recorder)
+    _schedule(coordinator, BATTERY, NIGHT, "on")
+    await coordinator.async_follow_schedules()
+    (registry_id,) = coordinator.hass.registry.entity_ids
+    coordinator.hass.registry.rename(registry_id=registry_id, entity_id=RENAMED_NIGHT)
+    coordinator.hass.states.set(RENAMED_NIGHT, "on", power=-300)
+
+    coordinator._schedule_entity_updated(
+        _registry_event("update", entity_id=RENAMED_NIGHT, old_entity_id=NIGHT)
+    )
+
+    assert recorder.listeners[-1]["ids"] == [RENAMED_NIGHT]
+    assert recorder.registry_listeners[-1]["ids"] == [RENAMED_NIGHT]
+    assert recorder.listeners_cancelled == 1
+    assert recorder.registry_listeners_cancelled == 1
+    assert coordinator._wishes()[BATTERY].power == -300
+    assert [name for _, name in recorder.tasks] == ["SAJ power control schedule"]
+
+
+async def test_a_schedule_helper_that_loses_its_registry_entry_is_no_longer_wanted(
+    recorder,
+):
+    coordinator = build(recorder)
+    _schedule(coordinator, BATTERY, NIGHT, "on")
+    await coordinator.async_follow_schedules()
+    (registry_id,) = coordinator.hass.registry.entity_ids
+    coordinator.hass.registry.remove(registry_id=registry_id)
+
+    coordinator._schedule_entity_updated(_registry_event("remove", entity_id=NIGHT))
+
+    assert recorder.listeners[-1]["ids"] == []
+    assert coordinator._wishes()[BATTERY].on is False
+    assert [name for _, name in recorder.tasks] == ["SAJ power control schedule"]
+
+
+async def test_a_registry_update_that_keeps_the_entity_id_changes_nothing(recorder):
+    coordinator = build(recorder)
+    _schedule(coordinator, BATTERY, NIGHT, "on")
+    await coordinator.async_follow_schedules()
+    listening = len(recorder.listeners)
+
+    coordinator._schedule_entity_updated(
+        _registry_event("update", entity_id=NIGHT, changes={"name": "Night"})
+    )
+
+    assert len(recorder.listeners) == listening
+    assert recorder.tasks == []
+
+
+async def test_a_schedule_helper_missing_from_the_registry_at_start_is_not_wanted(
+    recorder,
+):
+    coordinator = build(recorder)
+    coordinator.schedules = (PowerSchedule(function=BATTERY, registry_id="gone"),)
+
+    await coordinator.async_follow_schedules()
+
+    assert recorder.listeners[0]["ids"] == []
+    assert coordinator._wishes()[BATTERY].on is False
 
 
 def _state_change(entity_id, state):

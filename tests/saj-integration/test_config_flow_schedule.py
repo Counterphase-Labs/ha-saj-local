@@ -2,6 +2,7 @@ from functools import partial
 from types import SimpleNamespace
 
 import pytest
+import voluptuous as vol
 
 from custom_components.saj_local import config_flow
 from custom_components.saj_local.const import PowerSchedule, power_schedules
@@ -12,6 +13,22 @@ BATTERY = PowerFunction.BATTERY
 GRID = PowerFunction.GRID
 FUNCTION_LABELS = {"battery": "Battery", "grid": "Grid", "inverter": "Inverter"}
 STORED_FIT = object()
+REGISTERED = ("schedule.night", "schedule.day")
+
+
+class Registry:
+    def __init__(self, *entity_ids: str) -> None:
+        self.entries = {_registry_id(entity_id): entity_id for entity_id in entity_ids}
+
+    def async_get(self, key: str):
+        for registry_id, entity_id in self.entries.items():
+            if key in (registry_id, entity_id):
+                return SimpleNamespace(id=registry_id, entity_id=entity_id)
+        return None
+
+
+def _registry_id(entity_id: str) -> str:
+    return f"id-{entity_id}"
 
 
 def _form(**kwargs):
@@ -44,7 +61,7 @@ def _schedule(subentry_id, function, entity_id):
         subentry_id=subentry_id,
         subentry_type="power_schedule",
         title=function.capitalize(),
-        data={"function": function, "schedule": entity_id},
+        data={"function": function, "schedule": _registry_id(entity_id)},
     )
 
 
@@ -53,7 +70,7 @@ def _polling_group():
         subentry_id="g1",
         subentry_type="polling_group",
         title="Group",
-        data={"scan_interval": 10, "sensors": []},
+        data={"scan_interval": 10, "keys": []},
     )
 
 
@@ -71,6 +88,7 @@ def _flow(
     flow.hass = SimpleNamespace(
         config_entries=KnownEntries(entry=entry, updates=flow.updates),
         config=SimpleNamespace(language="en"),
+        registry=Registry(*REGISTERED),
     )
     flow.handler = (ENTRY_ID, "power_schedule")
     flow.context = {"source": "user"}
@@ -83,6 +101,9 @@ def _flow(
         return FUNCTION_LABELS
 
     monkeypatch.setattr(config_flow, "selector_options", labels)
+    monkeypatch.setattr(
+        config_flow, "er", SimpleNamespace(async_get=lambda hass: hass.registry)
+    )
     monkeypatch.setattr(config_flow, "_stored_fit", lambda **_: STORED_FIT)
     monkeypatch.setattr(
         config_flow,
@@ -160,7 +181,7 @@ async def test_a_valid_schedule_is_created_titled_by_its_function(monkeypatch):
     assert result == {
         "type": "create_entry",
         "title": "Grid",
-        "data": {"function": "grid", "schedule": "schedule.night"},
+        "data": {"function": "grid", "schedule": _registry_id("schedule.night")},
     }
 
 
@@ -258,7 +279,10 @@ async def test_reconfiguring_updates_the_schedule_and_may_keep_its_own_choices(
     assert update["entry"] is entry
     assert update["subentry"] is saved
     assert update["title"] == "Battery"
-    assert update["data"] == {"function": "battery", "schedule": "schedule.night"}
+    assert update["data"] == {
+        "function": "battery",
+        "schedule": _registry_id("schedule.night"),
+    }
 
 
 async def test_reconfiguring_cannot_take_the_function_or_schedule_of_another(
@@ -294,9 +318,31 @@ def test_the_schedules_of_a_system_are_read_from_its_schedule_subentries():
     )
 
     assert power_schedules(entry=entry) == (
-        PowerSchedule(function=BATTERY, entity_id="schedule.night"),
-        PowerSchedule(function=GRID, entity_id="schedule.day"),
+        PowerSchedule(function=BATTERY, registry_id=_registry_id("schedule.night")),
+        PowerSchedule(function=GRID, registry_id=_registry_id("schedule.day")),
     )
     assert power_schedules(entry=entry, excluding="s1") == (
-        PowerSchedule(function=GRID, entity_id="schedule.day"),
+        PowerSchedule(function=GRID, registry_id=_registry_id("schedule.day")),
     )
+
+
+async def test_a_schedule_helper_without_a_registry_entry_is_refused(monkeypatch):
+    flow, _ = _flow(monkeypatch)
+
+    form = await flow.async_step_user(_input(schedule="schedule.yaml_only"))
+
+    assert form["errors"] == {"schedule": "schedule_not_registered"}
+    assert flow.created == []
+
+
+async def test_reconfiguring_shows_no_schedule_when_the_saved_helper_is_gone(
+    monkeypatch,
+):
+    saved = _schedule("s1", "battery", "schedule.removed")
+    flow, _ = _flow(monkeypatch, subentries=[saved], editing="s1")
+
+    form = await flow.async_step_reconfigure()
+
+    schema = form["data_schema"]
+    assert _marker(schema, "function").default() == "battery"
+    assert _marker(schema, "schedule").default is vol.UNDEFINED

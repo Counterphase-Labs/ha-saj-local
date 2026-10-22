@@ -89,6 +89,7 @@ class Format:
     valid_range: Range | None = None
     words: int | None = None
     inverted: bool = False
+    negated: bool = False
 
     @property
     def word_count(self) -> int:
@@ -138,6 +139,8 @@ def _decode_number(*, words: Sequence[int], encoding_format: Format) -> Value:
         return None
     if encoding_format.encoding in SIGNED_ENCODINGS and raw >> (bit_count - 1):
         raw -= 1 << bit_count
+    if encoding_format.negated:
+        raw = -raw
     value = scaled(raw=raw, scale=encoding_format.scale)
     if (
         encoding_format.valid_range is not None

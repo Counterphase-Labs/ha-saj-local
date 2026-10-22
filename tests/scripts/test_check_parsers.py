@@ -509,6 +509,46 @@ def test_release_check_success():
     assert check_parsers.parse_release_check("", 0).summary == "archive complete"
 
 
+def test_freeze_check_names_every_break():
+    output = "hs3 sensor battery_power: unit W -> kW\nh2 sensor soc: missing\n"
+
+    parsed = check_parsers.parse_freeze_check(output, 1)
+
+    assert parsed.summary == "2 freeze breaks"
+    assert parsed.details == (
+        "hs3 sensor battery_power: unit W -> kW",
+        "h2 sensor soc: missing",
+    )
+
+
+def test_freeze_check_with_one_break_is_singular():
+    parsed = check_parsers.parse_freeze_check("h2 sensor soc: missing\n", 1)
+
+    assert parsed.summary == "1 freeze break"
+
+
+def test_freeze_check_reports_an_unavailable_surface_as_failed_with_the_message():
+    parsed = check_parsers.parse_freeze_check("error git archive failed\n", 1)
+
+    assert parsed.summary == "failed"
+    assert parsed.details == ("error git archive failed",)
+
+
+@pytest.mark.parametrize(
+    ("output", "summary"),
+    [
+        ("no release tag\n", "no release tag"),
+        (
+            "warning: `VIRTUAL_ENV=/x/.venv` does not match\nno release tag\n",
+            "no release tag",
+        ),
+        ("", "surface kept"),
+    ],
+)
+def test_freeze_check_success_repeats_the_first_line(output, summary):
+    assert check_parsers.parse_freeze_check(output, 0).summary == summary
+
+
 def test_hassfest_reports_each_error_against_the_integration_directory():
     output = (
         "Validating manifest... done in 0.00s\n"
@@ -559,6 +599,7 @@ def test_plain_parser_reports_the_given_summary_on_success_only():
         check_parsers.parse_eslint,
         check_parsers.parse_prettier,
         check_parsers.parse_release_check,
+        check_parsers.parse_freeze_check,
         check_parsers.parse_hassfest,
     ],
 )

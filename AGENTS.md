@@ -18,6 +18,10 @@ DO NOT include or reference backwards compatibility in ANY discussion, documenta
 
 Creating backwards compatibility layers of any kind is STRICTLY PROHIBITED.
 
+### Stored Forms
+
+Once a release exists, a change to any stored form (config entry data or options, a subentry's data, the power control store, or a value stored in one of them) raises the config entry `VERSION` or `MINOR_VERSION`, or the store version, and adds a migration.
+
 ### Project Requirements Authority
 
 If discussing project requirements, design decisions and similar, what is currently implemented has ZERO authority. Existing code must not direct project requirements or design decisions.

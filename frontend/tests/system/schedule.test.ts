@@ -68,7 +68,10 @@ describe("scheduleOf", () => {
     );
 
     it("builds EV slots with their extra entities and no enable switch", () => {
-        const slot = firstSlot(slotEntities({ kind: "ev", number: 1 }), "ev");
+        const slot = firstSlot(
+            slotEntities({ kind: "ev_charger", number: 1 }),
+            "ev_charger",
+        );
 
         expect(slot.enabled).toBeNull();
         expect(slot.mode?.key).toBe("ev_slot_1_mode");
@@ -81,37 +84,40 @@ describe("scheduleOf", () => {
         const schedule = scheduleOf({
             entities: entitiesOf(
                 slotEntities({
-                    kind: "ev",
+                    kind: "ev_charger",
                     number: 1,
                     skip: ["ev_slot_1_mode"],
                 }),
             ),
-            kinds: ["ev"],
+            kinds: ["ev_charger"],
         });
 
         expect(schedule.leftOut).toBe(1);
     });
 
     it("builds only the requested kinds, in kind order, up to the slot count", () => {
-        const fakes = (["ev", "discharge", "charge"] as const).flatMap((kind) =>
-            Array.from({ length: SLOT_COUNT }, (_, index) =>
-                slotEntities({ kind, number: index + 1 }),
-            ).flat(),
+        const fakes = (["ev_charger", "discharge", "charge"] as const).flatMap(
+            (kind) =>
+                Array.from({ length: SLOT_COUNT }, (_, index) =>
+                    slotEntities({ kind, number: index + 1 }),
+                ).flat(),
         );
 
         const all = scheduleOf({
             entities: entitiesOf(fakes),
-            kinds: ["ev", "discharge", "charge"],
+            kinds: ["ev_charger", "discharge", "charge"],
         });
         const onlyEv = scheduleOf({
             entities: entitiesOf(fakes),
-            kinds: ["ev"],
+            kinds: ["ev_charger"],
         });
 
         expect(all.slots).toHaveLength(3 * SLOT_COUNT);
         expect(all.slots[0]?.kind).toBe("charge");
-        expect(all.slots.at(-1)?.kind).toBe("ev");
-        expect(onlyEv.slots.every((slot) => slot.kind === "ev")).toBe(true);
+        expect(all.slots.at(-1)?.kind).toBe("ev_charger");
+        expect(onlyEv.slots.every((slot) => slot.kind === "ev_charger")).toBe(
+            true,
+        );
         expect(all.leftOut).toBe(0);
     });
 
@@ -272,7 +278,7 @@ describe("timeOfUseNoticeRequired", () => {
     const modeEntity = (state: string) =>
         entity("application_mode", "select", state);
     const chargeSlot = slotEntities({ kind: "charge", number: 1 });
-    const evSlot = slotEntities({ kind: "ev", number: 1 });
+    const evSlot = slotEntities({ kind: "ev_charger", number: 1 });
     const slotsOf = (fakes: SystemEntity[], kinds: SlotKind[]) =>
         scheduleOf({ entities: entitiesOf(fakes), kinds }).slots;
 
@@ -309,7 +315,7 @@ describe("timeOfUseNoticeRequired", () => {
         expect(
             timeOfUseNoticeRequired({
                 entities: entitiesOf(fakes),
-                slots: slotsOf(fakes, ["ev"]),
+                slots: slotsOf(fakes, ["ev_charger"]),
             }),
         ).toBe(false);
     });

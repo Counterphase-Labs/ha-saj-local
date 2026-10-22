@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from custom_components.saj_local import coordinator as coordinator_module
@@ -10,6 +12,16 @@ def recorder(monkeypatch) -> Recorder:
     monkeypatch.setattr(coordinator_module, "async_track_time_interval", recorded.track)
     monkeypatch.setattr(
         coordinator_module, "async_track_state_change_event", recorded.listen
+    )
+    monkeypatch.setattr(
+        coordinator_module,
+        "async_track_entity_registry_updated_event",
+        recorded.listen_registry,
+    )
+    monkeypatch.setattr(
+        coordinator_module,
+        "er",
+        SimpleNamespace(async_get=lambda hass: hass.registry),
     )
     monkeypatch.setattr(coordinator_module, "device_registers", lambda **_: ())
     monkeypatch.setattr(coordinator_module, "hidden_sources", lambda **_: frozenset())

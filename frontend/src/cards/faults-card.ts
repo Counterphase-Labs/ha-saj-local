@@ -17,7 +17,7 @@ import { SystemCard, type CardContext } from "./system-card";
 
 export const FAULTS_CARD_TYPE = "saj-local-faults-card";
 const FAULTS_CARD_ROWS = 4;
-const SHOW_CLEAR_GROUPS = true;
+const SHOW_GROUPS_WITHOUT_FAULTS = true;
 const CLEAR_FAULT_KEY = "clear_current_fault";
 
 const GROUP_LABEL_KEYS: Readonly<Record<FaultGroupId, string>> = {
@@ -27,7 +27,7 @@ const GROUP_LABEL_KEYS: Readonly<Record<FaultGroupId, string>> = {
 };
 
 export interface FaultsCardConfig extends SajElementConfig {
-    show_clear_groups?: boolean;
+    show_groups_without_faults?: boolean;
 }
 
 export class SajLocalFaultsCard extends SystemCard<FaultsCardConfig> {
@@ -60,8 +60,8 @@ export class SajLocalFaultsCard extends SystemCard<FaultsCardConfig> {
     static getConfigForm(): ReturnType<typeof configForm> {
         return configForm(() => [
             booleanField({
-                name: "show_clear_groups",
-                fallback: SHOW_CLEAR_GROUPS,
+                name: "show_groups_without_faults",
+                fallback: SHOW_GROUPS_WITHOUT_FAULTS,
             }),
         ]);
     }
@@ -80,7 +80,9 @@ export class SajLocalFaultsCard extends SystemCard<FaultsCardConfig> {
     }
 
     protected override renderBody(context: CardContext): TemplateResult {
-        const showClear = this.config?.show_clear_groups ?? SHOW_CLEAR_GROUPS;
+        const showClear =
+            this.config?.show_groups_without_faults ??
+            SHOW_GROUPS_WITHOUT_FAULTS;
         const groups = faultGroups(context.entities).filter(
             ({ active }) => active || showClear,
         );

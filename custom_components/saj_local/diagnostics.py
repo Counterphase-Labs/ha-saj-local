@@ -180,8 +180,11 @@ def _power_control_summary(*, hass: HomeAssistant, coordinator: Any) -> dict[str
         "schedules": [
             {
                 "function": schedule.function.value,
-                "schedule": schedule.entity_id,
-                "on": _schedule_on(hass=hass, entity_id=schedule.entity_id),
+                "schedule": coordinator.schedule_entities.get(schedule.function),
+                "on": _schedule_on(
+                    hass=hass,
+                    entity_id=coordinator.schedule_entities.get(schedule.function),
+                ),
                 "outstanding": coordinator.outstanding.get(schedule.function),
             }
             for schedule in coordinator.schedules
@@ -189,8 +192,8 @@ def _power_control_summary(*, hass: HomeAssistant, coordinator: Any) -> dict[str
     }
 
 
-def _schedule_on(*, hass: HomeAssistant, entity_id: str) -> bool:
-    state = hass.states.get(entity_id)
+def _schedule_on(*, hass: HomeAssistant, entity_id: str | None) -> bool:
+    state = None if entity_id is None else hass.states.get(entity_id)
     return state is not None and state.state == SCHEDULE_ON
 
 

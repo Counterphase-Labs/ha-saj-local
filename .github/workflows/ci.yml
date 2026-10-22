@@ -21,6 +21,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Python
         uses: roquerodrigo/workflows/actions/setup-python@c8f4cdbb114d339ae54e35cd460ada75403d0271 # main

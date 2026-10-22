@@ -17,7 +17,7 @@ import { SystemElement } from "../ui/system-element";
 import "../ui/weekday-buttons";
 import { entityLabel } from "../cards/entity-controls";
 
-export const WEEKDAYS_FEATURE_TAG = "saj-local-weekdays";
+export const WEEKDAYS_FEATURE_TAG = "saj-local-weekdays-feature";
 
 const NUMBER_DOMAIN_PREFIX = "number.";
 const WEEKDAYS_KEY_SUFFIX = "_days";

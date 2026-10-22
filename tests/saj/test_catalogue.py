@@ -24,6 +24,7 @@ from saj.catalogue import (
 )
 from saj.codec import BitRange, Encoding, Range, decode
 from saj.definitions import (
+    PROTECTED_KEYS,
     Access,
     Combination,
     Definition,
@@ -163,6 +164,31 @@ def test_a_row_is_enabled_by_default_only_when_marked_core_and_verified_or_imple
 ):
     catalogue = _build(
         _definition("alpha", core=marked_core),
+        profile=_profile(_at("alpha", 0x1010, evidence)),
+    )
+
+    assert catalogue.registers[0].core is enabled
+
+
+@pytest.mark.parametrize(
+    ("access", "evidence", "enabled"),
+    [
+        (Access.READ_WRITE, Evidence.DOCUMENTED, True),
+        (Access.READ_WRITE, Evidence.RESPONDS_UNDOCUMENTED, True),
+        (Access.READ_ONLY, Evidence.DOCUMENTED, False),
+        (Access.READ_ONLY, Evidence.RESPONDS_UNDOCUMENTED, False),
+    ],
+)
+def test_a_setting_marked_core_is_enabled_by_default_whatever_its_evidence(
+    access: Access, evidence: Evidence, *, enabled: bool
+):
+    catalogue = _build(
+        _definition(
+            "alpha",
+            core=True,
+            access=access,
+            range=Range(minimum=0, maximum=9),
+        ),
         profile=_profile(_at("alpha", 0x1010, evidence)),
     )
 
@@ -673,10 +699,10 @@ def test_a_device_gets_the_registers_of_its_types_shape():
 
 
 SHIPPED_SHAPES = [
-    ("hs3", Shape(phases=3, strings=2), 547, 747, 180),
-    ("h2", Shape(phases=1, strings=2), 390, 487, 118),
-    ("h2", Shape(phases=1, strings=3), 398, 495, 121),
-    ("h2", Shape(phases=3, strings=4, assumed=True), 482, 579, 118),
+    ("hs3", Shape(phases=3, strings=2), 547, 746, 182),
+    ("h2", Shape(phases=1, strings=2), 390, 486, 119),
+    ("h2", Shape(phases=1, strings=3), 398, 494, 122),
+    ("h2", Shape(phases=3, strings=4, assumed=True), 482, 578, 119),
 ]
 
 
@@ -1087,7 +1113,7 @@ def test_the_keys_a_device_reads_leave_out_the_rows_that_are_only_written():
 
 def test_the_registers_of_a_device_split_into_those_read_and_those_not():
     selected = _blocks_profile(
-        "pv_power", "clear_fault_history", "clear_current_fault", "operating_mode"
+        "pv_power", "restart_inverter", "clear_current_fault", "operating_mode"
     )
 
     assert {
@@ -1104,7 +1130,7 @@ def test_the_registers_of_a_device_split_into_those_read_and_those_not():
         for r in device_unread_registers(
             fit=Fit(profile=selected, device_type=1, equipment=ALL_EQUIPMENT)
         )
-    } == {"clear_fault_history", "clear_current_fault"}
+    } == {"restart_inverter", "clear_current_fault"}
     assert {
         r.key
         for r in device_registers(
@@ -1113,7 +1139,7 @@ def test_the_registers_of_a_device_split_into_those_read_and_those_not():
     } == {
         "pv_power",
         "operating_mode",
-        "clear_fault_history",
+        "restart_inverter",
         "clear_current_fault",
     }
 
@@ -1574,7 +1600,7 @@ def _parallel_rows(profile_key: str) -> dict[str, Register]:
         for register in catalogue.registers_for(
             shape=catalogue.profile.maximum_shape, equipment=ALL_EQUIPMENT
         )
-        if register.key.startswith("parallel_") and not register.writable
+        if register.key.startswith("parallel_") and register.key not in PROTECTED_KEYS
     }
 
 
@@ -1636,7 +1662,7 @@ def test_the_parallel_rows_of_an_h2_exist_only_when_the_equipment_is_fitted():
     assert {
         register.key
         for register in without
-        if register.key.startswith("parallel_") and not register.writable
+        if register.key.startswith("parallel_") and register.key not in PROTECTED_KEYS
     } == {"parallel_mode", "parallel_online_count"}
 
 
@@ -1944,3 +1970,20 @@ def test_the_parallel_state_of_charge_reads_whole_percent_on_both_models(
     register = _parallel_rows(profile_key)["parallel_battery_soc"]
 
     assert decode(words=[100], encoding_format=register.format) == 100
+
+
+@pytest.mark.parametrize(
+    ("meter", "sign"), [("meter_a", -1), ("meter_b", 1)], ids=["meter_a", "meter_b"]
+)
+@pytest.mark.parametrize("profile_key", ["hs3", "h2"])
+def test_meter_a_phase_power_is_negated_and_the_solar_meter_b_phase_power_is_not(
+    meter: str, sign: int, profile_key: str
+):
+    rows = {register.key: register for register in CATALOGUES[profile_key].registers}
+    register_watts = 600
+
+    value = decode(
+        words=[register_watts], encoding_format=rows[f"{meter}_l1_power"].format
+    )
+
+    assert value == sign * register_watts

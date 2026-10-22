@@ -134,6 +134,7 @@ class FakeCoordinator:
         self.power_controls = {}
         self.power_state = {}
         self.schedules = ()
+        self.schedule_entities = {}
         self.outstanding = {}
 
     def failing_for(self, *, now):
@@ -590,9 +591,10 @@ async def test_diagnostics_list_power_control_functions_schedules_and_outstandin
     coordinator.power_state = {PowerFunction.BATTERY: True, PowerFunction.GRID: None}
     coordinator.ems.acquire(function=PowerFunction.BATTERY)
     coordinator.schedules = (
-        PowerSchedule(function=PowerFunction.BATTERY, entity_id="schedule.night"),
-        PowerSchedule(function=PowerFunction.GRID, entity_id="schedule.gone"),
+        PowerSchedule(function=PowerFunction.BATTERY, registry_id="registry-night"),
+        PowerSchedule(function=PowerFunction.GRID, registry_id="registry-gone"),
     )
+    coordinator.schedule_entities = {PowerFunction.BATTERY: "schedule.night"}
     coordinator.outstanding = {PowerFunction.GRID: "no_target"}
     schedule_states["schedule.night"] = SimpleNamespace(state="on")
 
@@ -612,7 +614,7 @@ async def test_diagnostics_list_power_control_functions_schedules_and_outstandin
             },
             {
                 "function": "grid",
-                "schedule": "schedule.gone",
+                "schedule": None,
                 "on": False,
                 "outstanding": "no_target",
             },

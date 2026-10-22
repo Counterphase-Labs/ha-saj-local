@@ -75,8 +75,8 @@ describe("battery card gauge", () => {
         const card = await mountBattery([
             soc,
             reading("backup_reserve_soc", "20"),
-            reading("battery_charge_limit", "90"),
-            reading("battery_discharge_limit_on_grid", "unknown"),
+            reading("battery_charge_soc_limit", "90"),
+            reading("battery_discharge_soc_limit_on_grid", "unknown"),
         ]);
 
         expect(firstIn(card, "saj-ring-gauge").markers).toEqual([
@@ -86,7 +86,7 @@ describe("battery card gauge", () => {
             },
             {
                 percent: 90,
-                label: "name(battery_charge_limit) value(battery_charge_limit)",
+                label: "name(battery_charge_soc_limit) value(battery_charge_soc_limit)",
             },
         ]);
     });

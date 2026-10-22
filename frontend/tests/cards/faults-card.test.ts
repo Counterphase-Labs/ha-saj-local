@@ -78,7 +78,7 @@ const mountFaults = (
         extra = [],
         locked = false,
     }: {
-        config?: { show_clear_groups?: boolean };
+        config?: { show_groups_without_faults?: boolean };
         extra?: SystemEntity[];
         locked?: boolean;
     } = {},
@@ -203,10 +203,10 @@ describe("faults card groups", () => {
 
     it("hides groups without faults when asked", async () => {
         const quiet = await mountFaults([inverter("off"), battery("off")], {
-            config: { show_clear_groups: false },
+            config: { show_groups_without_faults: false },
         });
         const mixed = await mountFaults([inverter("on"), battery("off")], {
-            config: { show_clear_groups: false },
+            config: { show_groups_without_faults: false },
         });
 
         expect(rowsOf(quiet)).toEqual([]);
@@ -350,7 +350,11 @@ describe("faults card contracts", () => {
     it("offers the groups without faults option as a switch", () => {
         expect(SajLocalFaultsCard.getConfigForm()).toEqual({
             fields: [
-                { kind: "boolean", name: "show_clear_groups", fallback: true },
+                {
+                    kind: "boolean",
+                    name: "show_groups_without_faults",
+                    fallback: true,
+                },
             ],
         });
     });

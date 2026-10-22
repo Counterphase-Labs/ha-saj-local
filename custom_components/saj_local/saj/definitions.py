@@ -32,12 +32,7 @@ DAYS_RANGE = Range(minimum=0, maximum=127)
 PERCENT_RANGE = Range(minimum=0, maximum=100)
 SIGNED_PERCENT_RANGE = Range(minimum=-100, maximum=100)
 POWER_LIMIT_RANGE = Range(minimum=0, maximum=110)
-WORD_RANGE = Range(minimum=0, maximum=65535)
-LEAD_ACID_VOLTAGE_RANGE = Range(minimum=85, maximum=450)
 FORCED_CHARGE_POWER_RANGE = Range(minimum=10, maximum=100)
-LEAD_ACID_CURRENT_RANGE = Range(minimum=0, maximum=30)
-PV_VOLTAGE_RANGE = Range(minimum=0, maximum=650)
-MPPT_VOLTAGE_RANGE = Range(minimum=90, maximum=500)
 EV_POWER_RANGE = Range(minimum=0, maximum=11000)
 PHASE_COUNT = 3
 STRING_COUNT = 4
@@ -95,7 +90,6 @@ class EntityKind(StrEnum):
     SELECT = "select"
     SWITCH = "switch"
     TIME = "time"
-    TEXT = "text"
     BUTTON = "button"
 
 
@@ -170,6 +164,8 @@ class Definition:
     command_value: int | None = None
     equipment: Equipment | None = None
     inverted: bool = False
+    negated: bool = False
+    diagnostic: bool = False
     exposed: bool = True
     summary: bool = False
     private: bool = False
@@ -184,6 +180,7 @@ class Definition:
             valid_range=self.valid_range,
             words=self.words,
             inverted=self.inverted,
+            negated=self.negated,
         )
 
     @property
@@ -201,7 +198,8 @@ class Definition:
     @property
     def category(self) -> Category | None:
         if (
-            self.quantity in DIAGNOSTIC_QUANTITIES
+            self.diagnostic
+            or self.quantity in DIAGNOSTIC_QUANTITIES
             or self.key in COMMISSIONING_KEYS
             or self.key in HEADER_DERIVED_KEYS
         ):
@@ -432,9 +430,9 @@ EV_STATUS_OPTIONS = {
     5: "vehicle_suspended",
     6: "complete",
 }
-EV_REMOTE_CONTROL_OPTIONS = {0: "shutdown", 1: "on"}
+EV_REMOTE_CONTROL_OPTIONS = {0: "off", 1: "on"}
 EV_PORT_MODE_OPTIONS = {0: "invalid", 1: "host", 2: "modbus_slave"}
-EV_SLOT_MODE_OPTIONS = {0: "not_set", 1: "standard", 2: "pv_mode"}
+EV_SLOT_MODE_OPTIONS = {0: "not_set", 1: "standard", 2: "pv_surplus"}
 OFF_GRID_MODE_OPTIONS = {0: "off", 1: "on"}
 INVERTER_STOP_OPTIONS = {0: "running", 1: "stopped"}
 GRID_TYPE_OPTIONS = {
@@ -904,18 +902,26 @@ AVERAGE_LINE_MEMBERS = (
 )
 AVERAGE_TOTALS = tuple(
     Family(
-        name=f"average_{subject}",
-        stem=f"average_{subject}",
+        name=f"five_minute_average_{subject}",
+        stem=f"five_minute_average_{subject}",
         base=base,
-        members=(Member(offset=0, definition=_power(encoding=Encoding.I32)),),
+        members=(
+            Member(
+                offset=0,
+                # HS3 read 2026-10-22: 513EH +7280 W while 40A7H read -6001 W on import
+                definition=replace(
+                    _power(encoding=Encoding.I32), negated=subject == "grid"
+                ),
+            ),
+        ),
     )
     for subject, base in AVERAGE_TOTAL_BASES.items()
 )
 AVERAGE_PHASES = tuple(
     _phased(
         family=Family(
-            name=f"average_{subject}_phase",
-            stem=f"average_{subject}_l{{index}}",
+            name=f"five_minute_average_{subject}_phase",
+            stem=f"five_minute_average_{subject}_l{{index}}",
             base=base + AVERAGE_TOTAL_WORDS,
             stride=AVERAGE_PHASE_STRIDE,
             members=(*AVERAGE_LINE_MEMBERS, Member(offset=4, definition=_frequency())),
@@ -925,8 +931,8 @@ AVERAGE_PHASES = tuple(
 )
 AVERAGE_PV_STRING = _stringed(
     family=Family(
-        name="average_pv_string",
-        stem="average_pv{index}",
+        name="five_minute_average_pv_string",
+        stem="five_minute_average_pv{index}",
         base=0x5195,
         stride=4,
         members=(
@@ -938,9 +944,9 @@ AVERAGE_PV_STRING = _stringed(
     count=2,
 )
 AVERAGE_BATTERY_PACK = Family(
-    name="average_battery_pack",
+    name="five_minute_average_battery_pack",
     equipment=Equipment.BATTERY,
-    stem="average_battery_pack{index}",
+    stem="five_minute_average_battery_pack{index}",
     base=0x51B9,
     members=(
         *AVERAGE_LINE_MEMBERS,
@@ -1047,7 +1053,10 @@ BATTERY_PACK_IDENTITY = Family(
         Member(
             offset=0,
             definition=Definition(
-                key="bms_type", quantity=Quantity.CODE, encoding=Encoding.U16
+                key="bms_type",
+                quantity=Quantity.CODE,
+                encoding=Encoding.U16,
+                diagnostic=True,
             ),
         ),
         Member(offset=1, definition=_pack_serial(key="bms_serial_number")),
@@ -1060,6 +1069,7 @@ BATTERY_PACK_IDENTITY = Family(
                 quantity=Quantity.CODE,
                 encoding=Encoding.U16,
                 options=BATTERY_TYPE_OPTIONS,
+                diagnostic=True,
             ),
         ),
         Member(offset=12, definition=_pack_serial(key="serial_number")),
@@ -1076,7 +1086,7 @@ METER_A_PHASE = _phased(
         members=(
             Member(offset=0, definition=_voltage()),
             Member(offset=1, definition=_current()),
-            Member(offset=2, definition=_power()),
+            Member(offset=2, definition=replace(_power(), negated=True)),
             Member(offset=3, definition=_apparent_power()),
             Member(offset=4, definition=_power_factor()),
             Member(offset=5, definition=_frequency()),
@@ -1089,6 +1099,11 @@ METER_B_PHASE = replace(
     equipment=Equipment.METER_B,
     stem="meter_b_l{index}",
     base=0xA054,
+    members=tuple(
+        # Meter B is a solar meter: its power reads positive while it generates.
+        replace(member, definition=replace(member.definition, negated=False))
+        for member in METER_A_PHASE.members
+    ),
 )
 METER_A_POWER_HIGH_WORDS = _phased(
     family=Family(
@@ -1097,7 +1112,12 @@ METER_A_POWER_HIGH_WORDS = _phased(
         stem="meter_a_l{index}",
         base=0xA066,
         stride=1,
-        members=(Member(offset=0, definition=_power(key="power_high_word")),),
+        members=(
+            Member(
+                offset=0,
+                definition=replace(_power(key="power_high_word"), exposed=False),
+            ),
+        ),
     )
 )
 METER_B_POWER_HIGH_WORDS = replace(
@@ -1156,8 +1176,6 @@ ETHERNET_ADDRESSES = Family(
             definition=Definition(
                 key=name,
                 quantity=Quantity.ADDRESS,
-                kind=EntityKind.TEXT,
-                access=Access.READ_WRITE,
                 encoding=Encoding.ADDRESS_TEXT,
                 words=ADDRESS_WORDS,
                 private=True,
@@ -1399,9 +1417,12 @@ def _power_limit_setting(
     )
 
 
-def _percent_setting(*, key: str, equipment: Equipment | None = None) -> Definition:
+def _state_of_charge_limit(
+    *, key: str, equipment: Equipment | None = None
+) -> Definition:
     return replace(
         _power_limit_setting(key=key, equipment=equipment, control=True),
+        quantity=Quantity.STATE_OF_CHARGE,
         scale=1,
         range=PERCENT_RANGE,
         core=True,
@@ -1442,6 +1463,18 @@ def _ems_percentage(
     )
 
 
+def _ems_power_target(*, key: str, equipment: Equipment | None = None) -> Definition:
+    return replace(
+        _ems_percentage(
+            key=key,
+            equipment=equipment,
+            encoding=Encoding.I16,
+            value_range=SIGNED_PERCENT_RANGE,
+        ),
+        exposed=False,
+    )
+
+
 def _ems_current_limit(
     *, key: str, maximum: float, equipment: Equipment | None = None
 ) -> Definition:
@@ -1462,21 +1495,11 @@ def _setting(
     *,
     key: str,
     quantity: Quantity,
-    value_range: Range,
     scale: float = 1,
     unit: Unit | None = None,
 ) -> Definition:
-    return replace(
-        _measure(
-            key=key,
-            quantity=quantity,
-            encoding=Encoding.U16,
-            scale=scale,
-            unit=unit,
-        ),
-        kind=EntityKind.NUMBER,
-        access=Access.READ_WRITE,
-        range=value_range,
+    return _measure(
+        key=key, quantity=quantity, encoding=Encoding.U16, scale=scale, unit=unit
     )
 
 
@@ -1487,11 +1510,7 @@ def _of_battery(*, definition: Definition) -> Definition:
 def _lead_acid_voltage(*, key: str) -> Definition:
     return _of_battery(
         definition=_setting(
-            key=key,
-            quantity=Quantity.VOLTAGE,
-            scale=0.1,
-            unit=Unit.VOLT,
-            value_range=LEAD_ACID_VOLTAGE_RANGE,
+            key=key, quantity=Quantity.VOLTAGE, scale=0.1, unit=Unit.VOLT
         )
     )
 
@@ -1499,36 +1518,30 @@ def _lead_acid_voltage(*, key: str) -> Definition:
 def _lead_acid_current(*, key: str) -> Definition:
     return _of_battery(
         definition=_setting(
-            key=key,
-            quantity=Quantity.CURRENT,
-            scale=0.1,
-            unit=Unit.AMPERE,
-            value_range=LEAD_ACID_CURRENT_RANGE,
+            key=key, quantity=Quantity.CURRENT, scale=0.1, unit=Unit.AMPERE
         )
     )
 
 
 def _select_setting(*, key: str, options: Mapping[int, str]) -> Definition:
-    return Definition(
-        key=key,
-        quantity=Quantity.CODE,
-        kind=EntityKind.SELECT,
-        access=Access.READ_WRITE,
-        encoding=Encoding.U16,
-        options=options,
-    )
+    return _reading(key=key, quantity=Quantity.CODE, options=options)
 
 
 def _flag_word(*, key: str) -> Definition:
-    return _setting(key=key, quantity=Quantity.CODE, value_range=WORD_RANGE)
+    return _setting(key=key, quantity=Quantity.CODE)
 
 
 def _reading(
-    *, key: str, quantity: Quantity, options: Mapping[int, str] | None = None
+    *,
+    key: str,
+    quantity: Quantity,
+    options: Mapping[int, str] | None = None,
+    diagnostic: bool = False,
 ) -> Definition:
     return replace(
         _measure(key=key, quantity=quantity, encoding=Encoding.U16),
         options=options,
+        diagnostic=diagnostic,
     )
 
 
@@ -1551,7 +1564,6 @@ COMMISSIONING_SETTINGS: tuple[Definition, ...] = (
         quantity=Quantity.FREQUENCY,
         scale=0.01,
         unit=Unit.HERTZ,
-        value_range=Range(minimum=0, maximum=0.15),
     ),
     _lead_acid_voltage(key="lead_acid_off_grid_discharge_cutoff_voltage"),
     _lead_acid_voltage(key="lead_acid_charge_cutoff_voltage"),
@@ -1565,7 +1577,6 @@ COMMISSIONING_SETTINGS: tuple[Definition, ...] = (
             key="lead_acid_capacity",
             quantity=Quantity.CAPACITY,
             unit=Unit.AMPERE_HOUR,
-            value_range=Range(minimum=0, maximum=1000),
         )
     ),
     _lead_acid_voltage(key="lead_acid_float_charge_voltage"),
@@ -1574,25 +1585,21 @@ COMMISSIONING_SETTINGS: tuple[Definition, ...] = (
         definition=_setting(
             key="bms_update_id",
             quantity=Quantity.COUNT,
-            value_range=Range(minimum=0, maximum=31),
         )
     ),
     _of_battery(
         definition=_setting(
             key="bms_update_mode",
             quantity=Quantity.CODE,
-            value_range=Range(minimum=0, maximum=255),
         )
     ),
     _setting(
         key="parallel_role",
         quantity=Quantity.CODE,
-        value_range=Range(minimum=0, maximum=10),
     ),
     _setting(
         key="parallel_number",
         quantity=Quantity.COUNT,
-        value_range=Range(minimum=1, maximum=255),
     ),
     _select_setting(
         key="parallel_configured_mode", options=PARALLEL_CONFIGURED_MODE_OPTIONS
@@ -1604,26 +1611,22 @@ COMMISSIONING_SETTINGS: tuple[Definition, ...] = (
         quantity=Quantity.VOLTAGE,
         scale=0.1,
         unit=Unit.VOLT,
-        value_range=Range(minimum=220, maximum=240),
     ),
     _setting(
         key="off_grid_output_frequency",
         quantity=Quantity.FREQUENCY,
         scale=0.01,
         unit=Unit.HERTZ,
-        value_range=Range(minimum=50, maximum=60),
     ),
     _flag_word(key="motor_enable"),
     _setting(
         key="machine_model",
         quantity=Quantity.CODE,
-        value_range=Range(minimum=90, maximum=96),
     ),
     _setting(
         key="rated_power",
         quantity=Quantity.POWER,
         unit=Unit.WATT,
-        value_range=Range(minimum=3000, maximum=6000),
     ),
     _flag_word(key="function_flags_1"),
     _flag_word(key="function_flags_2"),
@@ -1631,26 +1634,22 @@ COMMISSIONING_SETTINGS: tuple[Definition, ...] = (
         key="max_dc_current_component",
         quantity=Quantity.CURRENT,
         unit=Unit.MILLIAMPERE,
-        value_range=Range(minimum=0, maximum=3000),
     ),
     _setting(
         key="max_dc_voltage_component",
         quantity=Quantity.VOLTAGE,
         scale=0.1,
         unit=Unit.VOLT,
-        value_range=Range(minimum=0, maximum=40),
     ),
     _setting(
         key="insulation_resistance_limit",
         quantity=Quantity.RESISTANCE,
         unit=Unit.KILOOHM,
-        value_range=Range(minimum=30, maximum=1000),
     ),
     _setting(
         key="max_leakage_current",
         quantity=Quantity.CURRENT,
         unit=Unit.MILLIAMPERE,
-        value_range=Range(minimum=30, maximum=500),
     ),
     _select_setting(key="grid_type", options=GRID_TYPE_OPTIONS),
     _setting(
@@ -1658,34 +1657,29 @@ COMMISSIONING_SETTINGS: tuple[Definition, ...] = (
         quantity=Quantity.VOLTAGE,
         scale=0.1,
         unit=Unit.VOLT,
-        value_range=PV_VOLTAGE_RANGE,
     ),
     _setting(
         key="pv_shutdown_voltage",
         quantity=Quantity.VOLTAGE,
         scale=0.1,
         unit=Unit.VOLT,
-        value_range=PV_VOLTAGE_RANGE,
     ),
     _setting(
         key="mppt_voltage_high",
         quantity=Quantity.VOLTAGE,
         scale=0.1,
         unit=Unit.VOLT,
-        value_range=MPPT_VOLTAGE_RANGE,
     ),
     _setting(
         key="mppt_voltage_low",
         quantity=Quantity.VOLTAGE,
         scale=0.1,
         unit=Unit.VOLT,
-        value_range=MPPT_VOLTAGE_RANGE,
     ),
     _setting(
         key="mppt_scan_time",
         quantity=Quantity.DURATION,
         unit=Unit.MINUTE,
-        value_range=Range(minimum=3, maximum=30000),
     ),
 )
 READINGS: tuple[Definition, ...] = (
@@ -1696,13 +1690,14 @@ READINGS: tuple[Definition, ...] = (
         key="inverter_stop", quantity=Quantity.CODE, options=INVERTER_STOP_OPTIONS
     ),
     _reading(key="inverter_error_count", quantity=Quantity.COUNT),
-    _reading(key="drm_hardware_status", quantity=Quantity.CODE),
-    _reading(key="drm_software_status", quantity=Quantity.CODE),
+    _reading(key="drm_hardware_status", quantity=Quantity.CODE, diagnostic=True),
+    _reading(key="drm_software_status", quantity=Quantity.CODE, diagnostic=True),
     _reading(key="fault_record_sequence", quantity=Quantity.COUNT),
     _reading(
         key="application_mode_active",
         quantity=Quantity.CODE,
         options=APPLICATION_MODE_OPTIONS,
+        diagnostic=True,
     ),
     _battery_controller_current(key="battery_controller_1_current"),
     _battery_controller_current(key="battery_controller_2_current"),
@@ -1749,8 +1744,6 @@ SINGLES: tuple[Definition, ...] = (
     Definition(
         key="ethernet_mode",
         quantity=Quantity.CODE,
-        kind=EntityKind.SELECT,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=ETHERNET_MODE_OPTIONS,
     ),
@@ -1900,10 +1893,7 @@ SINGLES: tuple[Definition, ...] = (
     Definition(
         key="settings_sequence",
         quantity=Quantity.COUNT,
-        kind=EntityKind.NUMBER,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
-        range=Range(minimum=0, maximum=65535),
     ),
     Definition(
         key="settings_protocol_version",
@@ -1914,34 +1904,24 @@ SINGLES: tuple[Definition, ...] = (
     Definition(
         key="meter_configuration",
         quantity=Quantity.CODE,
-        kind=EntityKind.SELECT,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=METER_CONFIGURATION_OPTIONS,
     ),
     Definition(
         key="meter_address",
         quantity=Quantity.COUNT,
-        kind=EntityKind.NUMBER,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
-        range=Range(minimum=1, maximum=255),
     ),
     Definition(
         key="rs485_address",
         quantity=Quantity.COUNT,
-        kind=EntityKind.NUMBER,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
-        range=Range(minimum=1, maximum=127),
     ),
     Definition(
         key="rs485_baud_rate",
-        quantity=Quantity.COUNT,
-        kind=EntityKind.NUMBER,
-        access=Access.READ_WRITE,
+        quantity=Quantity.CODE,
         encoding=Encoding.U16,
-        range=Range(minimum=0, maximum=65535),
+        options=BAUD_RATE_OPTIONS,
     ),
     Definition(
         key="passive_mode",
@@ -1962,8 +1942,6 @@ SINGLES: tuple[Definition, ...] = (
     Definition(
         key="battery_protocol",
         quantity=Quantity.CODE,
-        kind=EntityKind.SELECT,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=BATTERY_PROTOCOL_OPTIONS,
     ),
@@ -1976,13 +1954,13 @@ SINGLES: tuple[Definition, ...] = (
         encoding=Encoding.U16,
         range=SWITCH_RANGE,
     ),
-    _percent_setting(
-        key="battery_discharge_limit_on_grid", equipment=Equipment.BATTERY
+    _state_of_charge_limit(
+        key="battery_discharge_soc_limit_on_grid", equipment=Equipment.BATTERY
     ),
-    _percent_setting(
-        key="battery_discharge_limit_off_grid", equipment=Equipment.BATTERY
+    _state_of_charge_limit(
+        key="battery_discharge_soc_limit_off_grid", equipment=Equipment.BATTERY
     ),
-    _percent_setting(key="battery_charge_limit", equipment=Equipment.BATTERY),
+    _state_of_charge_limit(key="battery_charge_soc_limit", equipment=Equipment.BATTERY),
     Definition(
         key="application_mode",
         control=True,
@@ -2091,16 +2069,11 @@ SINGLES: tuple[Definition, ...] = (
     Definition(
         key="rs485_slave_address",
         quantity=Quantity.COUNT,
-        kind=EntityKind.NUMBER,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
-        range=Range(minimum=1, maximum=1),
     ),
     Definition(
         key="rs485_slave_baud_rate",
         quantity=Quantity.CODE,
-        kind=EntityKind.SELECT,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=BAUD_RATE_OPTIONS,
     ),
@@ -2176,7 +2149,10 @@ SINGLES: tuple[Definition, ...] = (
         encoding=Encoding.U16,
     ),
     Definition(
-        key="battery_protocol_active", quantity=Quantity.CODE, encoding=Encoding.I16
+        key="battery_protocol_active",
+        quantity=Quantity.CODE,
+        encoding=Encoding.I16,
+        diagnostic=True,
     ),
     Definition(
         key="battery_charge_limit_active",
@@ -2204,7 +2180,10 @@ SINGLES: tuple[Definition, ...] = (
         unit=Unit.PERCENT,
     ),
     Definition(
-        key="meter_configuration_active", quantity=Quantity.CODE, encoding=Encoding.I16
+        key="meter_configuration_active",
+        quantity=Quantity.CODE,
+        encoding=Encoding.I16,
+        diagnostic=True,
     ),
     Definition(
         key="dc_bus_voltage",
@@ -2264,15 +2243,31 @@ SINGLES: tuple[Definition, ...] = (
         valid_range=SOC_RANGE,
         core=True,
     ),
-    Definition(key="pv_direction", quantity=Quantity.CODE, encoding=Encoding.U16),
+    Definition(
+        key="pv_direction",
+        quantity=Quantity.CODE,
+        encoding=Encoding.U16,
+        exposed=False,
+    ),
     Definition(
         key="battery_direction",
         equipment=Equipment.BATTERY,
         quantity=Quantity.CODE,
         encoding=Encoding.I16,
+        exposed=False,
     ),
-    Definition(key="grid_direction", quantity=Quantity.CODE, encoding=Encoding.I16),
-    Definition(key="output_direction", quantity=Quantity.CODE, encoding=Encoding.U16),
+    Definition(
+        key="grid_direction",
+        quantity=Quantity.CODE,
+        encoding=Encoding.I16,
+        exposed=False,
+    ),
+    Definition(
+        key="output_direction",
+        quantity=Quantity.CODE,
+        encoding=Encoding.U16,
+        exposed=False,
+    ),
     Definition(
         key="load_power",
         quantity=Quantity.POWER,
@@ -2337,6 +2332,7 @@ SINGLES: tuple[Definition, ...] = (
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
+        exposed=False,
     ),
     Definition(
         key="parallel_battery_power_low_word",
@@ -2344,6 +2340,7 @@ SINGLES: tuple[Definition, ...] = (
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
+        exposed=False,
     ),
     Definition(
         key="parallel_grid_power_low_word",
@@ -2351,6 +2348,7 @@ SINGLES: tuple[Definition, ...] = (
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
+        exposed=False,
     ),
     Definition(
         key="parallel_load_power_low_word",
@@ -2358,6 +2356,7 @@ SINGLES: tuple[Definition, ...] = (
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
+        exposed=False,
     ),
     Definition(
         key="parallel_backup_load_power_low_word",
@@ -2365,6 +2364,7 @@ SINGLES: tuple[Definition, ...] = (
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
+        exposed=False,
     ),
     Definition(
         key="parallel_battery_soc",
@@ -2380,6 +2380,7 @@ SINGLES: tuple[Definition, ...] = (
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
+        exposed=False,
     ),
     Definition(
         key="parallel_battery_capacity",
@@ -2394,6 +2395,7 @@ SINGLES: tuple[Definition, ...] = (
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
+        exposed=False,
     ),
     Definition(
         key="parallel_battery_power_high_word",
@@ -2401,6 +2403,7 @@ SINGLES: tuple[Definition, ...] = (
         quantity=Quantity.POWER,
         encoding=Encoding.I16,
         unit=Unit.WATT,
+        exposed=False,
     ),
     Definition(
         key="parallel_grid_power_high_word",
@@ -2408,6 +2411,7 @@ SINGLES: tuple[Definition, ...] = (
         quantity=Quantity.POWER,
         encoding=Encoding.I16,
         unit=Unit.WATT,
+        exposed=False,
     ),
     Definition(
         key="parallel_load_power_high_word",
@@ -2415,6 +2419,7 @@ SINGLES: tuple[Definition, ...] = (
         quantity=Quantity.POWER,
         encoding=Encoding.U16,
         unit=Unit.WATT,
+        exposed=False,
     ),
     Definition(
         key="parallel_backup_load_power_high_word",
@@ -2422,6 +2427,7 @@ SINGLES: tuple[Definition, ...] = (
         quantity=Quantity.POWER,
         encoding=Encoding.I16,
         unit=Unit.WATT,
+        exposed=False,
     ),
     Definition(
         key="parallel_grid_load_power_high_word",
@@ -2429,6 +2435,7 @@ SINGLES: tuple[Definition, ...] = (
         quantity=Quantity.POWER,
         encoding=Encoding.I16,
         unit=Unit.WATT,
+        exposed=False,
     ),
     Definition(
         key="parallel_meter_b_power",
@@ -2457,17 +2464,12 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_address",
         equipment=Equipment.EV_CHARGER,
         quantity=Quantity.COUNT,
-        kind=EntityKind.NUMBER,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
-        range=Range(minimum=1, maximum=127),
     ),
     Definition(
         key="ev_baud_rate",
         equipment=Equipment.EV_CHARGER,
         quantity=Quantity.CODE,
-        kind=EntityKind.SELECT,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=BAUD_RATE_OPTIONS,
     ),
@@ -2475,27 +2477,19 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_charger_count",
         equipment=Equipment.EV_CHARGER,
         quantity=Quantity.COUNT,
-        kind=EntityKind.NUMBER,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
-        range=Range(minimum=1, maximum=3),
     ),
     Definition(
         key="ev_communication_timeout",
         equipment=Equipment.EV_CHARGER,
         quantity=Quantity.DURATION,
-        kind=EntityKind.NUMBER,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         unit=Unit.SECOND,
-        range=Range(minimum=1, maximum=6),
     ),
     Definition(
         key="ev_port_mode",
         equipment=Equipment.EV_CHARGER,
         quantity=Quantity.CODE,
-        kind=EntityKind.SELECT,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
         options=EV_PORT_MODE_OPTIONS,
     ),
@@ -2503,10 +2497,7 @@ SINGLES: tuple[Definition, ...] = (
         key="ev_port_address",
         equipment=Equipment.EV_CHARGER,
         quantity=Quantity.COUNT,
-        kind=EntityKind.NUMBER,
-        access=Access.READ_WRITE,
         encoding=Encoding.U16,
-        range=Range(minimum=1, maximum=254),
     ),
     Definition(
         key="ev_mode",
@@ -2531,20 +2522,20 @@ SINGLES: tuple[Definition, ...] = (
         range=EV_POWER_RANGE,
     ),
     Definition(
-        key="average_pv_power",
+        key="five_minute_average_pv_power",
         quantity=Quantity.POWER,
         encoding=Encoding.I32,
         unit=Unit.WATT,
     ),
     Definition(
-        key="average_battery_power",
+        key="five_minute_average_battery_power",
         equipment=Equipment.BATTERY,
         quantity=Quantity.POWER,
         encoding=Encoding.I32,
         unit=Unit.WATT,
     ),
     Definition(
-        key="average_battery_soc",
+        key="five_minute_average_battery_soc",
         equipment=Equipment.BATTERY,
         quantity=Quantity.STATE_OF_CHARGE,
         encoding=Encoding.U16,
@@ -2560,7 +2551,6 @@ SINGLES: tuple[Definition, ...] = (
         unit=Unit.SECOND,
         range=Range(minimum=0, maximum=65534),
     ),
-    _command(key="clear_fault_history", value=1),
     _command(key="clear_current_fault", value=2, control=True),
     _command(key="restart_inverter", value=1),
     Definition(
@@ -2571,11 +2561,7 @@ SINGLES: tuple[Definition, ...] = (
         access=Access.WRITE_ONLY,
         encoding=Encoding.CLOCK,
     ),
-    _ems_percentage(
-        key="ems_inverter_power_target",
-        encoding=Encoding.I16,
-        value_range=SIGNED_PERCENT_RANGE,
-    ),
+    _ems_power_target(key="ems_inverter_power_target"),
     _ems_current_limit(
         key="ems_battery_charge_current_limit", maximum=200, equipment=Equipment.BATTERY
     ),
@@ -2584,12 +2570,7 @@ SINGLES: tuple[Definition, ...] = (
         maximum=20,
         equipment=Equipment.BATTERY,
     ),
-    _ems_percentage(
-        key="ems_battery_power_target",
-        equipment=Equipment.BATTERY,
-        encoding=Encoding.I16,
-        value_range=SIGNED_PERCENT_RANGE,
-    ),
+    _ems_power_target(key="ems_battery_power_target", equipment=Equipment.BATTERY),
     _ems_percentage(
         key="ems_inverter_import_power_limit",
         encoding=Encoding.U16,
@@ -2600,11 +2581,7 @@ SINGLES: tuple[Definition, ...] = (
         encoding=Encoding.U16,
         value_range=PERCENT_RANGE,
     ),
-    _ems_percentage(
-        key="ems_grid_power_target",
-        encoding=Encoding.I16,
-        value_range=SIGNED_PERCENT_RANGE,
-    ),
+    _ems_power_target(key="ems_grid_power_target"),
     _ems_percentage(
         key="ems_pv_power_limit",
         encoding=Encoding.U16,
@@ -2671,18 +2648,21 @@ SINGLES: tuple[Definition, ...] = (
         equipment=Equipment.BATTERY,
         quantity=Quantity.CAPACITY,
         encoding=Encoding.U16,
+        unit=Unit.AMPERE_HOUR,
     ),
     Definition(
         key="battery_usable_capacity",
         equipment=Equipment.BATTERY,
         quantity=Quantity.CAPACITY,
         encoding=Encoding.U16,
+        unit=Unit.AMPERE_HOUR,
     ),
     Definition(
         key="battery_online_code",
         equipment=Equipment.BATTERY,
         quantity=Quantity.CODE,
         encoding=Encoding.U16,
+        diagnostic=True,
     ),
     Definition(
         key="battery_discharge_current_limit",
@@ -2768,7 +2748,7 @@ SINGLES: tuple[Definition, ...] = (
         unit=Unit.VOLT_AMPERE,
     ),
     Definition(
-        key="protocol_version",
+        key="identity_protocol_version",
         quantity=Quantity.VERSION,
         encoding=Encoding.U16,
         scale=0.001,
@@ -2850,6 +2830,7 @@ SINGLES: tuple[Definition, ...] = (
             encoding=Encoding.U16,
             field=BitRange(first=bit, last=bit),
             range=SWITCH_RANGE,
+            exposed=False,
         )
         for key, bit in EMS_CONTROL_BITS.items()
     ),

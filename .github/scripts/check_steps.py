@@ -344,6 +344,18 @@ def _release_check(invocation: Invocation) -> tuple[Command, ...]:
     )
 
 
+def _freeze_check(invocation: Invocation) -> tuple[Command, ...]:
+    del invocation
+    script = Path(__file__).with_name("freeze_check.py")
+    return (
+        Command(
+            ("uv", "run", "python", str(script)),
+            check_parsers.parse_freeze_check,
+            timeout=SHORT_TIMEOUT_SECONDS,
+        ),
+    )
+
+
 def _validate(invocation: Invocation) -> tuple[Command, ...]:
     return (
         Command(
@@ -624,6 +636,20 @@ STEPS: tuple[Step, ...] = (
             runs="a check of the files the HACS archive holds",
             success="archive complete",
             failure="each missing archive entry",
+            args=NO_ARGS,
+        ),
+    ),
+    Step(
+        "freeze-check",
+        _freeze_check,
+        Help(
+            summary="entities, stored settings and cards against the last release",
+            runs=(
+                "a comparison of the surface generated from the working tree with the "
+                "surface generated from the newest release tag"
+            ),
+            success='"no release tag", or the tag the surface was kept since',
+            failure="one line per removed or changed entity, stored setting or card",
             args=NO_ARGS,
         ),
     ),

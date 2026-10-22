@@ -35,9 +35,9 @@ const SECTION_KEYS: Record<KeyedSectionId, readonly string[]> = {
     ],
     battery: [
         "backup_reserve_soc",
-        "battery_charge_limit",
-        "battery_discharge_limit_on_grid",
-        "battery_discharge_limit_off_grid",
+        "battery_charge_soc_limit",
+        "battery_discharge_soc_limit_on_grid",
+        "battery_discharge_soc_limit_off_grid",
         "battery_charge_power_limit",
         "battery_discharge_power_limit",
         "battery_forced_charge_power_limit",

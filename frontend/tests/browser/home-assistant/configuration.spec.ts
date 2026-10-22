@@ -121,7 +121,7 @@ const addIntegration = async (
 const smokeEntities = [
     "sensor.pv_power",
     "sensor.pv_energy_total",
-    "number.battery_discharge_limit_on_grid",
+    "number.battery_discharge_soc_limit_on_grid",
 ] as const;
 
 const smokeEntityId = (prefix: string, entity: string): string => {
@@ -358,7 +358,7 @@ test("an HS3 and an H2 endpoint load, report values, show a solar value on a das
     for (const prefix of ["", "h2"]) {
         await expectSettingChangeToShow(
             page,
-            smokeEntityId(prefix, "number.battery_discharge_limit_on_grid"),
+            smokeEntityId(prefix, "number.battery_discharge_soc_limit_on_grid"),
         );
     }
 });

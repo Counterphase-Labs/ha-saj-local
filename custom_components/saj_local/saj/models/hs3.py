@@ -141,7 +141,7 @@ PROFILE = Profile(
                 "passive_battery_charge_power": 0x3639,
                 "battery_protocol": 0x363B,
                 "battery_auto_wake": 0x3643,
-                "battery_discharge_limit_on_grid": 0x3644,
+                "battery_discharge_soc_limit_on_grid": 0x3644,
                 "application_mode": 0x3647,
                 "backup_reserve_soc": 0x3651,
                 "export_limit_power": 0x365A,
@@ -188,9 +188,9 @@ PROFILE = Profile(
                 "ev_mode": 0x4B12,
                 "ev_charge_power": 0x4B14,
                 "ev_minimum_current_charging": 0x4B43,
-                "average_pv_power": 0x5193,
-                "average_battery_power": 0x51B6,
-                "average_battery_soc": 0x51B8,
+                "five_minute_average_pv_power": 0x5193,
+                "five_minute_average_battery_power": 0x51B6,
+                "five_minute_average_battery_soc": 0x51B8,
                 "ems_battery_control": 0x8400,
                 "ems_grid_control": 0x8400,
                 "ems_inverter_control": 0x8400,
@@ -248,7 +248,7 @@ PROFILE = Profile(
                 "passive_grid_charge_power": 0x3637,
                 "passive_grid_discharge_power": 0x3638,
                 "passive_battery_discharge_power": 0x363A,
-                "battery_discharge_limit_off_grid": 0x3645,
+                "battery_discharge_soc_limit_off_grid": 0x3645,
                 "battery_charge_power_limit": 0x364D,
                 "battery_discharge_power_limit": 0x364E,
                 "grid_import_power_limit": 0x364F,
@@ -276,7 +276,6 @@ PROFILE = Profile(
                 "battery_fault_word_1": 0x400B,
                 "ev_fault_word_1": 0x30AB,
                 "ev_fault_word_2": 0x30AD,
-                "clear_fault_history": 0x8015,
                 "clear_current_fault": 0x8015,
                 "restart_inverter": 0x801A,
                 "synchronise_clock": 0x8020,
@@ -300,7 +299,7 @@ PROFILE = Profile(
                 "ev_current_setpoint": 0x30B7,
                 "ev_session_start": 0x30B8,
                 "ev_session_end": 0x30BA,
-                "battery_charge_limit": 0x3646,
+                "battery_charge_soc_limit": 0x3646,
                 "slave_software_version": 0x8F19,
                 "ev_ems_charging": 0x4B46,
                 "ev_ems_phase_mode": 0x4B46,
@@ -382,20 +381,44 @@ PROFILE = Profile(
         FamilyPlacement(
             family="parallel_pv_meter_energy", evidence=Evidence.RESPONDS_UNCHECKED
         ),
-        FamilyPlacement(family="average_grid", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_inverter", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_load", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_grid_load", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_backup", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_generator", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_grid_phase", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_inverter_phase", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_load_phase", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_grid_load_phase", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_backup_phase", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_generator_phase", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_pv_string", evidence=Evidence.VERIFIED),
-        FamilyPlacement(family="average_battery_pack", evidence=Evidence.VERIFIED),
+        FamilyPlacement(family="five_minute_average_grid", evidence=Evidence.VERIFIED),
+        FamilyPlacement(
+            family="five_minute_average_inverter", evidence=Evidence.VERIFIED
+        ),
+        FamilyPlacement(family="five_minute_average_load", evidence=Evidence.VERIFIED),
+        FamilyPlacement(
+            family="five_minute_average_grid_load", evidence=Evidence.VERIFIED
+        ),
+        FamilyPlacement(
+            family="five_minute_average_backup", evidence=Evidence.VERIFIED
+        ),
+        FamilyPlacement(
+            family="five_minute_average_generator", evidence=Evidence.VERIFIED
+        ),
+        FamilyPlacement(
+            family="five_minute_average_grid_phase", evidence=Evidence.VERIFIED
+        ),
+        FamilyPlacement(
+            family="five_minute_average_inverter_phase", evidence=Evidence.VERIFIED
+        ),
+        FamilyPlacement(
+            family="five_minute_average_load_phase", evidence=Evidence.VERIFIED
+        ),
+        FamilyPlacement(
+            family="five_minute_average_grid_load_phase", evidence=Evidence.VERIFIED
+        ),
+        FamilyPlacement(
+            family="five_minute_average_backup_phase", evidence=Evidence.VERIFIED
+        ),
+        FamilyPlacement(
+            family="five_minute_average_generator_phase", evidence=Evidence.VERIFIED
+        ),
+        FamilyPlacement(
+            family="five_minute_average_pv_string", evidence=Evidence.VERIFIED
+        ),
+        FamilyPlacement(
+            family="five_minute_average_battery_pack", evidence=Evidence.VERIFIED
+        ),
         FamilyPlacement(
             family="battery_pack", evidence=Evidence.RESPONDS_UNDOCUMENTED, count=1
         ),

@@ -755,7 +755,7 @@ def test_an_incomplete_readout_reports_the_refusal_code():
     assert caught.value.exception_code == 0
 
 
-WRITE_ONLY_KEYS = {"ems_grid_power_target", "ems_pv_power_limit", "clear_fault_history"}
+WRITE_ONLY_KEYS = {"ems_grid_power_target", "ems_pv_power_limit", "clear_current_fault"}
 
 
 @pytest.mark.parametrize(

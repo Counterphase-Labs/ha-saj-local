@@ -151,6 +151,24 @@ def test_an_inverted_bit_field_reads_the_complement_of_its_bits(
     assert decode(words=[word], encoding_format=format_) == expected
 
 
+@pytest.mark.parametrize(
+    ("encoding", "words", "scale", "expected"),
+    [
+        (Encoding.I16, [600], 1, -600),
+        (Encoding.I16, [0xFFFE], 1, 2),
+        (Encoding.I16, [0], 1, 0),
+        (Encoding.U16, [600], 1, -600),
+        (Encoding.I16, [25], 0.1, -2.5),
+    ],
+)
+def test_a_negated_number_reads_with_the_opposite_sign(
+    encoding: Encoding, words: list[int], scale: float, expected: float
+):
+    format_ = Format(encoding=encoding, scale=scale, negated=True)
+
+    assert decode(words=words, encoding_format=format_) == expected
+
+
 def test_a_bit_field_applies_the_invalid_marker_to_the_field_value():
     format_ = Format(
         encoding=Encoding.U16,

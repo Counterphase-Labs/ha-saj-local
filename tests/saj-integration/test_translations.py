@@ -14,6 +14,7 @@ from custom_components.saj_local.config_flow import (
     ERROR_FUNCTION_SCHEDULED,
     ERROR_INVALID_EQUIPMENT,
     ERROR_SCHEDULE_IN_USE,
+    ERROR_SCHEDULE_NOT_REGISTERED,
     NO_EQUIPMENT,
 )
 from custom_components.saj_local.const import (
@@ -417,6 +418,7 @@ def test_every_refusal_of_the_power_schedule_form_has_its_own_message():
         ERROR_CONTROL_NOT_ALLOWED,
         ERROR_FUNCTION_SCHEDULED,
         ERROR_SCHEDULE_IN_USE,
+        ERROR_SCHEDULE_NOT_REGISTERED,
     }
     assert len(set(errors.values())) == len(errors)
 

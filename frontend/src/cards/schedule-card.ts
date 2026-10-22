@@ -39,11 +39,11 @@ const SHOW_TIMELINE = true;
 const KIND_COLOURS: Record<SlotKind, string> = {
     charge: "var(--energy-battery-in-color, #4db6ac)",
     discharge: "var(--energy-battery-out-color, #a280db)",
-    ev: "var(--energy-grid-consumption-color, #488fc2)",
+    ev_charger: "var(--energy-grid-consumption-color, #488fc2)",
 };
 
 export interface ScheduleCardConfig extends SajElementConfig {
-    kinds?: SlotKind[];
+    slot_kinds?: SlotKind[];
     show_timeline?: boolean;
 }
 
@@ -144,7 +144,7 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
     static getConfigForm(): ReturnType<typeof configForm> {
         return configForm((text) => [
             multiSelectField({
-                name: "kinds",
+                name: "slot_kinds",
                 options: SLOT_KINDS.map((kind) => ({
                     value: kind,
                     label: text(`option_kind_${kind}`),
@@ -160,7 +160,7 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
     static getStubConfig(
         hass: Pick<Hass, "entities" | "devices">,
     ): Omit<ScheduleCardConfig, "type"> {
-        return { ...stubConfig(hass), kinds: [...SLOT_KINDS] };
+        return { ...stubConfig(hass), slot_kinds: [...SLOT_KINDS] };
     }
 
     declare expanded: ReadonlySet<string>;
@@ -254,7 +254,7 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
     }
 
     private get kinds(): readonly SlotKind[] {
-        return this.config?.kinds ?? SLOT_KINDS;
+        return this.config?.slot_kinds ?? SLOT_KINDS;
     }
 
     private get showTimeline(): boolean {

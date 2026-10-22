@@ -24,7 +24,7 @@ CONF_MODEL = "model"
 CONF_DEVICE_TYPE = "device_type"
 CONF_UNIT_ID = "unit_id"
 CONF_SCAN_INTERVAL = "scan_interval"
-CONF_SENSORS = "sensors"
+CONF_KEYS = "keys"
 CONF_PREFIX = "prefix"
 CONF_ALLOW_CONTROL = "allow_control"
 CONF_EMS_HEARTBEAT = "ems_heartbeat"
@@ -74,7 +74,6 @@ PLATFORMS = (
     Platform.SELECT,
     Platform.SWITCH,
     Platform.TIME,
-    Platform.TEXT,
     Platform.BUTTON,
 )
 
@@ -164,7 +163,7 @@ def group_cadences(
     return [
         Cadence(
             interval=int(subentry.data[CONF_SCAN_INTERVAL]),
-            keys=frozenset(subentry.data[CONF_SENSORS]),
+            keys=frozenset(subentry.data[CONF_KEYS]),
         )
         for subentry in entry.subentries.values()
         if subentry.subentry_type == SUBENTRY_POLLING_GROUP
@@ -175,7 +174,7 @@ def group_cadences(
 @dataclass(frozen=True)
 class PowerSchedule:
     function: PowerFunction
-    entity_id: str
+    registry_id: str
 
 
 def power_schedules(
@@ -184,7 +183,7 @@ def power_schedules(
     return tuple(
         PowerSchedule(
             function=PowerFunction(subentry.data[CONF_FUNCTION]),
-            entity_id=subentry.data[CONF_SCHEDULE],
+            registry_id=subentry.data[CONF_SCHEDULE],
         )
         for subentry in entry.subentries.values()
         if subentry.subentry_type == SUBENTRY_POWER_SCHEDULE

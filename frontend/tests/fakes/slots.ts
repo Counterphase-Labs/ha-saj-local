@@ -2,7 +2,13 @@ import type { Slot } from "../../src/system/schedule";
 import type { SystemEntity } from "../../src/system/entities";
 import { entity } from "./entities";
 
-export type SlotKind = "charge" | "discharge" | "ev";
+export type SlotKind = "charge" | "discharge" | "ev_charger";
+
+const STEM_PREFIXES: Record<SlotKind, string> = {
+    charge: "charge",
+    discharge: "discharge",
+    ev_charger: "ev",
+};
 
 export interface SlotOptions {
     kind: SlotKind;
@@ -25,13 +31,13 @@ export const slotEntities = ({
     enabled = "on",
     skip = [],
 }: SlotOptions): SystemEntity[] => {
-    const stem = `${kind}_slot_${String(number)}`;
+    const stem = `${STEM_PREFIXES[kind]}_slot_${String(number)}`;
     const all: SystemEntity[] = [
         entity(`${stem}_start`, "time", start),
         entity(`${stem}_end`, "time", end),
         entity(`${stem}_days`, "number", days),
         entity(`${stem}_power`, "number", power),
-        ...(kind === "ev"
+        ...(kind === "ev_charger"
             ? [
                   entity(`${stem}_mode`, "select", "charge"),
                   entity(`${stem}_grid_charging`, "switch", "off"),
@@ -44,7 +50,7 @@ export const slotEntities = ({
 
 export const fakeSlot = (options: SlotOptions): Slot => {
     const entities = slotEntities(options);
-    const stem = `${options.kind}_slot_${String(options.number)}`;
+    const stem = `${STEM_PREFIXES[options.kind]}_slot_${String(options.number)}`;
     const named = (suffix: string): SystemEntity | null =>
         entities.find((item) => item.key === `${stem}_${suffix}`) ?? null;
     const required = (suffix: string): SystemEntity => {

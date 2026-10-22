@@ -26,7 +26,9 @@ Platform stability and correctness is paramount.
   - Each element is set up by choosing a system, so the same element can be added once for each system
   - Each element shows only what its system has, and keeps working when the system's prefix changes
   - Elements look and behave like standard Home Assistant cards and follow the user's theme and language
+- Each system is one Home Assistant device. A later split into sub-devices keeps the system's device as the base device, so cards and device automations pointing at the system's device keep working.
 - Full localisation and internalisation support
+- English texts and keys use British spelling
 - clear and detailed errors with good error handling
 - extensive and useful debug dump tools using native HA solutions that are privacy focused
 
@@ -99,6 +101,7 @@ Platform stability and correctness is paramount.
   - One `make build` builds everything the project builds. There is no build target per feature or part, such as `frontend-build` or `showcase-build`
   - One `make test` runs every test. Each test suite also has its own target, which `make test` runs
   - One `make ci` runs every check. The partial targets that make up `make ci` stay
+- Once a release exists, `make ci` fails when a change removes an entity key, a stored setting key, a card type or a card setting, changes an entity's platform, unit, device class, state class or state values, removes a value a card setting accepts, or lowers a config entry or store version, compared with the newest release tag.
 - All testing and verification can run in github workflows using the same make targets
 - This HACS repository will be the sole repository and must contain all elements of the integration, including the SAJ stand alone library, the actual SAJ integration, any lovelace components and custom dashboards
 

@@ -254,6 +254,8 @@ class Recorder:
         self.cancelled = 0
         self.listeners: list[dict] = []
         self.listeners_cancelled = 0
+        self.registry_listeners: list[dict] = []
+        self.registry_listeners_cancelled = 0
         self.tasks: list = []
 
     def track(self, hass, action, interval, *, name):
@@ -274,9 +276,39 @@ class Recorder:
 
         return cancel
 
+    def listen_registry(self, hass, entity_ids, action):
+        self.registry_listeners.append(
+            {"hass": hass, "ids": list(entity_ids), "action": action}
+        )
+
+        def cancel() -> None:
+            self.registry_listeners_cancelled += 1
+
+        return cancel
+
     def create_task(self, coroutine, name=None):
         self.tasks.append((coroutine, name))
         coroutine.close()
+
+
+class FakeRegistry:
+    def __init__(self) -> None:
+        self.entity_ids: dict[str, str] = {}
+
+    def register(self, entity_id: str) -> str:
+        registry_id = f"registry-{entity_id}"
+        self.entity_ids[registry_id] = entity_id
+        return registry_id
+
+    def rename(self, *, registry_id: str, entity_id: str) -> None:
+        self.entity_ids[registry_id] = entity_id
+
+    def remove(self, *, registry_id: str) -> None:
+        del self.entity_ids[registry_id]
+
+    def async_get(self, registry_id: str):
+        entity_id = self.entity_ids.get(registry_id)
+        return None if entity_id is None else SimpleNamespace(entity_id=entity_id)
 
 
 class FakeStates:
@@ -324,6 +356,7 @@ def build(recorder, *, contexts=READ_KEYS, functions=None, rows=None):
     coordinator.hass = SimpleNamespace(
         loop=SimpleNamespace(time=lambda: NOW),
         states=FakeStates(),
+        registry=FakeRegistry(),
         async_create_task=recorder.create_task,
     )
     coordinator.control = FakeControl()
@@ -369,7 +402,8 @@ def build(recorder, *, contexts=READ_KEYS, functions=None, rows=None):
     coordinator._started = {}
     coordinator._closed = False
     coordinator._stopping = set()
-    coordinator._stop_listening = None
+    coordinator.schedule_entities = {}
+    coordinator._schedule_trackers = []
     coordinator._stop_retry = None
     coordinator._store = FakeStore()
 

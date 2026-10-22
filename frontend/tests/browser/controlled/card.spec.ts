@@ -157,7 +157,7 @@ test.beforeEach(async ({ page }) => {
             ]) {
                 configured(tag);
             }
-            mountElement("saj-local-weekdays", (element) => {
+            mountElement("saj-local-weekdays-feature", (element) => {
                 Object.assign(element, {
                     hass,
                     context: { entity_id: weekdaysEntityId },
@@ -217,7 +217,7 @@ test("the schedule card shows the charge slot times", async ({ page }) => {
 });
 
 test("the weekdays feature presses the days of the slot", async ({ page }) => {
-    const feature = page.locator("saj-local-weekdays");
+    const feature = page.locator("saj-local-weekdays-feature");
 
     await expect(
         feature.getByRole("button", { name: "Wednesday", pressed: true }),

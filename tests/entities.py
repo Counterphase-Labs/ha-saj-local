@@ -115,7 +115,6 @@ def register_of(*, kind: EntityKind, **changes: object) -> Register:
         EntityKind.SELECT: {"options": {0: "first", 1: "second"}},
         EntityKind.SWITCH: {"range": Range(minimum=0, maximum=1)},
         EntityKind.TIME: {"encoding": Encoding.TIME_OF_DAY},
-        EntityKind.TEXT: {"encoding": Encoding.ADDRESS_TEXT, "words": 8},
         EntityKind.BUTTON: {"access": Access.WRITE_ONLY, "command_value": 1},
     }
     access = {

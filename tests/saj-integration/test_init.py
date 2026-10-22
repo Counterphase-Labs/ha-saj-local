@@ -544,7 +544,7 @@ async def test_a_failed_load_counts_as_a_failure_from_the_shortest_interval(
     entry.subentries = {
         f"g{index}": SimpleNamespace(
             subentry_type="polling_group",
-            data={"scan_interval": interval, "sensors": ["pv_power"]},
+            data={"scan_interval": interval, "keys": ["pv_power"]},
         )
         for index, interval in enumerate(groups)
     }

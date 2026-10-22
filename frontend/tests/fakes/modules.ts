@@ -404,7 +404,7 @@ export const systemElementModule = async () => {
 export const scheduleModule = () => ({
     APPLICATION_MODE_KEY: "application_mode",
     MINUTES_PER_DAY: 1440,
-    SLOT_KINDS: ["charge", "discharge", "ev"],
+    SLOT_KINDS: ["charge", "discharge", "ev_charger"],
     scheduleOf: vi.fn(() => ({ slots: [], leftOut: 0 })),
     timelineBars: vi.fn(() => []),
     timeOfUseNoticeRequired: vi.fn(() => false),

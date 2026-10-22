@@ -33,7 +33,7 @@ export const POWER_FLOW_SCOPES: readonly PowerFlowScope[] = [
 
 export interface PowerFlowCardConfig extends SajElementConfig {
     show_strings?: boolean;
-    show_optional?: boolean;
+    show_optional_equipment?: boolean;
     scope?: PowerFlowScope;
 }
 
@@ -263,7 +263,10 @@ export class SajLocalPowerFlowCard extends SystemCard<PowerFlowCardConfig> {
     static getConfigForm(): ReturnType<typeof configForm> {
         return configForm((text) => [
             booleanField({ name: "show_strings", fallback: SHOW_STRINGS }),
-            booleanField({ name: "show_optional", fallback: SHOW_OPTIONAL }),
+            booleanField({
+                name: "show_optional_equipment",
+                fallback: SHOW_OPTIONAL,
+            }),
             selectField({
                 name: "scope",
                 options: POWER_FLOW_SCOPES.map((scope) => ({
@@ -289,7 +292,8 @@ export class SajLocalPowerFlowCard extends SystemCard<PowerFlowCardConfig> {
 
     private drawnNodes(entities: SystemEntities): DrawnNode[] {
         const { scope } = this;
-        const showOptional = this.config?.show_optional ?? SHOW_OPTIONAL;
+        const showOptional =
+            this.config?.show_optional_equipment ?? SHOW_OPTIONAL;
         const present = NODE_SPECS.flatMap((spec) => {
             const entity = entities.get(spec.keys[scope]);
             return entity === undefined || (spec.optional && !showOptional)

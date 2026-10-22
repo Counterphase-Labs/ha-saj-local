@@ -511,6 +511,19 @@ def parse_release_check(output: str, return_code: int) -> Parsed:
     )
 
 
+UV_WARNING_PREFIX = "warning: "
+
+
+def parse_freeze_check(output: str, return_code: int) -> Parsed:
+    lines = [line for line in _lines(output) if not line.startswith(UV_WARNING_PREFIX)]
+    if return_code == 0:
+        return Parsed(lines[0] if lines else "surface kept")
+    broken = [line for line in lines if ": " in line]
+    if any(line.startswith("error ") for line in lines) or not broken:
+        return Parsed("failed", tuple(lines))
+    return Parsed(_plural(len(broken), "freeze break"), tuple(broken))
+
+
 def parse_hassfest(output: str, return_code: int) -> Parsed:
     if return_code == 0:
         return Parsed("manifest valid")
