@@ -71,17 +71,16 @@ The goal is wide coverage of common SAJ household inverters, batteries and relat
 
 ### What is exposed
 
-Every register the integration knows for a model becomes an entity, one of eight types so that each setting has the control Home Assistant users expect:
+Every register the integration knows for a model becomes an entity, one of seven types so that each setting has the control Home Assistant users expect:
 
 | Entity type | What it is |
 | --- | --- |
-| `sensor` | Read-only numbers, counters, statuses, text, clocks and timestamps |
+| `sensor` | Read-only numbers, counters, statuses, text, clocks and timestamps, including text settings such as a network address, which are commissioning settings and read-only |
 | `binary_sensor` | A fault the inverter, the battery or the EV charger reports, shown as a problem that is on or off, see [Device faults and repairs](#device-faults-and-repairs), and `control_allowed`, which is on while the system accepts changes, see [Control allowed](#control-allowed) |
 | `number` | A setting with a numeric range |
 | `select` | A setting with named options |
 | `switch` | A setting that is off or on, and each named bit of a packed register |
 | `time` | A time of day, such as the start or end of a schedule |
-| `text` | A text setting, such as a network address. Every text row is a commissioning setting and read-only |
 | `button` | A command with nothing to read, such as restart. Created disabled |
 
 An HS3 with every optional piece of equipment has 712 entities and a single-phase H2 with two PV strings and every optional piece of equipment has 479. Only a core set is enabled by default: power, voltage, temperature and state of charge readings, the energy counters, the main battery limits and every fault entity. An HS3 with a battery and a grid meter (Meter A) has 145 enabled by default and an H2 has 114. Optional equipment adds its own defaults when it is fitted: the second meter's total power, the EV charger's status, mode, power and energy counters, and the parallel system's powers and state of charge, which brings an HS3 with everything fitted to 183 and an H2 to 120. The rest is created disabled, so a new installation stays light on the inverter and you enable what you want. A packed register that holds several values is read once and each value is its own entity. Equipment a unit may not have is only created when it is fitted, see [Optional equipment](#optional-equipment).
@@ -252,14 +251,14 @@ The integration serves its own cards and registers them with Home Assistant when
 
 | Element | What it shows | Options |
 | --- | --- | --- |
-| `saj-local-power-flow-card` | Live power between solar, battery, grid, home and the optional equipment, with the direction and speed of each flow | `show_strings` (off by default) lists each solar string, `show_optional` (on by default) draws the EV charger, backup load and Meter B, `scope` (`system` or `parallel`, `system` by default) chooses the system's own readings or the parallel system's readings, and a system without parallel readings shows the empty state with `parallel` |
+| `saj-local-power-flow-card` | Live power between solar, battery, grid, home and the optional equipment, with the direction and speed of each flow | `show_strings` (off by default) lists each solar string, `show_optional_equipment` (on by default) draws the EV charger, backup load and Meter B, `scope` (`system` or `parallel`, `system` by default) chooses the system's own readings or the parallel system's readings, and a system without parallel readings shows the empty state with `parallel` |
 | `saj-local-status-card` | Operating state, application mode, key readings, today's energy, a fault summary and whether changes are allowed | `show_energy` (on by default) |
 | `saj-local-faults-card` | Active faults per piece of equipment with how long ago each began, and clear fault | `show_groups_without_faults` (on by default) shows the groups with no fault |
 | `saj-local-battery-card` | State of charge with the reserve and limits marked, battery power and readings, one row group per pack | `show_packs` (on by default) |
 | `saj-local-controls-card` | The shared settings the system offers, grouped into sections | `sections`, a list of `mode`, `battery`, `grid`, `power_control`, `ev_charger` and `device` (all by default) |
-| `saj-local-schedule-card` | Charge, discharge and EV charger slots, a week timeline and a slot editor | `kinds`, a list of `charge`, `discharge` and `ev` (all by default), `show_timeline` (on by default) |
-| `saj-local-weekdays` | A tile card feature with seven named day buttons for a slot's weekdays entity | None. Add it to a tile card whose entity is a slot weekdays number |
-| `saj-local-status-badge` | A badge with the operating state and the number of active faults | None |
+| `saj-local-schedule-card` | Charge, discharge and EV charger slots, a week timeline and a slot editor | `slot_kinds`, a list of `charge`, `discharge` and `ev_charger` (all by default), `show_timeline` (on by default) |
+| `saj-local-weekdays-feature` | A tile card feature with seven named day buttons for a slot's weekdays entity | None. Add it to a tile card whose entity is a slot weekdays number |
+| `saj-local-status-badge` | A badge with the operating state and the number of pieces of equipment with an active fault | None |
 
 A few details are worth knowing:
 
@@ -278,7 +277,7 @@ A few details are worth knowing:
 type: custom:saj-local-power-flow-card
 device: 0123456789abcdef0123456789abcdef
 show_strings: false
-show_optional: true
+show_optional_equipment: true
 scope: system
 ```
 
@@ -288,7 +287,7 @@ A tile card takes the weekdays feature on a slot's weekdays entity, and a badge 
 type: tile
 entity: number.saj_charge_slot_1_days
 features:
-  - type: custom:saj-local-weekdays
+  - type: custom:saj-local-weekdays-feature
 ```
 
 ```yaml

@@ -8,7 +8,7 @@ To get a working checkout and send a change, start with [CONTRIBUTING.md](../CON
 
 | Question | Authority |
 | --- | --- |
-| What must the project do? | [requirements.md](../.github/work/requirements.md) |
+| What must the project do? | [Global requirements](../.github/work/requirements.md), [integration requirements](../custom_components/saj_local/docs/requirements.md), [cards requirements](../frontend/docs/requirements.md), [simulator requirements](../mock/docs/requirements.md) |
 | How is code, testing and documentation written? | [code-style.md](../.github/work/code-style.md) |
 | What rules bind everyone working here? | [AGENTS.md](../AGENTS.md) |
 | What was built, and why? | [done/index.md](../.github/work/done/index.md) |
@@ -158,7 +158,7 @@ GitHub Actions are pinned to a commit hash so a moved tag cannot change what CI 
 
 ## Testing
 
-The rules are in the Non Functional section of `requirements.md`. The reasons:
+The rules are in the [Testing section of the global requirements](../.github/work/requirements.md#testing). The reasons:
 
 - **Coverage counts unit tests only.** A test that wires real modules together raises the figure without proving any one of them.
 - **Unit tests are fast and isolated.** No sockets, servers, fixture files, real time or long simulations. This is why time, randomness and I/O are injected throughout the code.
@@ -197,7 +197,7 @@ Elements find entities by device and translation key, never by entity ID, so a t
 
 Looking at every card in every option needs a Home Assistant with real systems, so the development environment declares two dashboards, `saj-hs3` and `saj-h2`, from `config/dashboards/saj-hs3.yaml` and `config/dashboards/saj-h2.yaml`, through the `lovelace: dashboards:` block of `config/configuration.yaml`. They are plain YAML dashboards written by hand, and nothing generates them. Each SAJ Local element is a reusable custom element configured by its own YAML, so every card, tile feature and badge is written out individually with every option set, under a heading that names the card and its options.
 
-- Each dashboard has four views: Dashboard (the cards of a typical system dashboard, written out as plain cards), Cards (every card in each of its option combinations), Features and badges (one tile card with the `custom:saj-local-weekdays` feature per slot weekdays entity, and the status badge) and Empty states (each card with no `device` and with the device of something that is not SAJ Local).
+- Each dashboard has four views: Dashboard (the cards of a typical system dashboard, written out as plain cards), Cards (every card in each of its option combinations), Features and badges (one tile card with the `custom:saj-local-weekdays-feature` feature per slot weekdays entity, and the status badge) and Empty states (each card with no `device` and with the device of something that is not SAJ Local).
 - The dashboards hold this development instance's device IDs. A developer whose instance has different device IDs replaces the two `device` IDs in each file, the system's own and the ID of any device that is not SAJ Local used in the Empty states view, and the slot weekdays entity IDs when the entity prefix differs.
 - Home Assistant reads the dashboard files when it starts, so restart Home Assistant after changing `config/configuration.yaml`. A change to a dashboard file shows after a reload of the page.
 - The bundle loads on every page without a dashboard resource, because the integration adds it to Home Assistant's frontend.

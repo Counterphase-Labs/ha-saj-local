@@ -50,6 +50,6 @@ Commit messages use a semantic type and need both a title and a body that explai
 ## Read more
 
 - [Development guide](documentation/development.md): architecture, tooling, Docker and the Modbus simulator.
-- [Requirements](.github/work/requirements.md): what the project must do.
+- Requirements: what the project must do. [Global](.github/work/requirements.md), [integration](custom_components/saj_local/docs/requirements.md), [cards](frontend/docs/requirements.md) and [simulator](mock/docs/requirements.md).
 - [Code style](.github/work/code-style.md): how code, tests and documentation are written.
 - [AGENTS.md](AGENTS.md): the rules that bind everyone working in the repository, including how to bump the Home Assistant version.
