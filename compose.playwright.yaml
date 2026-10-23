@@ -47,6 +47,11 @@ services:
     volumes:
       - ./mock/scenarios/h2-battery.yaml:/config/config.yaml:ro
 
+  mock-docs:
+    <<: *mock
+    volumes:
+      - ./mock/scenarios/hs3-full-house.yaml:/config/config.yaml:ro
+
   playwright:
     build:
       context: .
@@ -65,6 +70,39 @@ services:
     init: true
     ipc: host
     volumes:
+      - ./frontend/playwright-report:/workspace/frontend/playwright-report
+      - ./frontend/test-results:/workspace/frontend/test-results
+
+  playwright-docs:
+    build:
+      context: .
+      dockerfile: Dockerfile.playwright-runner
+    depends_on:
+      homeassistant:
+        condition: service_healthy
+      mock-docs:
+        condition: service_healthy
+      mock-h2:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - >-
+        mkdir -p playwright-report/docs test-results/docs;
+        npm run test:docs;
+        docs_status=$$?;
+        chown -R "$${PLAYWRIGHT_RESULT_UID}:$${PLAYWRIGHT_RESULT_GID}"
+        playwright-report/docs test-results/docs /workspace/docs/images;
+        exit "$$docs_status"
+    environment:
+      DOCS_LOCALE: ${DOCS_LOCALE:-en-GB}
+      HOME_ASSISTANT_URL: http://homeassistant:8123
+      PLAYWRIGHT_RESULT_GID: ${PLAYWRIGHT_RESULT_GID:-1000}
+      PLAYWRIGHT_RESULT_UID: ${PLAYWRIGHT_RESULT_UID:-1000}
+    init: true
+    ipc: host
+    volumes:
+      - ./docs/images:/workspace/docs/images
       - ./frontend/playwright-report:/workspace/frontend/playwright-report
       - ./frontend/test-results:/workspace/frontend/test-results
 

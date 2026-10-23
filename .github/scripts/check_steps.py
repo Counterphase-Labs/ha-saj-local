@@ -35,6 +35,7 @@ BROWSER_TIMEOUT_SECONDS = 1800
 FRONTEND_DIRECTORY = "frontend"
 CONTROLLED_REPORT = "frontend/playwright-report/controlled"
 HOME_ASSISTANT_REPORT = "frontend/playwright-report/home-assistant"
+DOCS_IMAGES_REPORT = "frontend/playwright-report/docs"
 HASSFEST_IMAGE = "ghcr.io/home-assistant/hassfest"
 ISOLATED_TEST_PATHS = ("tests/saj", "tests/mock")
 ISOLATED_ENVIRONMENT = {"UV_PROJECT_ENVIRONMENT": ".venv-isolated"}
@@ -332,6 +333,21 @@ def _browser_home_assistant(invocation: Invocation) -> tuple[Command, ...]:
     )
 
 
+def _docs_images(invocation: Invocation) -> tuple[Command, ...]:
+    options = ("--reporter=list",) if invocation.verbose else ()
+    return (
+        Command(
+            (
+                "tests/playwright/run-docs-images.sh",
+                *options,
+                *invocation.args,
+            ),
+            check_parsers.playwright(DOCS_IMAGES_REPORT),
+            timeout=BROWSER_TIMEOUT_SECONDS,
+        ),
+    )
+
+
 def _release_check(invocation: Invocation) -> tuple[Command, ...]:
     del invocation
     script = Path(__file__).with_name("release_check.py")
@@ -351,6 +367,22 @@ def _freeze_check(invocation: Invocation) -> tuple[Command, ...]:
         Command(
             ("uv", "run", "python", str(script)),
             check_parsers.parse_freeze_check,
+            timeout=SHORT_TIMEOUT_SECONDS,
+        ),
+    )
+
+
+def _docs_script(*options: str) -> tuple[str, ...]:
+    script = Path(__file__).with_name("docs_check.py")
+    return (sys.executable, str(script), *options)
+
+
+def _docs_check(invocation: Invocation) -> tuple[Command, ...]:
+    del invocation
+    return (
+        Command(
+            _docs_script(),
+            check_parsers.parse_docs_check,
             timeout=SHORT_TIMEOUT_SECONDS,
         ),
     )
@@ -654,6 +686,23 @@ STEPS: tuple[Step, ...] = (
         ),
     ),
     Step(
+        "docs-check",
+        _docs_check,
+        Help(
+            summary="generated entity reference, links, images and page coverage",
+            runs=(
+                "a check that the committed entity reference is what make docs "
+                "writes, that every entity name in the translations is on an area "
+                "page, that relative links, images and heading anchors resolve, that "
+                "every image is used, that no written page is over 300 lines and that "
+                "every feature list section is covered"
+            ),
+            success="documentation current",
+            failure="one line per finding, as file: message",
+            args=NO_ARGS,
+        ),
+    ),
+    Step(
         "mock-build",
         _mock_build,
         Help(
@@ -750,6 +799,34 @@ SUPPORT_STEPS: tuple[Step, ...] = (
             success="installed",
             failure="the raw failure output",
             args=NO_ARGS,
+        ),
+    ),
+    Step(
+        "docs",
+        _fixed(_docs_script("--write"), "regenerated"),
+        Help(
+            summary="regenerate the entity reference pages",
+            runs="the documentation script with --write",
+            success="regenerated",
+            failure="the raw failure output",
+            args=NO_ARGS,
+        ),
+    ),
+    Step(
+        "docs-images",
+        _docs_images,
+        Help(
+            summary="documentation screenshots from a throwaway Home Assistant",
+            runs=(
+                "Playwright against a throwaway Home Assistant in Docker, "
+                "writing docs/images"
+            ),
+            success="pass count",
+            failure=(
+                "failing steps with assertion messages, plus the report path "
+                f"{DOCS_IMAGES_REPORT}"
+            ),
+            args="options passed to the Playwright run script",
         ),
     ),
     Step(

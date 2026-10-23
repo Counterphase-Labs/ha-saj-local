@@ -23,7 +23,7 @@ Requirements: [Simulated models](requirements.md#simulated-models)
 
 A scenario file sets up the simulated system: the model, its equipment and how it starts.
 
-Files: [scenario.py](../saj_local_mock/scenario.py), [hs3-full-house.yaml](../scenarios/hs3-full-house.yaml)
+Files: [scenario.py](../saj_local_mock/scenario.py), [hs3-battery.yaml](../scenarios/hs3-battery.yaml), [hs3-no-battery.yaml](../scenarios/hs3-no-battery.yaml), [hs3-ev.yaml](../scenarios/hs3-ev.yaml), [hs3-off-grid.yaml](../scenarios/hs3-off-grid.yaml), [hs3-full-house.yaml](../scenarios/hs3-full-house.yaml), [h2-battery.yaml](../scenarios/h2-battery.yaml), [h2-no-battery.yaml](../scenarios/h2-no-battery.yaml)
 
 Requirements: [Scenarios](requirements.md#scenarios)
 

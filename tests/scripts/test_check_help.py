@@ -8,6 +8,8 @@ EVERY_TARGET = (
     "setup",
     "up",
     "down",
+    "docs",
+    "docs-images",
     "logs",
     "help",
     "lint",

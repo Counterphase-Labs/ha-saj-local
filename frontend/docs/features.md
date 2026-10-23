@@ -11,7 +11,7 @@ Files: [index.ts](../src/index.ts), [registration.ts](../src/registration.ts), [
 Requirements: [Elements and setup](requirements.md#elements-and-setup)
 
 - Six cards appear in the card picker: power flow, status, faults, battery, controls and schedule. The weekdays feature appears in the tile card's feature picker and the status badge in the badge picker.
-- The power flow, status, faults, battery and controls cards show a live preview in the card picker.
+- The power flow, status, faults, battery, controls and schedule cards show a live preview in the card picker.
 - Each element is set up in Home Assistant's visual editor by choosing one SAJ system, and the first system is chosen for a new card. A home with two systems adds a card once per system.
 - A card's title is the system's device name followed by its model. The serial number is added only when two systems would otherwise have the same title.
 - Elements find a system's entities through Home Assistant's entity registry, so they keep working when the system's prefix changes.

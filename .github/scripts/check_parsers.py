@@ -511,6 +511,18 @@ def parse_release_check(output: str, return_code: int) -> Parsed:
     )
 
 
+def parse_docs_check(output: str, return_code: int) -> Parsed:
+    lines = _lines(output)
+    if return_code == 0:
+        return Parsed("documentation current")
+    findings = [
+        line.removeprefix("finding ") for line in lines if line.startswith("finding ")
+    ]
+    if not findings:
+        return Parsed("failed", tuple(lines))
+    return Parsed(_plural(len(findings), "documentation finding"), tuple(findings))
+
+
 UV_WARNING_PREFIX = "warning: "
 
 

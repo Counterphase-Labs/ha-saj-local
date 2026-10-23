@@ -20,6 +20,7 @@
     "vite.config.ts",
     "eslint.config.js",
     "playwright.controlled.config.ts",
+    "playwright.docs.config.ts",
     "playwright.home-assistant.config.ts"
   ]
 }

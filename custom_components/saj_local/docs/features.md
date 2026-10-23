@@ -115,7 +115,7 @@ Requirements: [Changing settings](requirements.md#changing-settings)
 - Allow control is off for every new system. Switching Allow control on, in setup or Configure, asks for confirmation with a warning about what a wrong setting can do and the added request load. Switching Allow control off needs no confirmation.
 - While Allow control is off, settings show their current value but refuse every change with a message saying where to switch control on, and nothing is sent.
 - Each system has a Control allowed binary sensor, on while the system accepts changes.
-- Switching Allow control on enables the system's control set: the slot, mode, battery, grid, EV charger and power control entities and the clock and fault commands. Switching Allow control off disables the entities the integration enabled. An entity you enabled or disabled yourself keeps your choice.
+- Switching Allow control on enables the system's control set: the slot, mode, battery, grid, EV charger and power control entities, the LED mode, the H2's buzzer, and the clock and fault commands. Switching Allow control off disables the entities the integration enabled. An entity you enabled or disabled yourself keeps your choice.
 - A change is refused with its own message when control is off, the model is unverified, the setting is a commissioning setting, the value is invalid, the inverter is unreachable or the write limit is reached. The inverter is not changed.
 - A change is written once and read back, and the entity shows the value the inverter holds. When the inverter refuses the change, the message gives its exception code. When no answer comes, the message says the change may or may not have been applied, and nothing is sent again. When the inverter holds a different value, the entity shows that value and the change fails.
 - A change to one setting of a packed register leaves the other settings in the register untouched.
@@ -186,6 +186,7 @@ Files: [binary_sensor.py](../binary_sensor.py), [faults.py](../saj/faults.py), [
 - When a fault register cannot be read, the faults that depend on it are unavailable instead of guessed.
 - A fault turning on logs one warning naming the system and the fault, and its clearing logs one information line.
 - Battery faults exist only when a battery is fitted, and EV charger faults only when an EV charger is fitted.
+- A device fault raises no repair issue. The repair issues SAJ Local raises belong to other sections: the wrong model, a different inverter and an unrecognised device to [Model replacement](#model-replacement), refused readings and an inverter that has stopped answering to [Protecting the inverter](#protecting-the-inverter), and equipment no longer detected to [Optional equipment](#optional-equipment).
 
 ## Diagnostics and debug logging
 

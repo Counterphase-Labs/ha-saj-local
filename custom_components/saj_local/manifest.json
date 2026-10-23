@@ -5,7 +5,7 @@
   "codeowners": ["@dogmatic69"],
   "config_flow": true,
   "dependencies": ["frontend", "http"],
-  "documentation": "https://github.com/Counterphase-Labs/ha-saj-local",
+  "documentation": "https://github.com/Counterphase-Labs/ha-saj-local/blob/main/docs/en-gb/user/README.md",
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Counterphase-Labs/ha-saj-local/issues",

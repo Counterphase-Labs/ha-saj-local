@@ -50,7 +50,7 @@ Rules:
 
 Run checks through the make targets. Each target runs one tool through the runner in `.github/scripts/`, which prints one `[x]` or `[ ]` line per step, the details of each failed step, and a final result line. The runner runs every selected step even after one fails and exits non-zero when any step fails. A step killed by a signal, a timeout or a missing tool is reported as that, not as a test or lint failure.
 
-Never exclude `.github/work/` (requirements, code style, plans and done work) from the copy-paste check (the `ignore` list in `.jscpd.json`) or from any other check; duplicated text found there is fixed in the documents, not hidden.
+Never exclude `.github/work/` (requirements, code style, plans and done work) or `docs/` (the user and developer documentation) from the copy-paste check (the `ignore` list in `.jscpd.json`) or from any other check; duplicated text found there is fixed in the documents or the generator, not hidden.
 
 `make help` lists every make target with a one-line description and ends with a line naming `make help ARGS=<target>` for the detail of one target. `make help ARGS=<target>` prints the detail for one target: what the target runs, what the target prints on success and on failure, what `ARGS` does for the target, and for a grouping target the steps the target runs. The help lives with the step definitions in `.github/scripts/check_steps.py` and is printed by the runner, so a target added or changed there is described by `make help` without an edit of this file. An unknown target name exits non-zero.
 
@@ -58,24 +58,7 @@ Never exclude `.github/work/` (requirements, code style, plans and done work) fr
 
 ### Options
 
-- `ARGS="..."` passes paths and tool options to a single-tool target, for example `make test-python ARGS="tests/saj/test_poller.py -k decode"` or `make ruff ARGS="custom_components/saj_local/coordinator.py"`.
-- `ONLY=<step,...>` runs a subset of the steps of a grouping target, for example `make ci ONLY=ruff,mypy`.
-- `V=1` streams the raw tool output and switches off the sparse tool configuration and environment settings for that run.
-
-### Coverage of a subset run
-
-A full `make test-python` measures and gates the whole package. When `ARGS` selects test files or folders, the target measures coverage only for the modules those files test and adds the other unit test files mapped to those modules to the run, and applies the same 100 % gate to those modules, so a run of `tests/saj-integration/test_coordinator_write.py` also runs `test_coordinator.py` and `test_coordinator_power.py` and gates `coordinator.py`. The module is the file with the test file's name without the `test_` prefix, looked up by test folder:
-
-| Test folder | Module folders |
-| --- | --- |
-| `tests/saj` | `custom_components/saj_local/saj`, `custom_components/saj_local/saj/models` |
-| `tests/saj-integration` | `custom_components/saj_local` |
-| `tests/mock` | `mock/saj_local_mock` |
-| `tests/mock/profiles` | `mock/saj_local_mock/profiles` |
-| `tests/mock/simulation` | `mock/saj_local_mock/simulation` |
-| `tests/scripts` | `.github/scripts` |
-
-Test files with no module of the same name are listed in `.github/scripts/pytest_scope.json`, each with the modules the file tests, and a test file with no known module is rejected until the file is added there. Selecting tests with `-k`, `-m` or `--lf` needs a test file in `ARGS`. `test-modules` runs in `make ci` and gates every module at 100 % line and branch coverage from the unit test files mapped to the module alone, so coverage from the tests of other modules does not count. A module with logic (any function, method or branch) and no unit test file fails the step, and a module with no logic, such as an empty module or a module that only holds a data table, is skipped, because the requirements forbid tests of constants. A module that only passes the gate in the full `test-python` run means other tests cover the module by accident, and that is a real gap to fix. `--no-cov` is never used; `test-isolated` gates coverage the same way as any subset run.
+`ARGS`, `ONLY` and `V` are explained in [docs/en-gb/developer/checks.md](docs/en-gb/developer/checks.md#options), and how a subset run measures coverage is under [Coverage of a subset run](docs/en-gb/developer/checks.md#coverage-of-a-subset-run). Agents never use `V=1`, see Agent use below.
 
 ### Agent use
 
@@ -96,13 +79,7 @@ When the trimmed output does not explain a failure clearly enough to fix the fai
 
 ## Bumping the Home Assistant version
 
-The Home Assistant version is pinned in three files and **must be updated together**, otherwise the development container, CI, HACS and the test harness drift apart:
-
-1. `compose.yaml` — `ghcr.io/home-assistant/home-assistant:<X.Y.Z>` (development Home Assistant runtime).
-2. `pyproject.toml` `[dependency-groups] dev` — `homeassistant==<X.Y.Z>` (CI lint + mypy) **and** `pytest-homeassistant-custom-component==<matching release>` (the test harness ships its own pinned `homeassistant`; the two pins must come from the same HA release, otherwise lint and tests resolve different cores).
-3. `hacs.json` — `"homeassistant": "<X.Y.Z>"` (minimum HA core enforced by HACS).
-
-Verify the pairing on PyPI before committing: the `requires_dist` of `pytest-homeassistant-custom-component` must list the same `homeassistant==<X.Y.Z>` you pinned in `pyproject.toml`.
+The files that pin the Home Assistant version and the steps to bump the version are in [docs/en-gb/developer/releasing.md](docs/en-gb/developer/releasing.md#bumping-the-home-assistant-version).
 
 ## Repository Layout
 
@@ -113,7 +90,7 @@ Verify the pairing on PyPI before committing: the `requires_dist` of `pytest-hom
 - `.github/scripts/`: the check runner and its helpers behind the make targets.
 - `.github/work/`: global project requirements (`requirements.md`), coding standards (`code-style.md`), `future/` plans and `done/` work.
 - `config/`: development Home Assistant configuration; the compose and Dockerfile files define the Docker environments.
-- `documentation/`: the development guide and user documentation.
+- `docs/en-gb/`: the user documentation (`user/`, with the generated entity reference in `user/entities/`) and the developer documentation (`developer/`); `docs/images/en-gb/` holds the screenshots.
 - `Makefile`, `pyproject.toml`: entry points and tool configuration.
 
 Keep implementation and tests focused on observable Home Assistant behavior.
@@ -129,7 +106,7 @@ Each part of the repository keeps a feature list, `docs/features.md`, and its ow
 
 Read a part's `AGENTS.md` before working in the part.
 
-A change that adds, changes or removes a capability of a part updates the part's `features.md` in the same change. A change with no observable effect does not.
+A change that adds, changes or removes a capability of a part updates the part's `features.md` in the same change, and every user page under `docs/en-gb/user/` that links to the changed `features.md` section in the same change too. A change with no observable effect does not.
 
 Every section of a `features.md` has a `Files:` line after its overview, with one or more Markdown links, relative to the `features.md`, to the files that implement the section. Link whole files only. Never link or cite line numbers, line ranges or anchors in these code links, because they go stale as the code changes.
 
@@ -148,6 +125,8 @@ When adding or moving a completed work document into `.github/work/done/`, updat
 Use `.github/work/done/index.md` as the starting point when researching prior work, implementation decisions, or historical project context. Follow its links to the completed work documents for the authoritative detail.
 
 `.github/work/code-style.md` is the authoritative source for the project's coding standards and style guidelines.
+
+The user documentation is in `docs/en-gb/user/`, the developer documentation in `docs/en-gb/developer/` and the screenshots in `docs/images/en-gb/`. `docs/en-gb/user/entities/` is generated by `make docs` and is never edited by hand. [docs/en-gb/developer/documentation.md](docs/en-gb/developer/documentation.md) describes how the pages are made and checked, and `make docs-check` is part of `make ci`.
 
 The roadmap is the [Roadmap project](https://github.com/orgs/Counterphase-Labs/projects/1) on GitHub (project 1, owner `Counterphase-Labs`), read and changed with `gh project`. This repository's items have the Product `saj-local`. Kind `Roadmap` marks a feature the requirements ask for; Kind `Idea` marks an idea or open question that no requirement backs yet. Status `Backlog` items are open, in the order they are expected to be worked on; `Done` items are delivered and `Dropped` items were withdrawn without being delivered.
 

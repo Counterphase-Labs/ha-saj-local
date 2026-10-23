@@ -235,6 +235,15 @@ def test_the_home_assistant_browser_tests_forward_args_and_verbose_reporter(
     assert verbose.argv == ("tests/playwright/run-home-assistant.sh", "--reporter=list")
 
 
+def test_docs_images_forward_args_and_verbose_reporter(root, scratch):
+    (quiet,) = build("docs-images", root, scratch, "-g", "panel")
+    (verbose,) = build("docs-images", root, scratch, verbose=True)
+
+    assert quiet.argv == ("tests/playwright/run-docs-images.sh", "-g", "panel")
+    assert verbose.argv == ("tests/playwright/run-docs-images.sh", "--reporter=list")
+    assert quiet.timeout == check_steps.BROWSER_TIMEOUT_SECONDS
+
+
 def test_release_check_runs_the_archive_script_with_the_current_interpreter(
     root, scratch
 ):
@@ -250,6 +259,24 @@ def test_freeze_check_runs_the_comparison_script_in_the_project_environment(
 
     assert command.argv[:3] == ("uv", "run", "python")
     assert command.argv[3].endswith("freeze_check.py")
+
+
+def test_docs_check_runs_the_documentation_script_with_the_current_interpreter(
+    root, scratch
+):
+    (command,) = build("docs-check", root, scratch)
+
+    assert command.argv[1].endswith("docs_check.py")
+    assert command.argv[2:] == ()
+
+
+def test_docs_regenerates_the_entity_reference_through_the_documentation_script(
+    root, scratch
+):
+    (command,) = build("docs", root, scratch)
+
+    assert command.argv[1].endswith("docs_check.py")
+    assert command.argv[2:] == ("--write",)
 
 
 def test_the_mock_build_builds_the_image_then_checks_it_for_bytecode(root, scratch):
@@ -334,6 +361,7 @@ def test_every_check_step_has_a_unique_name_and_the_checks_run_in_order():
         "test-browser-controlled",
         "release-check",
         "freeze-check",
+        "docs-check",
         "mock-build",
         "mock-smoke",
         "validate",

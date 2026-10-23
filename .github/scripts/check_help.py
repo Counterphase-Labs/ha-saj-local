@@ -16,7 +16,7 @@ GROUP_FAILURE = (
     "steps, and a non-zero exit"
 )
 GROUP_ARGS = "not used; ONLY=<step,...> runs a subset of the steps"
-MAKE_STEP_NAMES = (*CHECK_STEP_NAMES, "up", "down")
+MAKE_STEP_NAMES = (*CHECK_STEP_NAMES, "docs", "docs-images", "up", "down")
 DETAIL_HINT = (
     "Run make help ARGS=<target> for the detail of one target: what the target "
     "runs, what the target prints on success and on failure, what ARGS does, and "
