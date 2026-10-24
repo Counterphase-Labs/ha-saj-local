@@ -42,6 +42,8 @@ The SAJ HS3 and the single-phase SAJ H2 are supported. See [supported equipment]
 
 Questions, bug reports and ideas are welcome on the [issue tracker](https://github.com/Counterphase-Labs/ha-saj-local/issues).
 
+Report a security problem privately, see the [security policy](SECURITY.md).
+
 ## Licence
 
 [MIT](LICENSE)

@@ -1,0 +1,48 @@
+name: Card bug report
+description: A dashboard card, badge or card feature of SAJ Local shows or does something wrong
+labels: ["🛠 goal: fix", "🚦 status: awaiting triage", "🃏 part: cards"]
+body:
+  - type: markdown
+    attributes:
+      value: Before you open a new issue, [search the existing card bug reports](../../issues?q=is%3Aissue+label%3A%22%F0%9F%83%8F+part%3A+cards%22+) to see if others have had the same problem.
+  - type: input
+    id: card
+    attributes:
+      label: Card
+      description: The card that shows the problem, for example the power flow card.
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      description: The browser, or the Home Assistant app, and its version.
+    validations:
+      required: true
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Card configuration (YAML)
+      description: The YAML of the card, from the card editor's code view.
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: Drag a screenshot of the card here.
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: What the card shows or does, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics download
+      description: Drag the file [downloaded from the system's menu](https://github.com/Counterphase-Labs/ha-saj-local/blob/main/docs/en-gb/user/troubleshooting.md#download-diagnostics) here, if the problem may come from the data.

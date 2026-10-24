@@ -372,6 +372,18 @@ def _freeze_check(invocation: Invocation) -> tuple[Command, ...]:
     )
 
 
+def _template_check(invocation: Invocation) -> tuple[Command, ...]:
+    del invocation
+    script = Path(__file__).with_name("template_check.py")
+    return (
+        Command(
+            ("uv", "run", "python", str(script)),
+            check_parsers.parse_template_check,
+            timeout=SHORT_TIMEOUT_SECONDS,
+        ),
+    )
+
+
 def _docs_script(*options: str) -> tuple[str, ...]:
     script = Path(__file__).with_name("docs_check.py")
     return (sys.executable, str(script), *options)
@@ -693,11 +705,27 @@ STEPS: tuple[Step, ...] = (
             runs=(
                 "a check that the committed entity reference is what make docs "
                 "writes, that every entity name in the translations is on an area "
-                "page, that relative links, images and heading anchors resolve, that "
+                "page, that relative links, images and heading anchors resolve in the "
+                "pages, README.md, CONTRIBUTING.md and SECURITY.md, that "
                 "every image is used, that no written page is over 300 lines and that "
                 "every feature list section is covered"
             ),
             success="documentation current",
+            failure="one line per finding, as file: message",
+            args=NO_ARGS,
+        ),
+    ),
+    Step(
+        "template-check",
+        _template_check,
+        Help(
+            summary="issue templates against the label file and the models",
+            runs=(
+                "a check that bug.yml requires the diagnostics download, that every "
+                "label a template applies or links exists in .github/labels.yml, and "
+                "that the model dropdown matches the models in the translations"
+            ),
+            success="templates current",
             failure="one line per finding, as file: message",
             args=NO_ARGS,
         ),

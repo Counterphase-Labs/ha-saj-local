@@ -35,6 +35,7 @@ The checks that make up `make ci` also have a target each, so one tool can be ru
 | `make release-check` | The HACS archive holds `asset-manifest.json` and the built card bundle. The archive is made from the files in `custom_components/saj_local/`, so the built bundle must be in the tree. |
 | `make freeze-check` | No entity key, entity ID, stored setting key or card type is removed, and no entity platform, unit, device class, state class or state value changes, compared with the newest release tag. With no release tag the step passes. |
 | `make docs-check` | The generated entity reference, links, images, page length and feature list coverage. See the [documentation page](documentation.md#checks). |
+| `make template-check` | `bug.yml` requires the diagnostics download, every label an issue template applies or links exists in `.github/labels.yml`, and the model dropdown of `bug.yml` matches the models in `translations/en.json`. |
 | `make mock-build` | The simulator image builds and holds no bytecode. |
 | `make validate` | hassfest against the working tree, in Docker. HACS validation reads the pushed repository, so only the `hacs` workflow job runs the HACS validation. |
 

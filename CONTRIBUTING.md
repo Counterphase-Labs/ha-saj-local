@@ -47,6 +47,16 @@ This runs everything CI runs, and GitHub runs `make ci` itself, so the result ma
 
 Commit messages use a semantic type and need both a title and a body that explains why the change is made. The full rules are under Commit Message Guidelines in [AGENTS.md](AGENTS.md).
 
+## Issue labels
+
+The labels are defined in `.github/labels.yml` and applied by the workflow `.github/workflows/labels.yml`. A label made by hand on GitHub is deleted on the next sync, so a new label goes into the file.
+
+Once triaged, every issue carries one priority, one status, one goal and one aspect label, plus one part label when the issue concerns the integration, the cards or the simulator. An issue about developer tooling or the documentation as a whole carries no part label. An issue labelled `🚦 status: awaiting triage` may lack the others.
+
+A closed issue gets `🏁 status: ready for dev` when resolved or `⛔️ status: discarded` when not. Status labels are kept current as the issue changes.
+
+The rules come from the [Creative Commons repository label guide](https://opensource.creativecommons.org/contributing-code/repo-labels/).
+
 ## Read more
 
 - [Developer documentation](docs/en-gb/developer/README.md): architecture, tooling, Docker and the Modbus simulator.

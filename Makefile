@@ -1,6 +1,6 @@
 RUNNER = python3 .github/scripts/check_runner.py
 
-.PHONY: help setup up down logs docs ruff mypy import-lint complexipy copy-paste test-python test-modules test-isolated test-runner-processes prettier tsc eslint test-frontend build test-browser-controlled test-browser-home-assistant release-check freeze-check docs-check docs-images mock-build mock-smoke validate lint test python-ci frontend-check frontend-ci ci
+.PHONY: help setup up down logs docs ruff mypy import-lint complexipy copy-paste test-python test-modules test-isolated test-runner-processes prettier tsc eslint test-frontend build test-browser-controlled test-browser-home-assistant release-check freeze-check docs-check template-check docs-images mock-build mock-smoke validate lint test python-ci frontend-check frontend-ci ci
 
 help:
 	@$(RUNNER) --describe $(ARGS)
@@ -20,7 +20,7 @@ docs:
 logs:
 	docker compose logs -f homeassistant
 
-ruff mypy import-lint complexipy copy-paste test-python test-modules test-isolated test-runner-processes prettier tsc eslint test-frontend build test-browser-controlled test-browser-home-assistant release-check freeze-check docs-check docs-images mock-build mock-smoke validate:
+ruff mypy import-lint complexipy copy-paste test-python test-modules test-isolated test-runner-processes prettier tsc eslint test-frontend build test-browser-controlled test-browser-home-assistant release-check freeze-check docs-check template-check docs-images mock-build mock-smoke validate:
 	@$(RUNNER) --forward-args $@
 
 lint:

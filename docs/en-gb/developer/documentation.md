@@ -56,7 +56,7 @@ The `AREAS` table of `.github/scripts/docs_check.py` names the areas, their summ
 
 - a generated page that differs from what `make docs` would write;
 - an entity in `en.json` that is on no area page, and a generated entity with no name in `en.json`;
-- a relative link, image or heading anchor that does not resolve, in the pages, `README.md`, `CONTRIBUTING.md` and every `AGENTS.md`, including links into the feature lists and the requirement documents;
+- a relative link, image or heading anchor that does not resolve, in the pages, `README.md`, `CONTRIBUTING.md`, `SECURITY.md` and every `AGENTS.md`, including links into the feature lists and the requirement documents;
 - an image in `docs/images/` that no page references;
 - a written page over 300 lines;
 - a feature list section with no row in the [Feature Coverage Table](#feature-coverage-table), a section named in the table that the feature list does not have, a page named in the table that does not exist, and a page that does not link to the feature list section named in the row, by the heading anchor of the section.
@@ -150,5 +150,7 @@ Each feature list section is investigated from the `Files:` line of the section 
 | Make targets and check rules | [checks](checks.md) |
 | Home Assistant version bump | [releasing](releasing.md) |
 | Site overview screenshot | `docs/images/en-gb/cards-power-flow-card.png`, copied to `assets/images/saj-local-power-flow.png` in the `website` repository at each release, see the [releasing page](releasing.md) |
+| How to report a security problem | `SECURITY.md` |
+| Issue labels and the rules for labels | `.github/labels.yml` and `CONTRIBUTING.md` |
 | Licence terms | `LICENSE` |
 | Intended product behaviour | `.github/work/requirements.md` and the three part requirement documents |

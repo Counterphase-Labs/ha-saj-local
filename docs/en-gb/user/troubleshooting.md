@@ -33,8 +33,9 @@ The snapshot adds no request to the inverter. The snapshot starts empty each tim
 
 1. Open the SAJ Local integration page.
 2. Open the three-dot menu of the integration page and choose Enable debug logging.
-3. Reproduce the problem.
-4. Choose Disable debug logging. Home Assistant downloads the log.
+3. When the system failed to set up, reload the system from the system's menu, so the log covers the setup.
+4. Reproduce the problem.
+5. Choose Disable debug logging. Home Assistant downloads the log.
 
 Debug logging records each connection, poll, request, write, heartbeat and schedule change, one line per event. Every log line starts with the title of the system and the serial number masked to the last three characters, so lines from two systems can be told apart. A title that holds the serial number has the serial masked in place, for example `SAJ xxxxx123`.
 
@@ -56,4 +57,4 @@ Diagnostics and logs never contain the host, port, unit ID, full serial number, 
 
 ## Help and feedback
 
-Questions, bug reports and ideas are welcome on the [issue tracker](https://github.com/Counterphase-Labs/ha-saj-local/issues). Attach the diagnostics download to a bug report.
+Questions, bug reports and ideas are welcome on the [issue tracker](https://github.com/Counterphase-Labs/ha-saj-local/issues). Open the Bug report form for a problem with the integration and the Card bug report form for a problem with a dashboard card. The Bug report form requires the diagnostics download. Report a security problem privately, see the [security policy](../../../SECURITY.md).

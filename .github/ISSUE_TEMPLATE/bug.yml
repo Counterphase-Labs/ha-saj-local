@@ -1,36 +1,45 @@
 name: Bug report
-description: Report a bug with the integration
+description: Something in the SAJ Local integration does not work as it should
+labels: ["🛠 goal: fix", "🚦 status: awaiting triage", "🔌 part: integration"]
 body:
   - type: markdown
     attributes:
-      value: Before you open a new issue, search through the existing issues to see if others have had the same problem.
-  - type: textarea
+      value: |
+        Before you open a new issue, [search the existing bug reports](../../issues?q=is%3Aissue+label%3A%22%F0%9F%9B%A0+goal%3A+fix%22+) to see if others have had the same problem.
+
+        A problem with a dashboard card has its own form. A security problem goes through the [security policy](https://github.com/Counterphase-Labs/ha-saj-local/blob/main/SECURITY.md), never an issue.
+  - type: dropdown
+    id: model
     attributes:
-      label: System Health details
-      description: Paste the data from the System Health card in Home Assistant (https://www.home-assistant.io/more-info/system-health#github-issues)
+      label: Model
+      options:
+        - HS3
+        - H2
+        - Other
     validations:
       required: true
-  - type: checkboxes
+  - type: dropdown
+    id: connection
     attributes:
-      label: Checklist
+      label: How SAJ Local reaches the inverter
       options:
-        - label: I have enabled debug logging for my installation.
-          required: true
-        - label: I have filled out the issue template to the best of my ability.
-          required: true
-        - label: This issue only contains 1 issue (if you have multiple issues, open one issue for each issue).
-          required: true
-        - label: This issue is not a duplicate issue of any [previous issues](../../issues?q=is%3Aissue+label%3A%22Bug%22+).
-          required: true
+        - The inverter's own network port
+        - SAJ communication module (such as the AIO3)
+        - RS485 to Modbus TCP gateway
+        - Other
+    validations:
+      required: true
   - type: textarea
+    id: description
     attributes:
-      label: Describe the issue
+      label: What happened
       description: A clear and concise description of what the issue is.
     validations:
       required: true
   - type: textarea
+    id: reproduction
     attributes:
-      label: Reproduction steps
+      label: Steps to reproduce
       description: Without steps to reproduce, it will be hard to fix. Issues without them will be closed.
       value: |
         1.
@@ -40,13 +49,30 @@ body:
     validations:
       required: true
   - type: textarea
+    id: diagnostics
     attributes:
-      label: Debug logs
-      description: To enable debug logs see https://www.home-assistant.io/integrations/logger/. This needs to include everything from startup of Home Assistant to the point where you encounter the issue.
-      render: text
+      label: Diagnostics download
+      description: 'Drag the file [downloaded from the system''s menu](https://github.com/Counterphase-Labs/ha-saj-local/blob/main/docs/en-gb/user/troubleshooting.md#download-diagnostics) here. When the system never loaded, write "No diagnostics: the system did not load".'
     validations:
       required: true
   - type: textarea
+    id: logs
     attributes:
-      label: Diagnostics dump
-      description: Drag the diagnostics dump file here (see https://www.home-assistant.io/integrations/diagnostics/ for info).
+      label: Debug log
+      description: The log from [turning on debug logging](https://github.com/Counterphase-Labs/ha-saj-local/blob/main/docs/en-gb/user/troubleshooting.md#turn-on-debug-logging), if you have one.
+      render: text
+  - type: textarea
+    id: system-health
+    attributes:
+      label: System Health details
+      description: Paste the data from the System Health card in Home Assistant (https://www.home-assistant.io/more-info/system-health#github-issues)
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: Checklist
+      options:
+        - label: This report covers one problem. For more problems I open one issue each.
+          required: true
+        - label: This report is not a duplicate of an existing bug report.
+          required: true

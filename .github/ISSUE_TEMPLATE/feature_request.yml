@@ -1,5 +1,6 @@
 name: Feature request
 description: Suggest an idea for this project
+labels: ["⭐ goal: addition", "🚦 status: awaiting triage"]
 body:
   - type: markdown
     attributes:
@@ -12,7 +13,7 @@ body:
           required: true
         - label: This only contains 1 feature request (if you have multiple feature requests, open one feature request for each feature request).
           required: true
-        - label: This is not a duplicate of [previous feature requests](../../issues?q=is%3Aissue+label%3A%22Feature+Request%22+).
+        - label: This is not a duplicate of [previous feature requests](../../issues?q=is%3Aissue+label%3A%22%E2%AD%90+goal%3A+addition%22+).
           required: true
   - type: textarea
     attributes:

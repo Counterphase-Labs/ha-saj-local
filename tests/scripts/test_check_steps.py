@@ -270,6 +270,15 @@ def test_docs_check_runs_the_documentation_script_with_the_current_interpreter(
     assert command.argv[2:] == ()
 
 
+def test_template_check_runs_the_template_script_in_the_project_environment(
+    root, scratch
+):
+    (command,) = build("template-check", root, scratch)
+
+    assert command.argv[:3] == ("uv", "run", "python")
+    assert command.argv[3].endswith("template_check.py")
+
+
 def test_docs_regenerates_the_entity_reference_through_the_documentation_script(
     root, scratch
 ):
@@ -362,6 +371,7 @@ def test_every_check_step_has_a_unique_name_and_the_checks_run_in_order():
         "release-check",
         "freeze-check",
         "docs-check",
+        "template-check",
         "mock-build",
         "mock-smoke",
         "validate",

@@ -535,6 +535,32 @@ def test_docs_check_success_says_the_documentation_is_current():
     assert check_parsers.parse_docs_check("", 0).summary == "documentation current"
 
 
+def test_template_check_names_every_finding_without_the_prefix():
+    output = "finding bug.yml: a\nwarning: ignored\nfinding other.yml: b\n"
+
+    parsed = check_parsers.parse_template_check(output, 1)
+
+    assert parsed.summary == "2 template findings"
+    assert parsed.details == ("bug.yml: a", "other.yml: b")
+
+
+def test_template_check_with_one_finding_is_singular():
+    parsed = check_parsers.parse_template_check("finding bug.yml: a\n", 1)
+
+    assert parsed.summary == "1 template finding"
+
+
+def test_template_check_reports_an_unexpected_failure_as_failed_with_the_output():
+    parsed = check_parsers.parse_template_check("Traceback\nKeyError: x\n", 1)
+
+    assert parsed.summary == "failed"
+    assert parsed.details == ("Traceback", "KeyError: x")
+
+
+def test_template_check_success_says_the_templates_are_current():
+    assert check_parsers.parse_template_check("", 0).summary == "templates current"
+
+
 def test_freeze_check_names_every_break():
     output = "hs3 sensor battery_power: unit W -> kW\nh2 sensor soc: missing\n"
 
@@ -627,6 +653,7 @@ def test_plain_parser_reports_the_given_summary_on_success_only():
         check_parsers.parse_release_check,
         check_parsers.parse_freeze_check,
         check_parsers.parse_docs_check,
+        check_parsers.parse_template_check,
         check_parsers.parse_hassfest,
     ],
 )

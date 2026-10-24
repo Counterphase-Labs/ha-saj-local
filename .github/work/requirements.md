@@ -16,6 +16,10 @@ Platform stability and correctness is paramount.
 
 - **CRITICAL**: While this line is in place, DO NOT create backwards compatibility layers. The integration is not released yet. Breaking changes to address the backwards compatible architecture are acceptable while this line is in place (before release). Build as if it is released.
 
+## Security
+
+- Users can report a security problem privately, and know how to.
+
 ## Model abstraction
 
 - The different implementations of SAJ systems form an abstraction layer. There is a single unified interface (entities, controls, Lovelace elements) that does the same thing across all models, as closely as each model allows: consistent names, values, units and behaviour. Where models differ, each model's implementation translates to and from the common form.

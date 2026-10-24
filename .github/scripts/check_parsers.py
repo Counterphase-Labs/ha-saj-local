@@ -536,6 +536,18 @@ def parse_freeze_check(output: str, return_code: int) -> Parsed:
     return Parsed(_plural(len(broken), "freeze break"), tuple(broken))
 
 
+def parse_template_check(output: str, return_code: int) -> Parsed:
+    lines = [line for line in _lines(output) if not line.startswith(UV_WARNING_PREFIX)]
+    if return_code == 0:
+        return Parsed("templates current")
+    findings = [
+        line.removeprefix("finding ") for line in lines if line.startswith("finding ")
+    ]
+    if not findings:
+        return Parsed("failed", tuple(lines))
+    return Parsed(_plural(len(findings), "template finding"), tuple(findings))
+
+
 def parse_hassfest(output: str, return_code: int) -> Parsed:
     if return_code == 0:
         return Parsed("manifest valid")

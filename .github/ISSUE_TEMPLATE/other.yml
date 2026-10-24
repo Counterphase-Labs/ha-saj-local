@@ -1,0 +1,22 @@
+name: Something else
+description: The Modbus simulator, developer tooling or the documentation
+labels: ["🚦 status: awaiting triage"]
+body:
+  - type: dropdown
+    id: part
+    attributes:
+      label: Part
+      options:
+        - Modbus simulator
+        - Developer tooling
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the issue
+      description: A clear and concise description of what the issue is.
+    validations:
+      required: true
