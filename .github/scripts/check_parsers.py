@@ -501,14 +501,17 @@ def parse_vite_build(output: str, return_code: int) -> Parsed:
     return Parsed("build failed")
 
 
+RELEASE_FINDING_PREFIXES = ("missing ", "version ", "tag ")
+
+
 def parse_release_check(output: str, return_code: int) -> Parsed:
-    missing = [line for line in _lines(output) if line.startswith("missing ")]
     if return_code == 0:
-        return Parsed("archive complete")
-    return Parsed(
-        _plural(len(missing), "missing entry").replace("entrys", "entries"),
-        tuple(missing),
-    )
+        return Parsed("release complete")
+    lines = _lines(output)
+    findings = [line for line in lines if line.startswith(RELEASE_FINDING_PREFIXES)]
+    if not findings:
+        return Parsed("failed", tuple(lines))
+    return Parsed(_plural(len(findings), "release finding"), tuple(findings))
 
 
 def parse_docs_check(output: str, return_code: int) -> Parsed:

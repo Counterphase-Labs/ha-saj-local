@@ -1,6 +1,10 @@
 # Releasing
 
-What to do before a release and how the Home Assistant version is bumped. SAJ Local has no release workflow yet, so the page holds only the steps that exist.
+What to do before a release, how a release is published and how the Home Assistant version is bumped. Pushing a version tag starts the `Release` workflow in `.github/workflows/release.yml`, which checks the tag, runs the checks and creates a draft GitHub release.
+
+## Versions
+
+A release is a GitHub release made from a version tag on `main`. The tag has no `v` prefix and equals the version in `custom_components/saj_local/manifest.json`, `pyproject.toml` and `frontend/package.json`. A stable release is `X.Y.Z` and a beta is `X.Y.ZbN`, published as a GitHub pre-release. The betas before the first stable release are `1.0.0b1`, `1.0.0b2` and so on, the first stable release is `1.0.0`, and Semantic Versioning applies from `1.0.0`. The release notes live in the GitHub release only, and the notes of a beta name every change to an entity, a stored setting, a card type or a card setting since the previous beta. The section [Releases](../../../.github/work/requirements.md#releases) of the project requirements holds the rule.
 
 ## Before a release
 
@@ -10,8 +14,20 @@ Do these on `main`, in order.
 2. **Run `make docs-images`.** The user documentation shows the interface, and CI does not regenerate the images, so each release needs a fresh set. The target needs Docker. Run the target, look at every changed image, commit the changed images in `docs/images/en-gb/` and run `make docs-check`. A run that fails writes no image, so do not release with a failed run. Read [Screenshots](documentation.md#screenshots) for what the run does and why every reading in an image is simulated.
 3. **Copy the site screenshot in the same step.** Copy `docs/images/en-gb/cards-power-flow-card.png` to `assets/images/saj-local-power-flow.png` in the `website` repository and commit the copy there, because the SAJ Local page on `counterphase.dev` shows a copy of the image. No check catches a stale copy, because CI in this repository cannot see the website repository.
 4. **Run `make release-check`.** The step makes an archive from `custom_components/saj_local/` and fails when the archive lacks `asset-manifest.json` or the built card bundle. Run `make build` and commit the bundle first when the cards changed.
+5. **Set the new version.** Set the version in `custom_components/saj_local/manifest.json`, `pyproject.toml` and `frontend/package.json`. Run `uv lock` so `uv.lock` records the project version, and run `npm install --package-lock-only` in `frontend/` so `frontend/package-lock.json` records the version. Run `make release-check`, commit to `main` and wait for CI to pass.
 
 The screenshots are the only part of a release that CI cannot check. A change that adds or removes an image fails `make docs-check` through the unused-image and missing-image rules. A change to the interface that leaves an image outdated fails nothing, so step 2 is what keeps the images current.
+
+## Publishing a release
+
+1. Push the tag: `git tag 1.0.0b1`, then `git push origin 1.0.0b1`.
+2. Wait for the `Release` workflow. The workflow requires the tagged commit on `main`, runs `make ci` through `ci.yml` and creates a draft release with GitHub's generated notes.
+3. Open the draft release and edit the generated notes. For a beta, name every change to an entity, a stored setting, a card type or a card setting since the previous beta.
+4. Press Publish.
+
+A failed run makes no draft. Delete the tag with `git push origin :refs/tags/<tag>` and `git tag -d <tag>`, fix `main` and tag again.
+
+HACS offers a published beta to users who turn on "Show beta versions" and a published stable release to every user. A user without the switch gets the tip of `main` until `1.0.0` exists, which is why `main` must pass `make ci` before every push.
 
 ## Bumping the Home Assistant version
 

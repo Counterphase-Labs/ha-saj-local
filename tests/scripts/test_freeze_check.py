@@ -66,8 +66,27 @@ def test_with_no_release_tag_the_step_passes_and_says_so(run_main):
 
     status, printed = run_main(commands)
 
-    assert (status, printed) == (0, "no release tag\n")
+    assert (status, printed) == (0, "no stable release tag\n")
     assert len(commands.calls) == 1
+
+
+def test_only_stable_version_tags_are_considered(run_main):
+    commands = Commands(tag=None)
+
+    run_main(commands)
+
+    assert commands.calls == [
+        (
+            "git",
+            "describe",
+            "--tags",
+            "--abbrev=0",
+            "--match",
+            "[0-9]*.[0-9]*.[0-9]*",
+            "--exclude",
+            "*b*",
+        )
+    ]
 
 
 def test_an_unchanged_surface_passes_naming_the_tag(run_main):

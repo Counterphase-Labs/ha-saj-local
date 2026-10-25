@@ -32,8 +32,8 @@ The checks that make up `make ci` also have a target each, so one tool can be ru
 | `make copy-paste` | jscpd duplicate code and text detection, over the whole repository including `docs/`. |
 | `make prettier`, `make tsc`, `make eslint` | Formatting, type check and lint of the frontend. |
 | `make build` | The Vite production build of the frontend. |
-| `make release-check` | The HACS archive holds `asset-manifest.json` and the built card bundle. The archive is made from the files in `custom_components/saj_local/`, so the built bundle must be in the tree. |
-| `make freeze-check` | No entity key, entity ID, stored setting key or card type is removed, and no entity platform, unit, device class, state class or state value changes, compared with the newest release tag. With no release tag the step passes. |
+| `make release-check` | The HACS archive holds `asset-manifest.json` and the built card bundle. The archive is made from the files in `custom_components/saj_local/`, so the built bundle must be in the tree. The version in `custom_components/saj_local/manifest.json`, `pyproject.toml` and `frontend/package.json` is `X.Y.Z` or `X.Y.ZbN` and the same in all three files, and a tag at `HEAD` equals the version. With no tag at `HEAD` the tag comparison is skipped. |
+| `make freeze-check` | No entity key, entity ID, stored setting key or card type is removed, and no entity platform, unit, device class, state class or state value changes, compared with the newest stable release tag. Beta tags are skipped, so a beta never freezes the surface. With no stable release tag the step passes. |
 | `make docs-check` | The generated entity reference, links, images, page length and feature list coverage. See the [documentation page](documentation.md#checks). |
 | `make template-check` | `bug.yml` requires the diagnostics download, every label an issue template applies or links exists in `.github/labels.yml`, and the model dropdown of `bug.yml` matches the models in `translations/en.json`. |
 | `make mock-build` | The simulator image builds and holds no bytecode. |

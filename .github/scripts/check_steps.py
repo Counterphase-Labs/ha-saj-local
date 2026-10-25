@@ -676,10 +676,13 @@ STEPS: tuple[Step, ...] = (
         "release-check",
         _release_check,
         Help(
-            summary="contents of the HACS release archive",
-            runs="a check of the files the HACS archive holds",
-            success="archive complete",
-            failure="each missing archive entry",
+            summary="HACS archive and release version",
+            runs=(
+                "a check of the files the HACS archive holds and of the version in "
+                "the three version files and the tag at HEAD"
+            ),
+            success="release complete",
+            failure="each missing archive entry and each version finding",
             args=NO_ARGS,
         ),
     ),
@@ -690,9 +693,9 @@ STEPS: tuple[Step, ...] = (
             summary="entities, stored settings and cards against the last release",
             runs=(
                 "a comparison of the surface generated from the working tree with the "
-                "surface generated from the newest release tag"
+                "surface generated from the newest stable release tag"
             ),
-            success='"no release tag", or the tag the surface was kept since',
+            success='"no stable release tag", or the tag the surface was kept since',
             failure="one line per removed or changed entity, stored setting or card",
             args=NO_ARGS,
         ),

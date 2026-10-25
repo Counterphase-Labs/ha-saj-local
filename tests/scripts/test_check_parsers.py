@@ -495,18 +495,29 @@ def test_release_check_names_every_missing_entry():
 
     parsed = check_parsers.parse_release_check(output, 1)
 
-    assert parsed.summary == "2 missing entries"
+    assert parsed.summary == "2 release findings"
     assert len(parsed.details) == 2
 
 
-def test_release_check_with_one_missing_entry_is_singular():
-    parsed = check_parsers.parse_release_check("missing saj_local/a\n", 1)
+def test_release_check_with_one_version_finding_is_singular_and_named():
+    output = "version manifest.json: v1 is not X.Y.Z or X.Y.ZbN\n"
 
-    assert parsed.summary == "1 missing entry"
+    parsed = check_parsers.parse_release_check(output, 1)
+
+    assert parsed.summary == "1 release finding"
+    assert parsed.details == ("version manifest.json: v1 is not X.Y.Z or X.Y.ZbN",)
+
+
+def test_release_check_names_a_tag_finding():
+    output = "tag 1.0.1 differs from version 1.0.0\n"
+
+    parsed = check_parsers.parse_release_check(output, 1)
+
+    assert parsed.summary == "1 release finding"
 
 
 def test_release_check_success():
-    assert check_parsers.parse_release_check("", 0).summary == "archive complete"
+    assert check_parsers.parse_release_check("", 0).summary == "release complete"
 
 
 def test_docs_check_names_every_finding_without_the_prefix():
@@ -589,10 +600,10 @@ def test_freeze_check_reports_an_unavailable_surface_as_failed_with_the_message(
 @pytest.mark.parametrize(
     ("output", "summary"),
     [
-        ("no release tag\n", "no release tag"),
+        ("no stable release tag\n", "no stable release tag"),
         (
-            "warning: `VIRTUAL_ENV=/x/.venv` does not match\nno release tag\n",
-            "no release tag",
+            "warning: `VIRTUAL_ENV=/x/.venv` does not match\nno stable release tag\n",
+            "no stable release tag",
         ),
         ("", "surface kept"),
     ],

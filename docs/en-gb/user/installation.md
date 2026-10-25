@@ -21,3 +21,7 @@ SAJ Local has no published release yet. Check the [supported equipment](supporte
 [![Open your Home Assistant instance and start setting up SAJ Local.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=saj_local)
 
 SAJ Local serves dashboard cards, so there is no card resource to add. See [dashboard cards](cards/README.md).
+
+## Beta versions
+
+Until the first stable release, every release of SAJ Local is a beta. In HACS, open SAJ Local, open the menu, choose Redownload, turn on "Show beta versions" and download the newest beta. Without the switch, HACS installs the development version of SAJ Local.

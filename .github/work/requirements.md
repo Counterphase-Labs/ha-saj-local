@@ -20,6 +20,12 @@ Platform stability and correctness is paramount.
 
 - Users can report a security problem privately, and know how to.
 
+## Releases
+
+- A release is a GitHub release made from a version tag on `main`. The tag, the version in `custom_components/saj_local/manifest.json`, the version in `pyproject.toml` and the version in `frontend/package.json` are the same, and the release runs `make ci` on the tagged commit before the release is created.
+- Versions are `X.Y.Z` for a stable release and `X.Y.ZbN` for a beta. A beta is published as a GitHub pre-release. The first stable release is `1.0.0`, and the betas before the first stable release are `1.0.0b1`, `1.0.0b2` and so on. From `1.0.0`, Semantic Versioning applies.
+- The release notes are written in the GitHub release. A beta's release notes name every change to an entity, a stored setting, a card type or a card setting since the previous beta.
+
 ## Model abstraction
 
 - The different implementations of SAJ systems form an abstraction layer. There is a single unified interface (entities, controls, Lovelace elements) that does the same thing across all models, as closely as each model allows: consistent names, values, units and behaviour. Where models differ, each model's implementation translates to and from the common form.
@@ -63,7 +69,7 @@ Platform stability and correctness is paramount.
   - One `make test` runs every test. Each test suite also has its own target, which `make test` runs
   - One `make ci` runs every check. The partial targets that make up `make ci` stay
 
-- Once a release exists, `make ci` fails when a change removes an entity key, a stored setting key, a card type or a card setting, changes an entity's platform, unit, device class, state class or state values, removes a value a card setting accepts, or lowers a config entry or store version, compared with the newest release tag.
+- Once a release exists, `make ci` fails when a change removes an entity key, a stored setting key, a card type or a card setting, changes an entity's platform, unit, device class, state class or state values, removes a value a card setting accepts, or lowers a config entry or store version, compared with the newest stable release tag.
 
 - All testing and verification can run in github workflows using the same make targets
 

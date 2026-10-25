@@ -12,7 +12,9 @@ from typing import Any
 SURFACE_SCRIPT = "freeze_surface.py"
 SURFACE_SCRIPT_IN_TREE = Path(".github/scripts") / SURFACE_SCRIPT
 ARCHIVE_NAME = "release.tar"
-NO_TAG_MESSAGE = "no release tag"
+NO_TAG_MESSAGE = "no stable release tag"
+STABLE_TAG_PATTERN = "[0-9]*.[0-9]*.[0-9]*"
+BETA_TAG_PATTERN = "*b*"
 COMMAND_TIMEOUT_SECONDS = 300
 NO_OUTPUT = "no output"
 RISING_VERSIONS = frozenset(
@@ -41,7 +43,18 @@ def run_command(argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
 
 
 def newest_tag(*, run: Run) -> str | None:
-    described = run(("git", "describe", "--tags", "--abbrev=0"))
+    described = run(
+        (
+            "git",
+            "describe",
+            "--tags",
+            "--abbrev=0",
+            "--match",
+            STABLE_TAG_PATTERN,
+            "--exclude",
+            BETA_TAG_PATTERN,
+        )
+    )
     return described.stdout.strip() if described.returncode == 0 else None
 
 
