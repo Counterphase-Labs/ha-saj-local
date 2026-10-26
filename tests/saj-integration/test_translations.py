@@ -2,6 +2,7 @@ import functools
 import json
 import re
 import string
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -436,4 +437,4 @@ def test_no_two_entities_share_a_display_name():
         for entry in entries.values()
     ]
 
-    assert sorted(name for name in set(names) if names.count(name) > 1) == []
+    assert sorted(name for name, count in Counter(names).items() if count > 1) == []

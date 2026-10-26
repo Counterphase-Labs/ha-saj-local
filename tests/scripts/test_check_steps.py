@@ -59,11 +59,52 @@ def test_verbose_pytest_options_drop_the_quiet_ones_and_restore_the_raw_reports(
     ]
 
 
-def test_a_full_python_test_run_keeps_the_configured_coverage_scope(root, scratch):
-    (command,) = build("test-python", root, scratch)
+COVERAGE_OPTIONS = [
+    "--durations=0",
+    "--durations-min=0.2",
+    "--cov-context=test",
+    "--cov=custom_components/saj_local",
+    "--cov=mock/saj_local_mock",
+    "--cov=.github/scripts",
+    "--cov-branch",
+]
 
-    assert command.argv == ("uv", "run", "pytest")
-    assert command.timeout == check_steps.PYTEST_TIMEOUT_SECONDS
+
+def addopts_of(command: check_steps.Command) -> list[str]:
+    assert command.argv[:4] == ("uv", "run", "pytest", "-o")
+    return command.argv[4].removeprefix("addopts=").split()
+
+
+def test_a_full_python_test_run_is_two_runs_into_one_coverage_data_file(root, scratch):
+    library, integration = build("test-python", root, scratch)
+
+    assert library.argv[5:] == ("tests/saj", "tests/mock", "tests/scripts")
+    assert addopts_of(library) == [
+        "-q",
+        "--tb=short",
+        *COVERAGE_OPTIONS,
+        "-p",
+        "no:homeassistant",
+        "--disable-socket",
+        "--allow-unix-socket",
+        "--ignore=tests/scripts/test_runner_processes.py",
+        "--cov-report=",
+    ]
+    assert integration.argv[5:] == ("tests/saj-integration",)
+    assert addopts_of(integration) == [
+        "-q",
+        "--tb=short",
+        *COVERAGE_OPTIONS,
+        "--cov-append",
+        "--cov-report=term-missing:skip-covered",
+        "--cov-fail-under=100",
+    ]
+    for command in (library, integration):
+        assert command.timeout == check_steps.PYTEST_TIMEOUT_SECONDS
+        assert command.environment == {
+            "COVERAGE_CORE": "ctrace",
+            "COVERAGE_FILE": str(scratch / "coverage.data"),
+        }
 
 
 def test_a_python_test_run_of_one_test_file_reports_coverage_for_its_module_only(
@@ -88,8 +129,32 @@ def test_a_python_test_run_of_one_test_file_reports_coverage_for_its_module_only
     )
 
 
-def test_a_verbose_python_test_run_restores_the_raw_options(root, scratch):
-    (command,) = build("test-python", root, scratch, verbose=True)
+def test_a_python_test_run_with_options_only_is_one_run_with_the_configured_scope(
+    root, scratch
+):
+    (command,) = build("test-python", root, scratch, "-x")
+
+    assert command.argv == ("uv", "run", "pytest", "-x")
+    assert command.environment == {}
+
+
+def test_a_verbose_full_python_test_run_drops_the_quiet_options_and_restores_the_report(
+    root, scratch
+):
+    library, integration = build("test-python", root, scratch, verbose=True)
+
+    assert addopts_of(library)[:2] == ["--durations=0", "--durations-min=0.2"]
+    assert "-q" not in addopts_of(integration)
+    assert "--tb=short" not in addopts_of(integration)
+    assert "--cov-report=term-missing" in addopts_of(integration)
+
+
+def test_a_verbose_python_test_run_of_test_files_restores_the_raw_options(
+    root, scratch
+):
+    (command,) = build(
+        "test-python", root, scratch, "tests/saj/test_codec.py", verbose=True
+    )
 
     assert command.argv[:4] == ("uv", "run", "pytest", "-o")
     assert command.argv[4].removeprefix("addopts=").split() == [
@@ -379,45 +444,27 @@ def test_every_check_step_has_a_unique_name_and_the_checks_run_in_order():
     )
 
 
-def test_the_module_gate_runs_every_test_file_of_each_module_for_that_module_only(
-    root, scratch
-):
+def test_the_module_gate_reads_the_coverage_data_of_the_python_tests(root, scratch):
     (root / "custom_components/saj_local/saj/codec.py").write_text(
         "def run():\n    return 1\n", encoding="utf-8"
     )
 
     (command,) = build("test-modules", root, scratch)
 
-    configuration = scratch / "coverage-module-0.ini"
-    assert command.argv == (
-        "uv",
-        "run",
-        "pytest",
-        "--cov=custom_components/saj_local/saj",
-        "--cov-config",
-        str(configuration),
-        "tests/saj/test_codec.py",
-        "tests/saj/test_models.py",
-    )
-    assert "    custom_components/saj_local/saj/codec.py\n" in (
-        configuration.read_text(encoding="utf-8")
+    assert command.argv[:3] == ("uv", "run", "python")
+    assert command.argv[3].endswith("module_gate.py")
+    assert command.argv[4:] == (
+        str(scratch / "coverage.data"),
+        "custom_components/saj_local/saj/codec.py",
     )
     assert command.timeout == check_steps.SHORT_TIMEOUT_SECONDS
-    assert command.parser("", 0).summary == "covered"
-    assert check_steps.STEPS_BY_NAME["test-modules"].combine is not None
-
-
-def test_a_verbose_module_gate_restores_the_raw_options(root, scratch):
-    (root / "custom_components/saj_local/saj/codec.py").write_text(
-        "def run():\n    return 1\n", encoding="utf-8"
+    assert command.parser("1 of 1 modules covered\n", 0).summary == (
+        "1 of 1 modules covered"
     )
-
-    (command,) = build("test-modules", root, scratch, verbose=True)
-
-    assert command.argv[3] == "-o"
+    assert check_steps.STEPS_BY_NAME["test-modules"].requires == ("test-python",)
 
 
-def test_the_module_gate_runs_only_the_modules_named_in_args(root, scratch):
+def test_the_module_gate_checks_only_the_modules_named_in_args(root, scratch):
     for name in ("codec", "client"):
         (root / f"custom_components/saj_local/saj/{name}.py").write_text(
             "def run():\n    return 1\n", encoding="utf-8"
@@ -427,18 +474,17 @@ def test_the_module_gate_runs_only_the_modules_named_in_args(root, scratch):
         "test-modules", root, scratch, "custom_components/saj_local/saj/codec.py"
     )
 
-    assert command.argv[-2:] == ("tests/saj/test_codec.py", "tests/saj/test_models.py")
+    assert command.argv[5:] == ("custom_components/saj_local/saj/codec.py",)
+
+
+def test_the_steps_that_start_the_simulator_or_copy_the_bundle_build_them_first():
+    steps = check_steps.STEPS_BY_NAME
+
+    assert steps["test-browser-home-assistant"].requires == ("build", "mock-build")
+    assert steps["docs-images"].requires == ("build", "mock-build")
+    assert steps["mock-smoke"].requires == ("mock-build",)
 
 
 def test_the_module_gate_rejects_a_name_that_is_not_a_module_with_code(root, scratch):
     with pytest.raises(check_steps.StepUnavailableError, match="not a module"):
         build("test-modules", root, scratch, "custom_components/saj_local/saj/codec.py")
-
-
-def test_the_module_gate_fails_for_a_module_without_a_unit_test_file(root, scratch):
-    (root / "custom_components/saj_local/saj/client.py").write_text(
-        "def run():\n    return 1\n", encoding="utf-8"
-    )
-
-    with pytest.raises(check_steps.ScopeError, match=r"saj/client\.py"):
-        build("test-modules", root, scratch)

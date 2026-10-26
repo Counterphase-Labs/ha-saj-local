@@ -67,27 +67,20 @@ def _control(*, link: WritableClient) -> Control:
     )
 
 
-def _only_on_the_h2() -> set[str]:
-    return {
-        register.key
-        for register in CATALOGUES["h2"].registers
-        if register.key not in {other.key for other in CATALOGUES["hs3"].registers}
-    }
-
-
-PROTECTED_ON_THE_H2 = sorted(
+ON_THE_HS3 = {register.key for register in CATALOGUES["hs3"].registers}
+ONLY_ON_THE_H2 = {
     register.key
     for register in CATALOGUES["h2"].registers
-    if register.key in COMMISSIONING_KEYS
-    and register.key not in {other.key for other in CATALOGUES["hs3"].registers}
-)
+    if register.key not in ON_THE_HS3
+}
+PROTECTED_ON_THE_H2 = sorted(ONLY_ON_THE_H2 & COMMISSIONING_KEYS)
 
 
 def test_the_new_writable_h2_settings_are_protected_apart_from_the_ones_allowed():
     writable = {
         register.key
         for register in CATALOGUES["h2"].registers
-        if register.writable and register.key in _only_on_the_h2()
+        if register.writable and register.key in ONLY_ON_THE_H2
     }
 
     assert writable - PROTECTED_KEYS == ALLOWED_NEW_WRITES

@@ -11,18 +11,17 @@ from typing import TYPE_CHECKING
 import check_parsers
 from pytest_scope import (
     RUNNER_PROCESSES_TESTS,
-    ScopeError,
+    SOURCE_DIRECTORIES,
     companion_test_files,
     coverage_configuration,
     gated_modules,
-    module_tests,
     scope_for,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from check_parsers import Parsed, Parser
+    from check_parsers import Parser
 
 SPARSE_ENVIRONMENT = {
     "COMPOSE_PROGRESS": "quiet",
@@ -41,6 +40,21 @@ ISOLATED_TEST_PATHS = ("tests/saj", "tests/mock")
 ISOLATED_ENVIRONMENT = {"UV_PROJECT_ENVIRONMENT": ".venv-isolated"}
 IMPORT_LINT_ENVIRONMENT = {"PYTHONPATH": ".:mock"}
 UNCOVERED_ADDOPTS = "-q --tb=short"
+COVERAGE_DATA_FILE = "coverage.data"
+# ctrace records the context of every test that runs a line; the default sysmon core
+# records a line for the first test only, which the per-module gate cannot use.
+COVERAGE_CORE = "ctrace"
+UNIT_TEST_PATHS = ("tests/saj", "tests/mock", "tests/scripts")
+INTEGRATION_TEST_PATH = "tests/saj-integration"
+DURATION_LIMIT_SECONDS = "0.2"
+DURATION_OPTIONS = ("--durations=0", f"--durations-min={DURATION_LIMIT_SECONDS}")
+WITHOUT_HOME_ASSISTANT_OPTIONS = (
+    "-p",
+    "no:homeassistant",
+    "--disable-socket",
+    "--allow-unix-socket",
+    f"--ignore={RUNNER_PROCESSES_TESTS.as_posix()}",
+)
 MOCK_INTEGRATION_DIRECTORY = "tests/mock-integration"
 MOCK_SERVICE = "mock"
 MOCK_SMOKE_SCRIPT = f"{MOCK_INTEGRATION_DIRECTORY}/smoke.sh"
@@ -88,7 +102,6 @@ class Step:
     build: Callable[[Invocation], tuple[Command, ...]]
     help: Help
     requires: tuple[str, ...] = ()
-    combine: Callable[[tuple[Parsed, ...]], Parsed] | None = None
 
 
 def _pyproject_addopts(root: Path) -> list[str]:
@@ -124,7 +137,50 @@ def _pytest_options(invocation: Invocation) -> list[str]:
     return options
 
 
+def _coverage_run(
+    invocation: Invocation, *, paths: tuple[str, ...], options: tuple[str, ...]
+) -> Command:
+    quiet = [] if invocation.verbose else UNCOVERED_ADDOPTS.split()
+    addopts = shlex.join(
+        [
+            *quiet,
+            *DURATION_OPTIONS,
+            "--cov-context=test",
+            *(f"--cov={source.as_posix()}" for source in SOURCE_DIRECTORIES),
+            "--cov-branch",
+            *options,
+        ]
+    )
+    return Command(
+        ("uv", "run", "pytest", "-o", f"addopts={addopts}", *paths),
+        check_parsers.parse_pytest,
+        timeout=PYTEST_TIMEOUT_SECONDS,
+        environment={
+            "COVERAGE_CORE": COVERAGE_CORE,
+            "COVERAGE_FILE": str(invocation.scratch / COVERAGE_DATA_FILE),
+        },
+    )
+
+
 def _test_python(invocation: Invocation) -> tuple[Command, ...]:
+    if not invocation.args:
+        report = "term-missing" if invocation.verbose else "term-missing:skip-covered"
+        return (
+            _coverage_run(
+                invocation,
+                paths=UNIT_TEST_PATHS,
+                options=(*WITHOUT_HOME_ASSISTANT_OPTIONS, "--cov-report="),
+            ),
+            _coverage_run(
+                invocation,
+                paths=(INTEGRATION_TEST_PATH,),
+                options=(
+                    "--cov-append",
+                    f"--cov-report={report}",
+                    "--cov-fail-under=100",
+                ),
+            ),
+        )
     return (
         Command(
             (
@@ -192,32 +248,21 @@ def _requested_modules(invocation: Invocation) -> tuple[Path, ...]:
 
 def _test_modules(invocation: Invocation) -> tuple[Command, ...]:
     modules = _requested_modules(invocation)
-    mapping = module_tests(invocation.root)
-    untested = [module.as_posix() for module in modules if module not in mapping]
-    if untested:
-        message = f"no unit test file for: {', '.join(untested)}"
-        raise ScopeError(message)
-    commands: list[Command] = []
-    for index, module in enumerate(modules):
-        configuration = invocation.scratch / f"coverage-module-{index}.ini"
-        configuration.write_text(coverage_configuration((module,)), encoding="utf-8")
-        commands.append(
-            Command(
-                (
-                    "uv",
-                    "run",
-                    "pytest",
-                    *_verbose_options(invocation),
-                    f"--cov={module.parent.as_posix()}",
-                    "--cov-config",
-                    str(configuration),
-                    *(test_file.as_posix() for test_file in mapping[module]),
-                ),
-                check_parsers.module_coverage(module.as_posix()),
-                timeout=SHORT_TIMEOUT_SECONDS,
-            )
-        )
-    return tuple(commands)
+    script = Path(__file__).with_name("module_gate.py")
+    return (
+        Command(
+            (
+                "uv",
+                "run",
+                "python",
+                str(script),
+                str(invocation.scratch / COVERAGE_DATA_FILE),
+                *(module.as_posix() for module in modules),
+            ),
+            check_parsers.parse_module_gate,
+            timeout=SHORT_TIMEOUT_SECONDS,
+        ),
+    )
 
 
 def _mock_smoke(invocation: Invocation) -> tuple[Command, ...]:
@@ -525,7 +570,14 @@ STEPS: tuple[Step, ...] = (
         _test_python,
         Help(
             summary="Python unit tests with the 100 % coverage gate",
-            runs="pytest over the whole package, or over the test files in ARGS",
+            runs=(
+                "two pytest runs into one coverage data file, with the ctrace core "
+                "and a coverage context per test: tests/saj, tests/mock and "
+                "tests/scripts without the Home Assistant plugin and with sockets "
+                "blocked, then tests/saj-integration with the plugin and the 100 % "
+                "gate on the combined data; every test body over 200 ms fails the "
+                "step. With test files in ARGS, one pytest run over the test files"
+            ),
             success=(
                 "pass count, total coverage, every warning exactly as pytest prints "
                 "it and each file below 100 % coverage with its missing lines and "
@@ -533,7 +585,8 @@ STEPS: tuple[Step, ...] = (
             ),
             failure=(
                 "failing test IDs with short tracebacks, plus the same warnings and "
-                "files, and the required threshold when the gate fails"
+                "files, the required threshold when the gate fails, and each test "
+                "body over 200 ms with its test ID and time"
             ),
             args=(
                 "test files, folders and pytest options; a subset run measures and "
@@ -547,18 +600,20 @@ STEPS: tuple[Step, ...] = (
         Help(
             summary="per-module coverage gate from the unit tests of the module alone",
             runs=(
-                "for each module with logic, the unit test files mapped to the "
-                "module, run together, with 100 % line and branch coverage required "
-                "of that module alone"
+                "test-python first, then for each module with logic a read of the "
+                "coverage data of test-python that counts only the code run at "
+                "import and the coverage contexts of the unit test files mapped to "
+                "the module, with 100 % line and branch coverage required of that "
+                "module alone"
             ),
             success="modules covered out of modules gated",
             failure=(
                 "per failing module: the module, its coverage with missing lines and "
-                "branches, failing tests, or no unit test file"
+                "branches, or no unit test file"
             ),
-            args="module paths that limit the run",
+            args="module paths that limit the gate, not the test-python run",
         ),
-        combine=check_parsers.combine_modules,
+        requires=("test-python",),
     ),
     Step(
         "test-isolated",
@@ -753,13 +808,15 @@ STEPS: tuple[Step, ...] = (
         Help(
             summary="the Modbus mock container answers a client",
             runs=(
-                f"{MOCK_SMOKE_SCRIPT}, then the tests in {MOCK_INTEGRATION_DIRECTORY} "
-                "with no coverage options"
+                f"mock-build first, then {MOCK_SMOKE_SCRIPT} on the saj-local-mock "
+                f"image, then the tests in {MOCK_INTEGRATION_DIRECTORY} with no "
+                "coverage options"
             ),
             success="scenarios answered",
             failure="the raw failure output, or failing test IDs with short tracebacks",
             args=NO_ARGS,
         ),
+        requires=("mock-build",),
     ),
     Step(
         "validate",
@@ -777,7 +834,11 @@ STEPS: tuple[Step, ...] = (
         _browser_home_assistant,
         Help(
             summary="browser tests against a throwaway Home Assistant",
-            runs="Playwright against a throwaway Home Assistant in Docker",
+            runs=(
+                "build and mock-build first, so the image copies the card bundle "
+                "built from the working tree and uses the saj-local-mock image, "
+                "then Playwright against a throwaway Home Assistant in Docker"
+            ),
             success="pass count",
             failure=(
                 "failing tests with assertion messages, plus the report path "
@@ -785,6 +846,7 @@ STEPS: tuple[Step, ...] = (
             ),
             args="options passed to the Playwright run script",
         ),
+        requires=("build", "mock-build"),
     ),
 )
 
@@ -849,7 +911,9 @@ SUPPORT_STEPS: tuple[Step, ...] = (
         Help(
             summary="documentation screenshots from a throwaway Home Assistant",
             runs=(
-                "Playwright against a throwaway Home Assistant in Docker, "
+                "build and mock-build first, so the image copies the card bundle "
+                "built from the working tree and uses the saj-local-mock image, "
+                "then Playwright against a throwaway Home Assistant in Docker, "
                 "writing docs/images"
             ),
             success="pass count",
@@ -859,6 +923,7 @@ SUPPORT_STEPS: tuple[Step, ...] = (
             ),
             args="options passed to the Playwright run script",
         ),
+        requires=("build", "mock-build"),
     ),
     Step(
         "up",

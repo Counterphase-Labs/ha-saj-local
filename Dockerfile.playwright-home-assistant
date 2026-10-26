@@ -1,15 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.63.0-noble AS frontend-builder
-
-WORKDIR /workspace/frontend
-
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
-
-COPY frontend ./
-RUN npm run build
-
 FROM ghcr.io/home-assistant/home-assistant:2026.9.3
 
 COPY tests/playwright/home-assistant/configuration.yaml /config/configuration.yaml
 COPY custom_components/saj_local /config/custom_components/saj_local
-COPY --from=frontend-builder /workspace/custom_components/saj_local/frontend /config/custom_components/saj_local/frontend

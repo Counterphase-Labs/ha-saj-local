@@ -855,12 +855,12 @@ async def test_a_release_waits_for_a_cycle_longer_than_its_limit(recorder, monke
     coordinator = build(recorder)
     coordinator.control.outcomes = [read_result({}), read_result({})]
     await coordinator.write(key="ems_battery_control", value=1)
-    monkeypatch.setattr(coordinator_module, "EMS_RELEASE_TIMEOUT", 0.01)
+    monkeypatch.setattr(coordinator_module, "EMS_RELEASE_TIMEOUT", 0.005)
     started, finish = hold_cycle(coordinator)
     cycle = asyncio.create_task(coordinator._async_update_data())
     await started.wait()
     releasing = asyncio.create_task(coordinator.async_release_power_control())
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.006)
     assert coordinator.control.switch_offs == []
     assert not releasing.done()
 

@@ -624,28 +624,25 @@ def test_every_command_of_a_step_runs_and_summaries_are_joined(
     assert outcome.raw == "one\ntwo\n"
 
 
-def test_a_step_with_its_own_combination_combines_the_parsed_parts(
+def test_a_step_whose_parser_finds_a_problem_fails_although_every_command_exited_zero(
     monkeypatch, tmp_path, clock
 ):
-    script(
-        monkeypatch,
-        one=CommandResult(0, "one\n", None),
-        two=CommandResult(0, "two\n", None),
-    )
+    script(monkeypatch, slow=CommandResult(0, "slow\n", None))
 
-    def combine(parts: tuple[Parsed, ...]) -> Parsed:
-        return Parsed(f"{len(parts)} parts")
+    def parse_with_a_finding(output: str, return_code: int) -> Parsed:
+        del output, return_code
+        return Parsed("1 too slow", ("a test",), (Finding("a.py", None, "a test"),))
 
     step = Step(
         "sample",
-        lambda _: (command_named("one"), command_named("two")),
+        lambda _: (Command(("slow",), parse_with_a_finding),),
         NO_HELP,
-        combine=combine,
     )
 
     outcome = execute_step(step, invocation(tmp_path), {})
 
-    assert outcome.summary == "2 parts"
+    assert not outcome.ok
+    assert outcome.details == ("a test",)
 
 
 def test_a_step_with_a_failing_second_command_fails(monkeypatch, tmp_path, clock):

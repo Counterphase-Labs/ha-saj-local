@@ -2,7 +2,7 @@
 set -eu
 
 smoke_repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-smoke_image="saj-local-mock-smoke-$$"
+smoke_image="saj-local-mock"
 smoke_project_name="saj-local-mock-smoke-$$"
 smoke_container=""
 smoke_state_directory=""
@@ -63,8 +63,7 @@ smoke_cleanup() {
     fi
     docker compose --project-name "$smoke_project_name" \
         --file "$smoke_repository_root/compose.yaml" down --volumes \
-        --remove-orphans --rmi local >/dev/null 2>&1 || true
-    docker image rm --force "$smoke_image" >/dev/null 2>&1 || true
+        --remove-orphans >/dev/null 2>&1 || true
     if [ -n "$smoke_state_directory" ]; then
         rm -rf "$smoke_state_directory"
     fi
@@ -93,7 +92,6 @@ smoke_state_directory=$(mktemp -d)
 mkdir "$smoke_state_directory/hs3" "$smoke_state_directory/h2"
 export SAJ_MOCK_STATE_DIR="$smoke_state_directory"
 
-docker build --quiet --tag "$smoke_image" "$smoke_repository_root/mock" >/dev/null
 for smoke_scenario in "$smoke_repository_root"/mock/scenarios/*.yaml; do
     echo "scenario $(basename "$smoke_scenario")"
     smoke_container=$(docker run --detach \
@@ -107,7 +105,7 @@ done
 
 echo "compose services"
 docker compose --project-name "$smoke_project_name" \
-    --file "$smoke_repository_root/compose.yaml" up --detach --build --wait \
+    --file "$smoke_repository_root/compose.yaml" up --detach --wait \
     --no-deps mock mock-h2
 for smoke_service in mock mock-h2; do
     docker compose --project-name "$smoke_project_name" \

@@ -30,6 +30,7 @@ services:
   mock:
     build:
       context: ./mock
+    image: saj-local-mock
     volumes:
       - ./mock/scenarios/hs3-battery.yaml:/config/config.yaml:ro
       - ${SAJ_MOCK_STATE_DIR:-./mock/state}/hs3:/data
@@ -39,8 +40,8 @@ services:
     restart: unless-stopped
 
   mock-h2:
-    build:
-      context: ./mock
+    image: saj-local-mock
+    pull_policy: never
     volumes:
       - ./mock/scenarios/h2-battery.yaml:/config/config.yaml:ro
       - ${SAJ_MOCK_STATE_DIR:-./mock/state}/h2:/data

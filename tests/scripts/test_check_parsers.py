@@ -858,42 +858,66 @@ def test_import_linter_failure_without_broken_contracts_drops_the_banner():
     assert parsed.findings == ()
 
 
-def test_a_covered_module_reports_only_that_it_is_covered():
-    parse = check_parsers.module_coverage("custom_components/saj_local/a.py")
+def test_a_module_gate_that_covers_every_module_reports_the_count_only():
+    parsed = check_parsers.parse_module_gate("90 of 90 modules covered\n", 0)
 
-    assert parse(PYTEST_PASS, 0) == check_parsers.Parsed(check_parsers.MODULE_COVERED)
-
-
-def test_an_uncovered_module_names_the_module_and_the_reasons_below_it():
-    parse = check_parsers.module_coverage("custom_components/saj_local/a.py")
-
-    parsed = parse(PYTEST_FAILURE, 1)
-
-    assert parsed.summary == check_parsers.MODULE_NOT_COVERED
-    assert parsed.details[0] == (
-        "custom_components/saj_local/a.py  2 failed, 1 passed  77.5% cov"
-    )
-    assert "  custom_components/saj_local/a.py  60%  12-30, 44, 51-60" in (
-        parsed.details
-    )
-    assert parsed.findings[0] == Finding(
-        "custom_components/saj_local/a.py", None, "2 failed, 1 passed  77.5% cov"
-    )
-    assert len(parsed.findings) == 3
+    assert parsed == check_parsers.Parsed("90 of 90 modules covered")
 
 
-def test_module_results_combine_into_a_count_of_covered_modules():
-    covered = check_parsers.Parsed(check_parsers.MODULE_COVERED)
-    uncovered = check_parsers.Parsed(
-        check_parsers.MODULE_NOT_COVERED,
-        ("a.py  90% cov",),
-        (Finding("a.py", None, "90% cov"),),
+def test_a_module_gate_names_each_module_with_a_gap_and_the_gap():
+    output = (
+        "finding custom_components/saj_local/a.py: 90.0% missing 7, 9->exit\n"
+        "finding custom_components/saj_local/b.py: no unit test file\n"
+        "88 of 90 modules covered\n"
     )
 
-    combined = check_parsers.combine_modules((covered, uncovered, covered))
+    parsed = check_parsers.parse_module_gate(output, 1)
 
-    assert combined == check_parsers.Parsed(
-        "2 of 3 modules covered",
-        ("a.py  90% cov",),
-        (Finding("a.py", None, "90% cov"),),
+    assert parsed.summary == "88 of 90 modules covered"
+    assert parsed.details == (
+        "custom_components/saj_local/a.py  90.0% missing 7, 9->exit",
+        "custom_components/saj_local/b.py  no unit test file",
     )
+    assert parsed.findings[1] == Finding(
+        "custom_components/saj_local/b.py", None, "no unit test file"
+    )
+
+
+def test_a_module_gate_that_did_not_finish_is_failed_with_the_output():
+    parsed = check_parsers.parse_module_gate("Traceback\nValueError: x\n", 1)
+
+    assert parsed == check_parsers.Parsed("failed", ("Traceback", "ValueError: x"))
+
+
+PYTEST_SLOW = """\
+=========================== slowest 0.20 durations ===========================
+0.35s call     tests/saj/test_a.py::test_slow[1-x]
+0.25s setup    tests/saj/test_a.py::test_fixture
+0.21s teardown tests/saj/test_a.py::test_fixture
+
+(3 durations < 0.2s hidden.  Use -vv to show these durations.)
+"""
+
+
+def test_a_test_body_over_the_limit_fails_the_run_with_its_id_and_time():
+    parsed = check_parsers.parse_pytest(PYTEST_SLOW + "5 passed in 0.31s\n", 0)
+
+    assert parsed.summary == "5 passed  1 too slow"
+    assert parsed.details == (
+        "tests/saj/test_a.py::test_slow[1-x] took 0.35s in the test body",
+    )
+    assert parsed.findings == (
+        Finding(
+            "tests/saj/test_a.py",
+            None,
+            "tests/saj/test_a.py::test_slow[1-x] took 0.35s in the test body",
+        ),
+    )
+
+
+def test_a_slow_fixture_and_the_hidden_durations_line_print_nothing():
+    output = "\n".join(PYTEST_SLOW.splitlines()[:1] + PYTEST_SLOW.splitlines()[2:])
+
+    parsed = check_parsers.parse_pytest(output + "\n5 passed in 0.31s\n", 0)
+
+    assert parsed == check_parsers.Parsed("5 passed")

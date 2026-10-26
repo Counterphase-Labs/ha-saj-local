@@ -1,6 +1,6 @@
 x-mock: &mock
-  build:
-    context: ./mock
+  image: saj-local-mock
+  pull_policy: never
   healthcheck:
     test:
       - CMD

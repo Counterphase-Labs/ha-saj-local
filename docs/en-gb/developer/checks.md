@@ -12,14 +12,14 @@ Every action is a make target and CI calls the same targets, so passing locally 
 
 | Target | Suite |
 | --- | --- |
-| `make test-python` | The pytest unit tests of the library, the integration, the simulator and the check runner, without `tests/mock-integration` and `tests/scripts/test_runner_processes.py`, with the 100 % line and branch coverage gate. |
+| `make test-python` | The pytest unit tests of the library, the integration, the simulator and the check runner, without `tests/mock-integration` and `tests/scripts/test_runner_processes.py`, with the 100 % line and branch coverage gate. A full run is two pytest runs into one coverage data file with the `ctrace` core and a coverage context per test: `tests/saj`, `tests/mock` and `tests/scripts` without the Home Assistant plugin and with sockets blocked, then `tests/saj-integration` with the plugin and the gate on the combined data. The step also fails for the body of any test that takes over 200 ms, fixture set-up and teardown not counted. |
 | `make test-frontend` | The Vitest unit tests of the cards, with the coverage gate. |
-| `make test-modules` | Every module with logic (any function, method or branch) against the unit test files mapped to the module alone, with 100 % line and branch coverage required per module. A module with logic and no unit test file fails, and a module with no logic, such as an empty module or a data table, is skipped. |
+| `make test-modules` | Every module with logic (any function, method or branch) against the unit test files mapped to the module alone, with 100 % line and branch coverage required per module. The gate reads the coverage data of `make test-python`, so `make test-modules` runs `make test-python` first. A module with logic and no unit test file fails, and a module with no logic, such as an empty module or a data table, is skipped. |
 | `make test-isolated` | The `tests/saj` and `tests/mock` tests in an environment that has no Home Assistant, which proves the boundary between the library, the simulator and Home Assistant. Coverage is gated on the modules the test files test. |
 | `make test-runner-processes` | The real-process tests of the check runner in `tests/scripts/test_runner_processes.py`, which start real processes and are outside coverage. |
 | `make test-browser-controlled` | Playwright against the built bundle and controlled data, with no Home Assistant. |
-| `make test-browser-home-assistant` | Playwright against a throwaway Home Assistant with an HS3 simulator and an H2 simulator, which proves the cards load and work in the real frontend. |
-| `make mock-smoke` | The simulator container answers a client, then the tests in `tests/mock-integration` run. |
+| `make test-browser-home-assistant` | Playwright against a throwaway Home Assistant with an HS3 simulator and an H2 simulator, which proves the cards load and work in the real frontend. The target runs `make build` and `make mock-build` first, because the Home Assistant image copies the card bundle from the working tree and the simulators use the `saj-local-mock` image. |
+| `make mock-smoke` | The simulator container answers a client, then the tests in `tests/mock-integration` run. The target runs `make mock-build` first and runs the scenarios from the `saj-local-mock` image. |
 
 The checks that make up `make ci` also have a target each, so one tool can be run alone:
 
@@ -41,7 +41,7 @@ The checks that make up `make ci` also have a target each, so one tool can be ru
 
 `make lint`, `make python-ci`, `make frontend-check` and `make frontend-ci` run groups of these targets.
 
-Four more targets are not checks. `make setup` installs the Python and frontend dependencies and Chromium, `make docs` regenerates the entity reference, `make docs-images` makes the documentation screenshots and is not a step of `make ci`, and `make up`, `make down` and `make logs` run the development Home Assistant, see the [environment page](environment.md#run-home-assistant).
+Four more targets are not checks. `make setup` installs the Python and frontend dependencies and Chromium, `make docs` regenerates the entity reference, `make docs-images` makes the documentation screenshots, runs `make build` and `make mock-build` first like the Home Assistant browser test, and is not a step of `make ci`, and `make up`, `make down` and `make logs` run the development Home Assistant, see the [environment page](environment.md#run-home-assistant).
 
 Every target runs through the check runner in `.github/scripts/`. The runner prints one `[x]` or `[ ]` line per step, the findings of a failing step as `file:line message`, and a final result line. The runner runs every selected step even after one fails, and reports a timeout, a signal or a missing tool as such. Every step has a time limit. The quiet output exists so a person or an agent reads only what is needed to fix a failure.
 
@@ -68,7 +68,9 @@ A full `make test-python` measures and gates the whole package. When `ARGS` sele
 
 Test files with no module of the same name are listed in `.github/scripts/pytest_scope.json`, each with the modules the file tests, and a test file with no known module is rejected until the file is added there. The folder mapping is in `.github/scripts/pytest_scope.py`. Selecting tests with `-k`, `-m` or `--lf` needs a test file in `ARGS`, so coverage can be gated on the module the file tests.
 
-`test-modules` runs in `make ci` and gates every module at 100 % line and branch coverage from the unit test files mapped to the module alone, so coverage from the tests of other modules does not count. A module with logic and no unit test file fails the step, and a module with no logic is skipped, because the requirements forbid tests of constants. A module that only passes the gate in the full `test-python` run means other tests cover the module by accident, and that is a real gap to fix. `test-isolated` gates coverage the same way as any subset run.
+A full `make test-python` records which test ran each line and branch (a coverage context per test), so one run feeds both gates. The `ctrace` core is set only for the full run, in the environment of its commands, because the default `sysmon` core records a line for the first test that runs the line and so leaves later tests without a context. The same full run measures the duration of each test body, and any body over 200 ms fails the step with the test ID and the time. 200 ms under coverage is about 50 ms in a normal run, above the 125 ms that healthy tests reach under coverage, so the gate does not fail at random. A subset run keeps the `sysmon` core, records no contexts and applies no duration gate.
+
+`test-modules` runs in `make ci` and gates every module at 100 % line and branch coverage from the unit test files mapped to the module alone. The gate counts only the contexts of those test files and the code run when the module is imported, so coverage from the tests of other modules does not count. `test-modules` reads the coverage data of `test-python`, so `make test-modules` alone runs `test-python` first and `make ci` runs the tests once. A module with logic and no unit test file fails the step, and a module with no logic is skipped, because the requirements forbid tests of constants. A module that only passes the gate in the full `test-python` run means other tests cover the module by accident, and that is a real gap to fix. `test-isolated` gates coverage the same way as any subset run.
 
 ## Testing
 

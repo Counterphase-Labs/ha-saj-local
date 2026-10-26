@@ -92,8 +92,9 @@ _IMPORT_LINTER_BANNER = re.compile(
 _IMPORT_LINTER_BROKEN_TITLE = "Broken contracts"
 _NPM_BANNER = re.compile(r"^> \S+@\S+ \S")
 _WORKSPACE_PREFIX = "/github/workspace/"
-MODULE_COVERED = "covered"
-MODULE_NOT_COVERED = "not covered"
+_PYTEST_SLOW_CALL = re.compile(r"^(?P<seconds>\d+(?:\.\d+)?)s call\s+(?P<test>\S.*)$")
+_MODULE_GATE_FINDING = re.compile(r"^finding (?P<module>\S+): (?P<message>.*)$")
+_MODULE_GATE_SUMMARY = re.compile(r"^\d+ of \d+ modules covered$")
 
 
 def _lines(output: str) -> list[str]:
@@ -200,6 +201,18 @@ def _pytest_warnings(lines: list[str]) -> list[str]:
     return warnings
 
 
+def _pytest_slow_calls(lines: list[str]) -> list[Finding]:
+    return [
+        Finding(
+            match["test"].split("::", 1)[0],
+            None,
+            f"{match['test']} took {match['seconds']}s in the test body",
+        )
+        for line in lines
+        if (match := _PYTEST_SLOW_CALL.match(line))
+    ]
+
+
 def _pytest_summary_counts(counts: str) -> str:
     kept: list[str] = []
     warnings = ""
@@ -222,7 +235,9 @@ def parse_pytest(output: str, return_code: int) -> Parsed:
         total = _PYTEST_TOTAL.match(line)
         if total:
             coverage = f"{total['percent']}% cov"
-    summary = "  ".join(part for part in (counts, coverage) if part) or (
+    slow = _pytest_slow_calls(lines)
+    slow_count = f"{len(slow)} too slow" if slow else ""
+    summary = "  ".join(part for part in (counts, coverage, slow_count) if part) or (
         "passed" if return_code == 0 else "failed"
     )
     sections = _pytest_failure_sections(lines)
@@ -231,30 +246,23 @@ def parse_pytest(output: str, return_code: int) -> Parsed:
     details.extend(_pytest_warnings(lines))
     details.extend(_pytest_coverage_rows(lines))
     details.extend(line for line in lines if _PYTEST_GATE.search(line))
-    return Parsed(summary, tuple(details), _pytest_findings(sections))
+    details.extend(finding.message for finding in slow)
+    return Parsed(summary, tuple(details), (*_pytest_findings(sections), *slow))
 
 
-def module_coverage(module: str) -> Parser:
-    def parse(output: str, return_code: int) -> Parsed:
-        if return_code == 0:
-            return Parsed(MODULE_COVERED)
-        parsed = parse_pytest(output, return_code)
-        return Parsed(
-            MODULE_NOT_COVERED,
-            (f"{module}  {parsed.summary}", *(f"  {line}" for line in parsed.details)),
-            (Finding(module, None, parsed.summary), *parsed.findings),
-        )
-
-    return parse
-
-
-def combine_modules(parts: tuple[Parsed, ...]) -> Parsed:
-    covered = sum(1 for part in parts if part.summary == MODULE_COVERED)
-    return Parsed(
-        f"{covered} of {len(parts)} modules covered",
-        tuple(detail for part in parts for detail in part.details),
-        tuple(finding for part in parts for finding in part.findings),
+def parse_module_gate(output: str, return_code: int) -> Parsed:
+    del return_code
+    lines = _lines(output)
+    summary = next((line for line in lines if _MODULE_GATE_SUMMARY.match(line)), None)
+    if summary is None:
+        return Parsed("failed", tuple(lines))
+    findings = tuple(
+        Finding(m["module"], None, m["message"])
+        for line in lines
+        if (m := _MODULE_GATE_FINDING.match(line))
     )
+    details = tuple(f"{finding.file}  {finding.message}" for finding in findings)
+    return Parsed(summary, details, findings)
 
 
 def parse_ruff_format(output: str, return_code: int) -> Parsed:

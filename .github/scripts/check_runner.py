@@ -233,8 +233,8 @@ def execute_step(
                 raw=result.output,
             )
         parts.append(command.parser(result.output, result.return_code))
-    ok = all(result.return_code == 0 for result in results)
-    parsed = step.combine(tuple(parts)) if step.combine else merge(parts)
+    parsed = merge(parts)
+    ok = all(result.return_code == 0 for result in results) and not parsed.findings
     details = parsed.details
     if not ok and not details:
         details = tuple(
