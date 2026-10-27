@@ -1,3 +1,5 @@
+en | [de](../../de/developer/frontend.md) | [nl](../../nl/developer/frontend.md) | [fr](../../fr/developer/frontend.md) | [zh](../../zh-hans/developer/frontend.md) | [es](../../es/developer/frontend.md) | [it](../../it/developer/frontend.md) | [pl](../../pl/developer/frontend.md) | [sv](../../sv/developer/frontend.md)
+
 # Frontend
 
 How the card bundle is organised and built, and how to look at every card in the development instance.
@@ -17,7 +19,7 @@ The layout follows what changes together:
 - `src/system/` holds everything that is not drawing: finding a system's entities in `hass`, power direction, weekdays, schedule slots, faults, the control lock and service calls. The folder never touches the DOM, so the rules are tested without a browser.
 - `src/ui/` holds the parts every card draws, styled only with Home Assistant's theme variables, because the Home Assistant frontend promises no `ha-*` element to custom cards.
 - `src/cards/`, `src/features/` and `src/badges/` hold the elements and register the elements with the Home Assistant picker.
-- `src/i18n/` holds the text only the cards need, one file per language, with English as the fallback. Entity names, states and values come from Home Assistant.
+- `src/i18n/` holds the text only the cards need, one file per language, named by the Home Assistant language code like the files in the integration's `translations/` folder (English and the eight target languages), with English as the fallback for any other language. Entity names, states and values come from Home Assistant.
 - `tests/fakes/` holds a fake `hass`, built from a list of entities, and the replacements for the modules an element uses. Each unit test exercises one module with every collaborator replaced by one of the fakes.
 
 An element finds the entities of a system by device and translation key, never by entity ID, so a card never depends on an entity ID prefix.

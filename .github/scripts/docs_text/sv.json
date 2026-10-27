@@ -1,0 +1,89 @@
+{
+  "generated_notice": "Genereras av `make docs`. Redigera inte för hand.",
+  "areas": {
+    "inverter-and-pv": {
+      "title": "Växelriktare och PV",
+      "summary": "Växelriktarens utgång, solcellssträngar, reservport, energiräknare, versioner och hushållets last"
+    },
+    "grid-and-meter-a": {
+      "title": "Nät och Mätare A",
+      "summary": "Nätanslutningen och Mätare A, nätmätaren"
+    },
+    "meter-b": {
+      "title": "Mätare B",
+      "summary": "Mätare B, den andra mätaren som mäter en solcellsväxelriktare"
+    },
+    "battery": {
+      "title": "Batteri",
+      "summary": "Batteriet som helhet"
+    },
+    "battery-packs": {
+      "title": "Batteripack",
+      "summary": "Avläsningar och identitet för varje batteripack"
+    },
+    "ev-charger": {
+      "title": "Elbilsladdare",
+      "summary": "Elbilsladdaren och dess laddningsstyrningar"
+    },
+    "parallel-system": {
+      "title": "Parallellsystem",
+      "summary": "Avläsningarna från ett parallellt maskinsystem"
+    },
+    "settings": {
+      "title": "Inställningar",
+      "summary": "Inställningar och kommandon som ändrar växelriktaren"
+    },
+    "faults": {
+      "title": "Fel",
+      "summary": "Fel som växelriktaren, batteriet och elbilsladdaren rapporterar"
+    },
+    "added-by-the-integration": {
+      "title": "Tillagt av integrationen",
+      "summary": "Entiteter som integrationen lägger till utanför registerkatalogen"
+    }
+  },
+  "kinds": {
+    "binary_sensor": "Binär sensor",
+    "button": "Knapp",
+    "number": "Nummer",
+    "select": "Val",
+    "sensor": "Sensor",
+    "switch": "Brytare",
+    "time": "Tid"
+  },
+  "summary_line": "{summary}.",
+  "area_intro": "Integrationens funktionslista förklarar entiteterna för {title} i {links}.",
+  "link_join": " och ",
+  "sections": {
+    "Devices and entities": "Enheter och entiteter",
+    "Optional equipment": "Valfri utrustning",
+    "Changing settings": "Ändra inställningar",
+    "Device faults and repairs": "Enhetsfel och reparationer",
+    "Power control": "Effektstyrning"
+  },
+  "count_line": "{count} entiteter. {notice}",
+  "prefix_note": "Ett prefix som anges i Konfigurera hamnar efter `{entity_prefix}_` i ID:t för varje entitet i {title}, till exempel `{example}` med prefixet `{prefix}`.",
+  "area_header": [
+    "Namn",
+    "Entitets-ID",
+    "Typ",
+    "Enhet",
+    "Modeller",
+    "Utrustning och antal",
+    "Aktiverad som standard"
+  ],
+  "phase_note": "Fas {n} och högre",
+  "string_note": "PV-sträng {n} och högre",
+  "pack_note": "Batteripack {n} och högre",
+  "yes": "Ja",
+  "no": "Nej",
+  "only": "Endast {models}",
+  "index_title": "Entiteter",
+  "index_intro": "Varje entitet som SAJ Local kan skapa, en sida för varje område. Avsnittet [{section}]({link}) i integrationens funktionslista förklarar entitetstyperna, vilka entiteter som är aktiverade som standard och tecknet på effektavläsningar.",
+  "index_fit": "Ett system får bara de entiteter som passar dess modell, dess installerade utrustning och dess antal faser, solcellssträngar och batteripack. Kolumnen Modeller anger vilka modeller som har en entitet, och kolumnen Utrustning och antal anger vad som måste vara installerat.",
+  "index_header": [
+    "Område",
+    "Entiteter",
+    "Vad området innehåller"
+  ]
+}

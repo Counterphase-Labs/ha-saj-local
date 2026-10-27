@@ -1,3 +1,5 @@
+en | [de](../../../de/user/entities/parallel-system.md) | [nl](../../../nl/user/entities/parallel-system.md) | [fr](../../../fr/user/entities/parallel-system.md) | [zh](../../../zh-hans/user/entities/parallel-system.md) | [es](../../../es/user/entities/parallel-system.md) | [it](../../../it/user/entities/parallel-system.md) | [pl](../../../pl/user/entities/parallel-system.md) | [sv](../../../sv/user/entities/parallel-system.md)
+
 # Parallel system
 
 The readings of a parallel machine system.

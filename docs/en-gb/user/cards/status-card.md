@@ -1,3 +1,5 @@
+en | [de](../../../de/user/cards/status-card.md) | [nl](../../../nl/user/cards/status-card.md) | [fr](../../../fr/user/cards/status-card.md) | [zh](../../../zh-hans/user/cards/status-card.md) | [es](../../../es/user/cards/status-card.md) | [it](../../../it/user/cards/status-card.md) | [pl](../../../pl/user/cards/status-card.md) | [sv](../../../sv/user/cards/status-card.md)
+
 # Status card
 
 The Status card page explains the status card, which sums up a system in one place. The full list is in the [Status card](../../../../frontend/docs/features.md#status-card) section of the cards feature list. [Add an element](README.md#add-an-element) explains how to add the card and choose a system.

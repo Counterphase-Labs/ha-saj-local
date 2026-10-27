@@ -76,6 +76,54 @@ POWER_ENTITIES = {
 CONTROL_ALLOWED = ("binary_sensor", CONTROL_ALLOWED_KEY)
 
 
+TRANSLATIONS_DIRECTORY = (
+    Path(__file__).parents[2] / "custom_components/saj_local/translations"
+)
+OTHER_LANGUAGE_FILES = sorted(
+    path for path in TRANSLATIONS_DIRECTORY.glob("*.json") if path.stem != "en"
+)
+
+
+def _texts(node, path=()):
+    """Return every text of a nested translation as a path-to-text mapping."""
+    if isinstance(node, dict):
+        return {
+            found: text
+            for key, child in node.items()
+            for found, text in _texts(child, (*path, key)).items()
+        }
+    return {path: node}
+
+
+def _placeholders(text):
+    return {name for _, name, _, _ in string.Formatter().parse(text) if name}
+
+
+ENGLISH_TEXTS = _texts(TRANSLATIONS)
+
+
+@pytest.mark.parametrize("path", OTHER_LANGUAGE_FILES, ids=lambda path: path.stem)
+def test_every_language_has_the_keys_and_placeholders_of_english(path):
+    texts = _texts(json.loads(path.read_text(encoding="utf-8")))
+
+    assert sorted(ENGLISH_TEXTS.keys() - texts.keys()) == []
+    assert sorted(texts.keys() - ENGLISH_TEXTS.keys()) == []
+    assert [
+        key
+        for key, text in texts.items()
+        if _placeholders(text) != _placeholders(ENGLISH_TEXTS[key])
+    ] == []
+
+
+def test_the_language_comparison_finds_a_missing_key_and_a_changed_placeholder():
+    english = _texts({"a": {"b": "Hello {name}"}, "c": "Text"})
+    other = _texts({"a": {"b": "Hallo {nom}"}, "d": "Text"})
+
+    assert english.keys() - other.keys() == {("c",)}
+    assert other.keys() - english.keys() == {("d",)}
+    assert _placeholders(other[("a", "b")]) != _placeholders(english[("a", "b")])
+
+
 def _shipped_registers(*, profile_key: str):
     return [row for row in CATALOGUES[profile_key].registers if row.exposed]
 

@@ -1,3 +1,5 @@
+en | [de](../../de/user/optional-equipment.md) | [nl](../../nl/user/optional-equipment.md) | [fr](../../fr/user/optional-equipment.md) | [zh](../../zh-hans/user/optional-equipment.md) | [es](../../es/user/optional-equipment.md) | [it](../../it/user/optional-equipment.md) | [pl](../../pl/user/optional-equipment.md) | [sv](../../sv/user/optional-equipment.md)
+
 # Optional equipment
 
 The Optional equipment page explains how SAJ Local finds out which optional equipment your inverter has and how to override the result. The full list is in the [Optional equipment](../../../custom_components/saj_local/docs/features.md#optional-equipment) section of the integration feature list. The [supported equipment](supported-equipment.md) page says which model can have what, and the [entity reference](entities/README.md) says which entities each piece of equipment adds.

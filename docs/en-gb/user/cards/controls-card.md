@@ -1,3 +1,5 @@
+en | [de](../../../de/user/cards/controls-card.md) | [nl](../../../nl/user/cards/controls-card.md) | [fr](../../../fr/user/cards/controls-card.md) | [zh](../../../zh-hans/user/cards/controls-card.md) | [es](../../../es/user/cards/controls-card.md) | [it](../../../it/user/cards/controls-card.md) | [pl](../../../pl/user/cards/controls-card.md) | [sv](../../../sv/user/cards/controls-card.md)
+
 # Controls card
 
 The Controls card page explains the controls card, which gathers the settings of a system into sections so you can change the settings from a dashboard. The full list is in the [Controls card](../../../../frontend/docs/features.md#controls-card) section of the cards feature list. [Add an element](README.md#add-an-element) explains how to add the card and choose a system. The settings behind the controls are described in [changing settings](../changing-settings.md).

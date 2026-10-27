@@ -1,0 +1,89 @@
+{
+  "generated_notice": "Gegenereerd door `make docs`. Niet met de hand bewerken.",
+  "areas": {
+    "inverter-and-pv": {
+      "title": "Omvormer en PV",
+      "summary": "Uitgang van de omvormer, zonnestrings, back-uppoort, energietellers, versies en de huishoudelijke belasting"
+    },
+    "grid-and-meter-a": {
+      "title": "Net en Meter A",
+      "summary": "De netaansluiting en Meter A, de netmeter"
+    },
+    "meter-b": {
+      "title": "Meter B",
+      "summary": "Meter B, de tweede meter die een zonne-omvormer meet"
+    },
+    "battery": {
+      "title": "Batterij",
+      "summary": "De batterij als geheel"
+    },
+    "battery-packs": {
+      "title": "Batterijpacks",
+      "summary": "Metingen en identiteit van elk batterijpack"
+    },
+    "ev-charger": {
+      "title": "EV-lader",
+      "summary": "De EV-lader en de bediening van het opladen"
+    },
+    "parallel-system": {
+      "title": "Parallel systeem",
+      "summary": "De metingen van een parallel machinesysteem"
+    },
+    "settings": {
+      "title": "Instellingen",
+      "summary": "Instellingen en opdrachten die de omvormer wijzigen"
+    },
+    "faults": {
+      "title": "Storingen",
+      "summary": "Storingen die de omvormer, de batterij en de EV-lader melden"
+    },
+    "added-by-the-integration": {
+      "title": "Toegevoegd door de integratie",
+      "summary": "Entiteiten die de integratie toevoegt buiten de registercatalogus"
+    }
+  },
+  "kinds": {
+    "binary_sensor": "Binaire sensor",
+    "button": "Knop",
+    "number": "Nummer",
+    "select": "Selectie",
+    "sensor": "Sensor",
+    "switch": "Schakelaar",
+    "time": "Tijd"
+  },
+  "summary_line": "{summary}.",
+  "area_intro": "De functielijst van de integratie legt de {title}-entiteiten uit in {links}.",
+  "link_join": " en ",
+  "sections": {
+    "Devices and entities": "Apparaten en entiteiten",
+    "Optional equipment": "Optionele apparatuur",
+    "Changing settings": "Instellingen wijzigen",
+    "Device faults and repairs": "Apparaatstoringen en reparaties",
+    "Power control": "Vermogensregeling"
+  },
+  "count_line": "{count} entiteiten. {notice}",
+  "prefix_note": "Een voorvoegsel dat in Configureren is ingesteld komt na `{entity_prefix}_` in de ID van elke {title}-entiteit, bijvoorbeeld `{example}` met het voorvoegsel `{prefix}`.",
+  "area_header": [
+    "Naam",
+    "Entiteits-ID",
+    "Type",
+    "Eenheid",
+    "Modellen",
+    "Apparatuur en aantallen",
+    "Standaard ingeschakeld"
+  ],
+  "phase_note": "Fase {n} en hoger",
+  "string_note": "PV-string {n} en hoger",
+  "pack_note": "Batterijpack {n} en hoger",
+  "yes": "Ja",
+  "no": "Nee",
+  "only": "Alleen {models}",
+  "index_title": "Entiteiten",
+  "index_intro": "Elke entiteit die SAJ Local kan aanmaken, één pagina per gebied. De sectie [{section}]({link}) van de functielijst van de integratie legt de entiteitstypen uit, welke entiteiten standaard zijn ingeschakeld en het teken van vermogensmetingen.",
+  "index_fit": "Een systeem krijgt alleen de entiteiten die passen bij zijn model, zijn geïnstalleerde apparatuur en zijn aantal fasen, zonnestrings en batterijpacks. De kolom Modellen zegt welke modellen een entiteit hebben, en de kolom Apparatuur en aantallen zegt wat geïnstalleerd moet zijn.",
+  "index_header": [
+    "Gebied",
+    "Entiteiten",
+    "Wat het bevat"
+  ]
+}

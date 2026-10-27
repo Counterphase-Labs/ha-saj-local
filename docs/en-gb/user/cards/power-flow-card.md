@@ -1,3 +1,5 @@
+en | [de](../../../de/user/cards/power-flow-card.md) | [nl](../../../nl/user/cards/power-flow-card.md) | [fr](../../../fr/user/cards/power-flow-card.md) | [zh](../../../zh-hans/user/cards/power-flow-card.md) | [es](../../../es/user/cards/power-flow-card.md) | [it](../../../it/user/cards/power-flow-card.md) | [pl](../../../pl/user/cards/power-flow-card.md) | [sv](../../../sv/user/cards/power-flow-card.md)
+
 # Power flow card
 
 The Power flow card page explains the power flow card, which draws live power between solar, battery, grid, home and the optional equipment. The full list is in the [Power flow card](../../../../frontend/docs/features.md#power-flow-card) section of the cards feature list. [Add an element](README.md#add-an-element) explains how to add the card and choose a system.
@@ -29,6 +31,7 @@ The Power flow card page explains the power flow card, which draws live power be
 | Show optional equipment | `show_optional_equipment` | On |
 | Scope | `scope` (`system` or `parallel`) | `system` |
 
+<!-- jscpd:ignore-start -->
 ```yaml
 type: custom:saj-local-power-flow-card
 device: 0123456789abcdef0123456789abcdef
@@ -36,6 +39,7 @@ show_strings: false
 show_optional_equipment: true
 scope: system
 ```
+<!-- jscpd:ignore-end -->
 
 The `device` value is the ID of the device in Home Assistant. The visual editor fills the value in for you. The names of the entities behind each part are in the [entity reference](../entities/README.md).
 

@@ -1,0 +1,3313 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Verbinden met een SAJ-omvormer",
+        "description": "Voer het lokale Modbus TCP-eindpunt, het pollinginterval en het model in. Laat het model op Automatisch staan, tenzij de omvormer niet wordt herkend.",
+        "data": {
+          "host": "Host",
+          "port": "Poort",
+          "unit_id": "Unit-ID",
+          "scan_interval": "Seconden tussen updates",
+          "model": "Model",
+          "prefix": "Voorvoegsel",
+          "allow_control": "Bediening toestaan"
+        },
+        "data_description": {
+          "prefix": "Optioneel. Voegt een voorvoegsel toe aan de entiteits-ID's van deze installatie, bijvoorbeeld sensor.saj_house_pv_power in plaats van sensor.saj_pv_power. Gebruik dit als u meer dan één SAJ-systeem hebt. Alleen kleine letters en cijfers, geen underscores, maximaal 32 tekens, en geen twee installaties mogen hetzelfde voorvoegsel delen.",
+          "allow_control": "Standaard uit. Als dit aan staat, kunnen entiteitswijzigingen, knoppen en automatiseringen de instellingen van de omvormer wijzigen. Instellingen die de omvormer in gebruik nemen (meter, RS485, batterijprotocol, netwerk, EV-laderkoppeling) blijven alleen-lezen. U wordt om bevestiging gevraagd wanneer u dit inschakelt."
+        }
+      },
+      "confirm_model": {
+        "title": "Model bevestigen",
+        "description": "Het apparaat meldt type {device_type}, dat niet wordt herkend als {model}, dus kon niet als dat model worden geverifieerd. De vereiste registers antwoordden, maar de metingen kunnen onjuist zijn als het een ander model is. {model} toch gebruiken?"
+      },
+      "confirm_control": {
+        "title": "Bevestig dat bediening is toegestaan",
+        "description": "Als bediening is toegestaan, wijzigen entiteitswijzigingen en automatiseringen de instellingen van uw omvormer. Een verkeerde instelling kan de omvormer laten stoppen, veranderen hoe hij de batterij of het net gebruikt, of u geld kosten.\n\nHet inschakelen van EMS-functies schakelt de terugstroombeveiliging van de omvormer uit.\n\nAls Home Assistant stopt of deze installatie wordt herladen, probeert deze de functies uit te schakelen die u vanuit Home Assistant hebt ingeschakeld. Dit gebeurt naar beste vermogen, zonder garantie. Als de omvormer niet bereikbaar is of Home Assistant abrupt stopt, kunnen ze aan blijven staan. De eigen EMS-time-out van de omvormer kan ze dan beëindigen, maar dit is niet betrouwbaar gebleken.\n\nBediening toestaan schakelt ook maximaal {count} bedieningsentiteiten van dit systeem in, zoals tijdvakken en batterijlimieten, zodat ze op dashboards kunnen worden getoond en gewijzigd. Het uitlezen ervan verhoogt de belasting van {before} naar maximaal {after} van {budget} verzoeken per minuut. De entiteiten verschijnen ongeveer 30 seconden na het opslaan. Wacht tot ze verschijnen voordat u iets wijzigt: het systeem wordt nog één keer herladen wanneer ze verschijnen, en het herladen schakelt elke vermogensregelfunctie uit die daarvoor was ingeschakeld.\n\nBediening toestaan?",
+        "data": {
+          "ems_heartbeat": "EMS-hartslag (seconden)"
+        },
+        "data_description": {
+          "ems_heartbeat": "Hoe vaak de doelen van de EMS-functies die u vanuit Home Assistant inschakelt, en de EMS-limieten, worden uitgelezen om ze actief te houden, van 30 tot 3600 seconden. De EMS-time-out van de omvormer moet langer zijn dan dit. Alleen getoond voor modellen met EMS."
+        }
+      }
+    },
+    "error": {
+      "already_configured": "Dit eindpunt is al geconfigureerd.",
+      "invalid_host": "Voer een hostnaam of IP-adres in.",
+      "invalid_unit_id": "Voer een geheel Unit-ID in van 1 tot 247.",
+      "cannot_connect": "Kon geen verbinding maken met de omvormer of deze niet uitlezen. Controleer het eindpunt en probeer het opnieuw.",
+      "unsupported_device": "Het apparaat meldt type {device_type}, dat niet automatisch wordt herkend. Kies het model handmatig.",
+      "invalid_device_data": "De omvormer gaf ongeldige identiteits- of telemetriegegevens terug.",
+      "timeout": "De omvormer antwoordde niet op tijd. Controleer het eindpunt en probeer het opnieuw.",
+      "read_rejected": "De omvormer weigerde het uitlezen van een vereist register. Controleer of dit een ondersteund SAJ-apparaat en model is.",
+      "invalid_port": "Voer een geheel poortnummer in van 1 tot 65535.",
+      "invalid_endpoint": "Voer een geldige poort en een geldig Unit-ID in.",
+      "invalid_scan_interval": "Voer een geheel pollinginterval in van minimaal 10 seconden.",
+      "model_mismatch": "Dit apparaat identificeert zich als {detected_model}, niet als {selected_model}. Kies {detected_model} of Automatisch.",
+      "unknown_model": "Het model {selection} is geen bekend model. Kies Automatisch of een van de vermelde modellen.",
+      "invalid_prefix": "Gebruik alleen kleine letters en cijfers, zonder underscores, maximaal 32 tekens.",
+      "prefix_in_use": "Een andere SAJ Local-installatie gebruikt dit voorvoegsel al. Leeg laten telt ook mee, dus slechts één installatie kan geen voorvoegsel hebben.",
+      "entity_id_taken": "De entiteits-ID {entity_id} is al in gebruik in Home Assistant. Kies een ander voorvoegsel.",
+      "prefix_shadows_entity": "Dit voorvoegsel zou entiteits-ID's maken die botsen met de naam van een entiteit. Kies een ander voorvoegsel.",
+      "invalid_ems_heartbeat": "Voer een gehele hartslag in van 30 tot 3600 seconden."
+    },
+    "abort": {
+      "already_configured": "Deze omvormer is al geconfigureerd.",
+      "confirmation_not_pending": "Er wacht geen gevalideerde wijziging op bevestiging."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Verbinding en polling",
+        "description": "Voer het lokale Modbus TCP-eindpunt, het pollinginterval en het model in. Instellingen worden opgeslagen nadat het eindpunt is gevalideerd. De integratie stuurt de omvormer maximaal {budget} verzoeken per minuut, zodat de communicatiemodule niet wordt overbelast. Deze installatie gebruikt er op dit moment {load} van.",
+        "data": {
+          "host": "Host",
+          "port": "Poort",
+          "unit_id": "Unit-ID",
+          "scan_interval": "Seconden tussen updates",
+          "model": "Model",
+          "prefix": "Voorvoegsel",
+          "allow_control": "Bediening toestaan",
+          "ems_heartbeat": "EMS-hartslag (seconden)"
+        },
+        "data_description": {
+          "prefix": "Optioneel. Voegt een voorvoegsel toe aan de entiteits-ID's van deze installatie, bijvoorbeeld sensor.saj_house_pv_power in plaats van sensor.saj_pv_power. Gebruik dit als u meer dan één SAJ-systeem hebt. Alleen kleine letters en cijfers, geen underscores, maximaal 32 tekens, en geen twee installaties mogen hetzelfde voorvoegsel delen. Het wijzigen ervan hernoemt de entiteiten van deze installatie nadat u bevestigt.",
+          "allow_control": "Standaard uit. Als dit aan staat, kunnen entiteitswijzigingen, knoppen en automatiseringen de instellingen van de omvormer wijzigen. Instellingen die de omvormer in gebruik nemen (meter, RS485, batterijprotocol, netwerk, EV-laderkoppeling) blijven alleen-lezen. U wordt om bevestiging gevraagd wanneer u dit inschakelt.",
+          "ems_heartbeat": "Hoe vaak de doelen van de EMS-functies die u vanuit Home Assistant inschakelt, en de EMS-limieten, worden uitgelezen om ze actief te houden, van 30 tot 3600 seconden. De EMS-time-out van de omvormer moet langer zijn dan dit. Alleen getoond voor modellen met EMS."
+        },
+        "sections": {
+          "equipment": {
+            "name": "Apparatuur",
+            "description": "Nu behandeld als geïnstalleerd: {equipment_fitted}. Automatisch detecteert elk onderdeel bij elke start en elke herlaad, en bewaart wat is gedetecteerd tot u Niet geïnstalleerd kiest. Geïnstalleerd maakt de entiteiten aan zonder te detecteren. Niet geïnstalleerd verwijdert de entiteiten uit Home Assistant, inclusief aanpassingen die u eraan hebt gemaakt, en vergeet wat is gedetecteerd. Entiteits-ID's blijven hetzelfde als het onderdeel opnieuw wordt geïnstalleerd, zodat de geschiedenis doorloopt.",
+            "data": {
+              "battery": "Batterij",
+              "meter_a": "Meter A",
+              "meter_b": "Meter B",
+              "ev_charger": "EV-lader",
+              "parallel": "Parallel systeem"
+            },
+            "data_description": {
+              "battery": "Batterij-entiteiten. Als de omvormer niet antwoordt op de detectie, wordt een batterij aangenomen.",
+              "meter_a": "Entiteiten van de eerste meter. Als de omvormer niet antwoordt op de detectie, wordt de meter aangenomen.",
+              "meter_b": "Entiteiten van de tweede meter, gedetecteerd aan de hand van de Meter B-status van de omvormer.",
+              "ev_charger": "Entiteiten van de SAJ EV-lader, gedetecteerd aan de hand van de instelling van de omvormer voor het inschakelen van de EV-lader.",
+              "parallel": "Entiteiten van een parallel machinesysteem, gedetecteerd aan de hand van de parallelle modus van de omvormer en het aantal machines online."
+            }
+          }
+        }
+      },
+      "confirm_replacement": {
+        "title": "Vervanging van omvormer bevestigen",
+        "description": "De hardware van deze bestaande installatie vervangen door de {model} met serienummer {serial}? Uw entiteiten en hun historische gegevens blijven bij deze installatie."
+      },
+      "confirm_model": {
+        "title": "Model bevestigen",
+        "description": "Het apparaat meldt type {device_type}, dat niet wordt herkend als {model}, dus kon niet als dat model worden geverifieerd. De vereiste registers antwoordden, maar de metingen kunnen onjuist zijn als het een ander model is. {model} toch gebruiken?"
+      },
+      "confirm_prefix": {
+        "title": "Wijziging van entiteits-ID bevestigen",
+        "description": "Entiteits-ID's veranderen van `{old_pattern}` naar `{new_pattern}`, voor elk entiteitstype.\n\nGeschiedenis en langetermijnstatistieken verhuizen naar de nieuwe entiteits-ID's.\n\nAutomatiseringen, scripts, dashboards, templates en Energie-instellingen die de oude entiteits-ID's gebruiken, werken niet meer totdat u ze bijwerkt.\n\nEntiteiten die u zelf hebt hernoemd blijven ongemoeid. De entiteits-ID's wijzigen?"
+      },
+      "confirm_load": {
+        "title": "Langzamere polling bevestigen",
+        "description": "Met dit standaardinterval zou de installatie {after} verzoeken per minuut nodig hebben, tegenover {before}. De integratie stuurt de omvormer maximaal {budget} verzoeken per minuut, zodat de communicatiemodule niet wordt overbelast. Omdat dit boven de limiet ligt, worden entiteiten langzamer uitgelezen dan ingesteld. Het interval toch opslaan?"
+      },
+      "confirm_control": {
+        "title": "Bevestig dat bediening is toegestaan",
+        "description": "Als bediening is toegestaan, wijzigen entiteitswijzigingen en automatiseringen de instellingen van uw omvormer. Een verkeerde instelling kan de omvormer laten stoppen, veranderen hoe hij de batterij of het net gebruikt, of u geld kosten.\n\nHet inschakelen van EMS-functies schakelt de terugstroombeveiliging van de omvormer uit.\n\nAls Home Assistant stopt of deze installatie wordt herladen, probeert deze de functies uit te schakelen die u vanuit Home Assistant hebt ingeschakeld. Dit gebeurt naar beste vermogen, zonder garantie. Als de omvormer niet bereikbaar is of Home Assistant abrupt stopt, kunnen ze aan blijven staan. De eigen EMS-time-out van de omvormer kan ze dan beëindigen, maar dit is niet betrouwbaar gebleken.\n\nBediening toestaan schakelt ook {count} bedieningsentiteiten van dit systeem in, zoals tijdvakken en batterijlimieten, zodat ze op dashboards kunnen worden getoond en gewijzigd. Het uitlezen ervan verhoogt de belasting van {before} naar {after} van {budget} verzoeken per minuut. De entiteiten verschijnen ongeveer 30 seconden na het opslaan. Wacht tot ze verschijnen voordat u iets wijzigt: het systeem wordt nog één keer herladen wanneer ze verschijnen, en het herladen schakelt elke vermogensregelfunctie uit die daarvoor was ingeschakeld.\n\nBediening toestaan?"
+      }
+    },
+    "error": {
+      "already_configured": "Een ander SAJ Local-item bezit dit eindpunt of dit serienummer van de omvormer al.",
+      "invalid_host": "Voer een hostnaam of IP-adres in.",
+      "invalid_port": "Voer een geheel poortnummer in van 1 tot 65535.",
+      "invalid_unit_id": "Voer een geheel Unit-ID in van 1 tot 247.",
+      "invalid_endpoint": "Voer een geldige poort en een geldig Unit-ID in.",
+      "invalid_scan_interval": "Voer een geheel pollinginterval in van minimaal 10 seconden.",
+      "cannot_connect": "Kon geen verbinding maken met de omvormer of deze niet uitlezen. Controleer het eindpunt en probeer het opnieuw.",
+      "unsupported_device": "Het apparaat meldt type {device_type}, dat niet automatisch wordt herkend. Kies het model handmatig.",
+      "invalid_device_data": "De omvormer gaf ongeldige identiteits- of telemetriegegevens terug.",
+      "timeout": "De omvormer antwoordde niet op tijd. Controleer het eindpunt en probeer het opnieuw.",
+      "read_rejected": "De omvormer weigerde het uitlezen van een vereist register. Controleer of dit een ondersteund SAJ-apparaat en model is.",
+      "model_mismatch": "Dit apparaat identificeert zich als {detected_model}, niet als {selected_model}. Kies {detected_model} of Automatisch.",
+      "unknown_model": "Het model {selection} is geen bekend model. Kies Automatisch of een van de vermelde modellen.",
+      "invalid_prefix": "Gebruik alleen kleine letters en cijfers, zonder underscores, maximaal 32 tekens.",
+      "prefix_in_use": "Een andere SAJ Local-installatie gebruikt dit voorvoegsel al. Leeg laten telt ook mee, dus slechts één installatie kan geen voorvoegsel hebben.",
+      "entity_id_taken": "De entiteits-ID {entity_id} is al in gebruik in Home Assistant. Kies een ander voorvoegsel.",
+      "statistics_exist": "Home Assistant bevat al langetermijnstatistieken onder {entity_id}, dus de geschiedenis van deze installatie kon er niet naartoe worden verplaatst. Kies een ander voorvoegsel.",
+      "prefix_shadows_entity": "Dit voorvoegsel zou entiteits-ID's maken die botsen met de naam van een entiteit. Kies een ander voorvoegsel.",
+      "invalid_ems_heartbeat": "Voer een gehele hartslag in van 30 tot 3600 seconden.",
+      "invalid_equipment": "Kies Automatisch, Geïnstalleerd of Niet geïnstalleerd voor elk onderdeel van de apparatuur."
+    },
+    "abort": {
+      "changes_saved": "De SAJ Local-instellingen zijn opgeslagen.",
+      "already_configured": "Een ander SAJ Local-item bezit nu dit eindpunt of dit serienummer van de omvormer.",
+      "confirmation_not_pending": "Er wacht geen gevalideerde wijziging op bevestiging.",
+      "prefix_unavailable": "Het voorvoegsel of een van de entiteits-ID's ervan is in gebruik genomen terwijl u bevestigde. Er is niets gewijzigd."
+    }
+  },
+  "config_subentries": {
+    "polling_group": {
+      "entry_type": "Pollinggroep",
+      "initiate_flow": {
+        "user": "Pollinggroep toevoegen"
+      },
+      "step": {
+        "user": {
+          "title": "Pollinggroep toevoegen",
+          "description": "Entiteiten in een pollinggroep worden uitgelezen met het eigen interval van de groep. Alle andere entiteiten worden uitgelezen met het standaardinterval. De integratie stuurt de omvormer maximaal {budget} verzoeken per minuut, zodat de communicatiemodule niet wordt overbelast. Deze installatie gebruikt er op dit moment {load} van. Uitgeschakelde entiteiten kunnen nu worden gegroepeerd en kosten niets totdat ze worden ingeschakeld.",
+          "data": {
+            "name": "Naam",
+            "scan_interval": "Seconden tussen updates",
+            "keys": "Entiteiten"
+          },
+          "data_description": {
+            "keys": "Vermeld in registervolgorde, elk met het blok registers waaruit het wordt uitgelezen. Entiteiten in hetzelfde blok kunnen een verzoek delen."
+          }
+        },
+        "reconfigure": {
+          "title": "Pollinggroep bewerken",
+          "description": "Entiteiten in een pollinggroep worden uitgelezen met het eigen interval van de groep. Een entiteit kan maar tot één groep behoren. De integratie stuurt de omvormer maximaal {budget} verzoeken per minuut, zodat de communicatiemodule niet wordt overbelast. Deze installatie gebruikt er op dit moment {load} van. Uitgeschakelde entiteiten kunnen nu worden gegroepeerd en kosten niets totdat ze worden ingeschakeld.",
+          "data": {
+            "name": "Naam",
+            "scan_interval": "Seconden tussen updates",
+            "keys": "Entiteiten"
+          },
+          "data_description": {
+            "keys": "Vermeld in registervolgorde, elk met het blok registers waaruit het wordt uitgelezen. Entiteiten in hetzelfde blok kunnen een verzoek delen."
+          }
+        },
+        "review_group": {
+          "title": "De verzoekbelasting controleren",
+          "description": "Verzoeken die nodig zijn om deze groep één keer uit te lezen: {requests}.\n\nDe integratie stuurt de omvormer maximaal {budget} verzoeken per minuut, zodat de communicatiemodule niet wordt overbelast. Deze installatie gebruikt er nu {before} van en gebruikt er {after} met deze groep opgeslagen.",
+          "menu_options": {
+            "save_group": "De groep opslaan",
+            "change_selection": "De selectie wijzigen"
+          }
+        },
+        "review_group_over_budget": {
+          "title": "De verzoekbelasting controleren",
+          "description": "Verzoeken die nodig zijn om deze groep één keer uit te lezen: {requests}.\n\nDe integratie stuurt de omvormer maximaal {budget} verzoeken per minuut, zodat de communicatiemodule niet wordt overbelast. Deze installatie gebruikt er nu {before} van en zou er {after} nodig hebben met deze groep opgeslagen. Omdat dit boven de limiet ligt, worden entiteiten langzamer uitgelezen dan ingesteld. U kunt de groep nog steeds opslaan.",
+          "menu_options": {
+            "save_group": "De groep opslaan",
+            "change_selection": "De selectie wijzigen"
+          }
+        }
+      },
+      "error": {
+        "invalid_scan_interval": "Voer een geheel pollinginterval in van minimaal 10 seconden.",
+        "no_sensors_selected": "Selecteer minstens één entiteit.",
+        "sensor_in_other_group": "Een geselecteerde entiteit behoort al tot een andere pollinggroep."
+      },
+      "abort": {
+        "no_sensors": "Deze installatie heeft nog geen entiteiten, dus er kan geen pollinggroep worden aangemaakt.",
+        "all_sensors_assigned": "Elke entiteit behoort al tot een pollinggroep, dus er is er geen meer om toe te voegen.",
+        "reconfigure_successful": "De pollinggroep is opgeslagen.",
+        "confirmation_not_pending": "Er wacht geen gevalideerde pollinggroep op een beslissing."
+      }
+    },
+    "power_schedule": {
+      "entry_type": "Schema voor vermogensregeling",
+      "initiate_flow": {
+        "user": "Schema voor vermogensregeling toevoegen"
+      },
+      "step": {
+        "user": {
+          "title": "Schema voor vermogensregeling toevoegen",
+          "description": "Kies de functie die op een ingesteld vermogen moet worden gehouden en de Home Assistant-schemahelper die aangeeft wanneer. De integratie schakelt de functie in wanneer het schema aangaat en uit wanneer het schema uitgaat. Een schemablok kan de extra gegevens power bevatten, in hele watts, met een negatief getal om op te laden of af te nemen en een positief getal om te ontladen of terug te leveren; zonder deze gegevens wordt het vermogensdoel van de functie gebruikt. Bediening toestaan moet aan staan.",
+          "data": {
+            "function": "Functie",
+            "schedule": "Schema"
+          },
+          "data_description": {
+            "function": "Elke functie kan één schema volgen.",
+            "schedule": "Een schemahelper kan door één functie van dit systeem worden gebruikt."
+          }
+        },
+        "reconfigure": {
+          "title": "Schema voor vermogensregeling bewerken",
+          "description": "Kies de functie die op een ingesteld vermogen moet worden gehouden en de Home Assistant-schemahelper die aangeeft wanneer. De integratie schakelt de functie in wanneer het schema aangaat en uit wanneer het schema uitgaat. Een schemablok kan de extra gegevens power bevatten, in hele watts, met een negatief getal om op te laden of af te nemen en een positief getal om te ontladen of terug te leveren; zonder deze gegevens wordt het vermogensdoel van de functie gebruikt. Bediening toestaan moet aan staan.",
+          "data": {
+            "function": "Functie",
+            "schedule": "Schema"
+          },
+          "data_description": {
+            "function": "Elke functie kan één schema volgen.",
+            "schedule": "Een schemahelper kan door één functie van dit systeem worden gebruikt."
+          }
+        }
+      },
+      "error": {
+        "control_not_allowed": "Bediening toestaan staat uit, dus een schema zou niets kunnen doen. Schakel eerst Bediening toestaan in bij Configureren.",
+        "function_already_scheduled": "Deze functie volgt al een schema in dit systeem.",
+        "schedule_in_use": "Deze schemahelper wordt al gebruikt door een ander schema voor vermogensregeling van dit systeem.",
+        "schedule_not_registered": "Deze schemahelper heeft geen vermelding in het entiteitenregister, dus het schema voor vermogensregeling kon een hernoeming van de helper niet volgen. Kies een schemahelper die in de interface is aangemaakt."
+      },
+      "abort": {
+        "reconfigure_successful": "Het schema voor vermogensregeling is opgeslagen."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "ethernet_protocol_version": {
+        "name": "Ethernet-protocolversie"
+      },
+      "ethernet_mac_address": {
+        "name": "Ethernet-MAC-adres"
+      },
+      "ev_serial_number": {
+        "name": "Serienummer EV-lader"
+      },
+      "ev_model": {
+        "name": "Model EV-lader"
+      },
+      "ev_software_version": {
+        "name": "Softwareversie EV-lader"
+      },
+      "ev_hardware_version": {
+        "name": "Hardwareversie EV-lader"
+      },
+      "ev_phase_count": {
+        "name": "Aantal fasen EV-lader"
+      },
+      "ev_minimum_power": {
+        "name": "Minimaal vermogen EV-lader"
+      },
+      "ev_maximum_power": {
+        "name": "Maximaal vermogen EV-lader"
+      },
+      "ev_work_mode": {
+        "name": "Werkmodus EV-lader",
+        "state": {
+          "disabled": "Uitgeschakeld",
+          "standard": "Standaard",
+          "time_based": "Tijdgebaseerd",
+          "pv_surplus": "PV-overschot",
+          "ems": "EMS"
+        }
+      },
+      "ev_status": {
+        "name": "Status EV-lader",
+        "state": {
+          "idle": "Inactief",
+          "ready": "Gereed",
+          "charging": "Opladen",
+          "charger_suspended": "Lader onderbroken",
+          "vehicle_suspended": "Voertuig onderbroken",
+          "complete": "Voltooid"
+        }
+      },
+      "ev_l1_voltage": {
+        "name": "Spanning L1 EV-lader"
+      },
+      "ev_l1_current": {
+        "name": "Stroom L1 EV-lader"
+      },
+      "ev_l2_voltage": {
+        "name": "Spanning L2 EV-lader"
+      },
+      "ev_l2_current": {
+        "name": "Stroom L2 EV-lader"
+      },
+      "ev_l3_voltage": {
+        "name": "Spanning L3 EV-lader"
+      },
+      "ev_l3_current": {
+        "name": "Stroom L3 EV-lader"
+      },
+      "ev_power": {
+        "name": "Vermogen EV-lader"
+      },
+      "ev_charge_duration": {
+        "name": "EV-oplaadduur"
+      },
+      "ev_session_energy": {
+        "name": "Sessie-energie EV-lader"
+      },
+      "ev_total_energy": {
+        "name": "Totale energie EV-lader"
+      },
+      "ev_control_pilot_voltage": {
+        "name": "Control pilot-spanning EV-lader"
+      },
+      "ev_duty_cycle": {
+        "name": "Dutycycle EV-lader"
+      },
+      "ev_remote_control": {
+        "name": "Afstandsbediening EV-lader",
+        "state": {
+          "off": "Uit",
+          "on": "Aan"
+        }
+      },
+      "ev_current_setpoint": {
+        "name": "Stroomsetpoint EV-lader"
+      },
+      "ev_session_start": {
+        "name": "Sessiestart EV-lader"
+      },
+      "ev_session_end": {
+        "name": "Sessie-einde EV-lader"
+      },
+      "settings_protocol_version": {
+        "name": "Protocolversie van instellingen"
+      },
+      "inverter_clock": {
+        "name": "Omvormerklok"
+      },
+      "operating_mode": {
+        "name": "Bedrijfsmodus",
+        "state": {
+          "initialisation": "Initialisatie",
+          "standby": "Stand-by",
+          "operating": "In bedrijf",
+          "off_grid": "Off-grid",
+          "grid_connected_load_bypass": "Netgekoppelde belasting / bypass",
+          "fault": "Storing",
+          "upgrade": "Upgrade",
+          "debugging": "Debuggen",
+          "self_check": "Zelfcontrole",
+          "reset": "Reset"
+        }
+      },
+      "inverter_temperature": {
+        "name": "Omvormertemperatuur"
+      },
+      "ambient_temperature": {
+        "name": "Omgevingstemperatuur"
+      },
+      "leakage_current": {
+        "name": "Lekstroom"
+      },
+      "pv1_insulation_resistance": {
+        "name": "PV1-isolatieweerstand"
+      },
+      "pv2_insulation_resistance": {
+        "name": "PV2-isolatieweerstand"
+      },
+      "grid_connection_countdown": {
+        "name": "Aftelling netaansluiting"
+      },
+      "inverter_discharge_power_setpoint": {
+        "name": "Setpoint ontlaadvermogen omvormer"
+      },
+      "inverter_charge_power_setpoint": {
+        "name": "Setpoint oplaadvermogen omvormer"
+      },
+      "battery_discharge_current_setpoint": {
+        "name": "Setpoint ontlaadstroom batterij"
+      },
+      "battery_charge_current_setpoint": {
+        "name": "Setpoint oplaadstroom batterij"
+      },
+      "battery_status_code": {
+        "name": "Batterijstatuscode"
+      },
+      "battery_protocol_active": {
+        "name": "Batterijprotocol (van kracht)"
+      },
+      "battery_charge_limit_active": {
+        "name": "Oplaadlimiet batterij (van kracht)"
+      },
+      "battery_discharge_limit_active": {
+        "name": "Ontlaadlimiet batterij (van kracht)"
+      },
+      "battery_depth_of_discharge_active": {
+        "name": "Batterijontladingsdiepte (van kracht)"
+      },
+      "backup_reserve_soc_active": {
+        "name": "Laadniveau back-upreserve (van kracht)"
+      },
+      "meter_configuration_active": {
+        "name": "Meterconfiguratie (van kracht)"
+      },
+      "grid_l1_voltage": {
+        "name": "Netspanning L1"
+      },
+      "grid_l1_current": {
+        "name": "Netstroom L1"
+      },
+      "grid_l1_frequency": {
+        "name": "Netfrequentie L1"
+      },
+      "grid_l1_dc_current": {
+        "name": "Netgelijkstroom L1"
+      },
+      "grid_l1_power": {
+        "name": "Netvermogen L1"
+      },
+      "grid_l1_apparent_power": {
+        "name": "Schijnbaar netvermogen L1"
+      },
+      "grid_l1_power_factor": {
+        "name": "Netarbeidsfactor L1"
+      },
+      "grid_l2_voltage": {
+        "name": "Netspanning L2"
+      },
+      "grid_l2_current": {
+        "name": "Netstroom L2"
+      },
+      "grid_l2_frequency": {
+        "name": "Netfrequentie L2"
+      },
+      "grid_l2_dc_current": {
+        "name": "Netgelijkstroom L2"
+      },
+      "grid_l2_power": {
+        "name": "Netvermogen L2"
+      },
+      "grid_l2_apparent_power": {
+        "name": "Schijnbaar netvermogen L2"
+      },
+      "grid_l2_power_factor": {
+        "name": "Netarbeidsfactor L2"
+      },
+      "grid_l3_voltage": {
+        "name": "Netspanning L3"
+      },
+      "grid_l3_current": {
+        "name": "Netstroom L3"
+      },
+      "grid_l3_frequency": {
+        "name": "Netfrequentie L3"
+      },
+      "grid_l3_dc_current": {
+        "name": "Netgelijkstroom L3"
+      },
+      "grid_l3_power": {
+        "name": "Netvermogen L3"
+      },
+      "grid_l3_apparent_power": {
+        "name": "Schijnbaar netvermogen L3"
+      },
+      "grid_l3_power_factor": {
+        "name": "Netarbeidsfactor L3"
+      },
+      "inverter_l1_voltage": {
+        "name": "Omvormerspanning L1"
+      },
+      "inverter_l1_current": {
+        "name": "Omvormerstroom L1"
+      },
+      "inverter_l1_frequency": {
+        "name": "Omvormerfrequentie L1"
+      },
+      "inverter_l1_power": {
+        "name": "Omvormervermogen L1"
+      },
+      "inverter_l1_apparent_power": {
+        "name": "Schijnbaar omvormervermogen L1"
+      },
+      "inverter_l2_voltage": {
+        "name": "Omvormerspanning L2"
+      },
+      "inverter_l2_current": {
+        "name": "Omvormerstroom L2"
+      },
+      "inverter_l2_frequency": {
+        "name": "Omvormerfrequentie L2"
+      },
+      "inverter_l2_power": {
+        "name": "Omvormervermogen L2"
+      },
+      "inverter_l2_apparent_power": {
+        "name": "Schijnbaar omvormervermogen L2"
+      },
+      "inverter_l3_voltage": {
+        "name": "Omvormerspanning L3"
+      },
+      "inverter_l3_current": {
+        "name": "Omvormerstroom L3"
+      },
+      "inverter_l3_frequency": {
+        "name": "Omvormerfrequentie L3"
+      },
+      "inverter_l3_power": {
+        "name": "Omvormervermogen L3"
+      },
+      "inverter_l3_apparent_power": {
+        "name": "Schijnbaar omvormervermogen L3"
+      },
+      "backup_l1_voltage": {
+        "name": "Back-upspanning L1"
+      },
+      "backup_l1_current": {
+        "name": "Back-upstroom L1"
+      },
+      "backup_l1_frequency": {
+        "name": "Back-upfrequentie L1"
+      },
+      "backup_l1_dc_voltage": {
+        "name": "Back-upgelijkspanning L1"
+      },
+      "backup_l1_power": {
+        "name": "Back-upvermogen L1"
+      },
+      "backup_l1_apparent_power": {
+        "name": "Schijnbaar back-upvermogen L1"
+      },
+      "backup_l2_voltage": {
+        "name": "Back-upspanning L2"
+      },
+      "backup_l2_current": {
+        "name": "Back-upstroom L2"
+      },
+      "backup_l2_frequency": {
+        "name": "Back-upfrequentie L2"
+      },
+      "backup_l2_dc_voltage": {
+        "name": "Back-upgelijkspanning L2"
+      },
+      "backup_l2_power": {
+        "name": "Back-upvermogen L2"
+      },
+      "backup_l2_apparent_power": {
+        "name": "Schijnbaar back-upvermogen L2"
+      },
+      "backup_l3_voltage": {
+        "name": "Back-upspanning L3"
+      },
+      "backup_l3_current": {
+        "name": "Back-upstroom L3"
+      },
+      "backup_l3_frequency": {
+        "name": "Back-upfrequentie L3"
+      },
+      "backup_l3_dc_voltage": {
+        "name": "Back-upgelijkspanning L3"
+      },
+      "backup_l3_power": {
+        "name": "Back-upvermogen L3"
+      },
+      "backup_l3_apparent_power": {
+        "name": "Schijnbaar back-upvermogen L3"
+      },
+      "dc_bus_voltage": {
+        "name": "DC-busspanning"
+      },
+      "dc_bus_slave_voltage": {
+        "name": "Slavespanning DC-bus"
+      },
+      "battery_voltage": {
+        "name": "Batterijspanning"
+      },
+      "battery_current": {
+        "name": "Batterijstroom"
+      },
+      "battery_port_power": {
+        "name": "Vermogen batterijpoort"
+      },
+      "battery_temperature": {
+        "name": "Batterijtemperatuur"
+      },
+      "battery_soc": {
+        "name": "Batterijlaadniveau"
+      },
+      "pv1_voltage": {
+        "name": "PV1-spanning"
+      },
+      "pv1_current": {
+        "name": "PV1-stroom"
+      },
+      "pv1_power": {
+        "name": "PV1-vermogen"
+      },
+      "pv2_voltage": {
+        "name": "PV2-spanning"
+      },
+      "pv2_current": {
+        "name": "PV2-stroom"
+      },
+      "pv2_power": {
+        "name": "PV2-vermogen"
+      },
+      "grid_output_l1_voltage": {
+        "name": "Netuitgangsspanning L1"
+      },
+      "grid_output_l1_current": {
+        "name": "Netuitgangsstroom L1"
+      },
+      "grid_output_l1_frequency": {
+        "name": "Netuitgangsfrequentie L1"
+      },
+      "grid_output_l1_power": {
+        "name": "Netuitgangsvermogen L1"
+      },
+      "grid_output_l2_voltage": {
+        "name": "Netuitgangsspanning L2"
+      },
+      "grid_output_l2_power": {
+        "name": "Netuitgangsvermogen L2"
+      },
+      "grid_output_l3_voltage": {
+        "name": "Netuitgangsspanning L3"
+      },
+      "grid_output_l3_power": {
+        "name": "Netuitgangsvermogen L3"
+      },
+      "load_power": {
+        "name": "Huisvermogen"
+      },
+      "pv_power": {
+        "name": "Zonnevermogen"
+      },
+      "battery_power": {
+        "name": "Batterijvermogen"
+      },
+      "grid_power": {
+        "name": "Netvermogen"
+      },
+      "inverter_power": {
+        "name": "Omvormervermogen"
+      },
+      "grid_load_power": {
+        "name": "Netbelastingvermogen"
+      },
+      "pv_energy_today": {
+        "name": "Zonne-energie vandaag"
+      },
+      "pv_energy_month": {
+        "name": "Zonne-energie deze maand"
+      },
+      "pv_energy_year": {
+        "name": "Zonne-energie dit jaar"
+      },
+      "pv_energy_total": {
+        "name": "Zonne-energie totaal"
+      },
+      "battery_charge_energy_today": {
+        "name": "Batterijoplaadenergie vandaag"
+      },
+      "battery_charge_energy_month": {
+        "name": "Batterijoplaadenergie deze maand"
+      },
+      "battery_charge_energy_year": {
+        "name": "Batterijoplaadenergie dit jaar"
+      },
+      "battery_charge_energy_total": {
+        "name": "Batterijoplaadenergie totaal"
+      },
+      "battery_discharge_energy_today": {
+        "name": "Batterijontlaadenergie vandaag"
+      },
+      "battery_discharge_energy_month": {
+        "name": "Batterijontlaadenergie deze maand"
+      },
+      "battery_discharge_energy_year": {
+        "name": "Batterijontlaadenergie dit jaar"
+      },
+      "battery_discharge_energy_total": {
+        "name": "Batterijontlaadenergie totaal"
+      },
+      "load_energy_today": {
+        "name": "Huisverbruik vandaag"
+      },
+      "load_energy_month": {
+        "name": "Huisverbruik deze maand"
+      },
+      "load_energy_year": {
+        "name": "Huisverbruik dit jaar"
+      },
+      "load_energy_total": {
+        "name": "Huisverbruik totaal"
+      },
+      "backup_load_energy_today": {
+        "name": "Back-upbelasting vandaag"
+      },
+      "backup_load_energy_month": {
+        "name": "Back-upbelasting deze maand"
+      },
+      "backup_load_energy_year": {
+        "name": "Back-upbelasting dit jaar"
+      },
+      "backup_load_energy_total": {
+        "name": "Back-upbelasting totaal"
+      },
+      "grid_l1_export_energy_today": {
+        "name": "Netteruglevering L1 vandaag"
+      },
+      "grid_l1_export_energy_month": {
+        "name": "Netteruglevering L1 deze maand"
+      },
+      "grid_l1_export_energy_year": {
+        "name": "Netteruglevering L1 dit jaar"
+      },
+      "grid_l1_export_energy_total": {
+        "name": "Netteruglevering L1 totaal"
+      },
+      "grid_l1_import_energy_today": {
+        "name": "Netafname L1 vandaag"
+      },
+      "grid_l1_import_energy_month": {
+        "name": "Netafname L1 deze maand"
+      },
+      "grid_l1_import_energy_year": {
+        "name": "Netafname L1 dit jaar"
+      },
+      "grid_l1_import_energy_total": {
+        "name": "Netafname L1 totaal"
+      },
+      "grid_l2_export_energy_today": {
+        "name": "Netteruglevering L2 vandaag"
+      },
+      "grid_l2_export_energy_month": {
+        "name": "Netteruglevering L2 deze maand"
+      },
+      "grid_l2_export_energy_year": {
+        "name": "Netteruglevering L2 dit jaar"
+      },
+      "grid_l2_export_energy_total": {
+        "name": "Netteruglevering L2 totaal"
+      },
+      "grid_l3_export_energy_today": {
+        "name": "Netteruglevering L3 vandaag"
+      },
+      "grid_l3_export_energy_month": {
+        "name": "Netteruglevering L3 deze maand"
+      },
+      "grid_l3_export_energy_year": {
+        "name": "Netteruglevering L3 dit jaar"
+      },
+      "grid_l3_export_energy_total": {
+        "name": "Netteruglevering L3 totaal"
+      },
+      "grid_l2_import_energy_today": {
+        "name": "Netafname L2 vandaag"
+      },
+      "grid_l2_import_energy_month": {
+        "name": "Netafname L2 deze maand"
+      },
+      "grid_l2_import_energy_year": {
+        "name": "Netafname L2 dit jaar"
+      },
+      "grid_l2_import_energy_total": {
+        "name": "Netafname L2 totaal"
+      },
+      "grid_l3_import_energy_today": {
+        "name": "Netafname L3 vandaag"
+      },
+      "grid_l3_import_energy_month": {
+        "name": "Netafname L3 deze maand"
+      },
+      "grid_l3_import_energy_year": {
+        "name": "Netafname L3 dit jaar"
+      },
+      "grid_l3_import_energy_total": {
+        "name": "Netafname L3 totaal"
+      },
+      "grid_import_energy_today": {
+        "name": "Netafname vandaag"
+      },
+      "grid_import_energy_month": {
+        "name": "Netafname deze maand"
+      },
+      "grid_import_energy_year": {
+        "name": "Netafname dit jaar"
+      },
+      "grid_import_energy_total": {
+        "name": "Netafname totaal"
+      },
+      "grid_export_energy_today": {
+        "name": "Netteruglevering vandaag"
+      },
+      "grid_export_energy_month": {
+        "name": "Netteruglevering deze maand"
+      },
+      "grid_export_energy_year": {
+        "name": "Netteruglevering dit jaar"
+      },
+      "grid_export_energy_total": {
+        "name": "Netteruglevering totaal"
+      },
+      "parallel_mode": {
+        "name": "Parallelle modus"
+      },
+      "parallel_id": {
+        "name": "Parallelle machine-ID"
+      },
+      "parallel_count": {
+        "name": "Aantal parallelle machines"
+      },
+      "parallel_online_count": {
+        "name": "Parallelle machines online"
+      },
+      "parallel_battery_soc": {
+        "name": "Parallel systeem batterijlaadniveau"
+      },
+      "parallel_battery_capacity": {
+        "name": "Parallel systeem batterijcapaciteit"
+      },
+      "parallel_meter_b_power": {
+        "name": "Parallel systeem Meter B vermogen"
+      },
+      "parallel_pv_energy_today": {
+        "name": "Parallel systeem zonne-energie vandaag"
+      },
+      "parallel_pv_energy_month": {
+        "name": "Parallel systeem zonne-energie deze maand"
+      },
+      "parallel_pv_energy_year": {
+        "name": "Parallel systeem zonne-energie dit jaar"
+      },
+      "parallel_pv_energy_total": {
+        "name": "Parallel systeem zonne-energie totaal"
+      },
+      "parallel_battery_charge_energy_today": {
+        "name": "Parallel systeem batterijoplaadenergie vandaag"
+      },
+      "parallel_battery_charge_energy_month": {
+        "name": "Parallel systeem batterijoplaadenergie deze maand"
+      },
+      "parallel_battery_charge_energy_year": {
+        "name": "Parallel systeem batterijoplaadenergie dit jaar"
+      },
+      "parallel_battery_charge_energy_total": {
+        "name": "Parallel systeem batterijoplaadenergie totaal"
+      },
+      "parallel_battery_discharge_energy_today": {
+        "name": "Parallel systeem batterijontlaadenergie vandaag"
+      },
+      "parallel_battery_discharge_energy_month": {
+        "name": "Parallel systeem batterijontlaadenergie deze maand"
+      },
+      "parallel_battery_discharge_energy_year": {
+        "name": "Parallel systeem batterijontlaadenergie dit jaar"
+      },
+      "parallel_battery_discharge_energy_total": {
+        "name": "Parallel systeem batterijontlaadenergie totaal"
+      },
+      "parallel_grid_l1_export_energy_today": {
+        "name": "Parallel systeem netteruglevering L1 vandaag"
+      },
+      "parallel_grid_l1_export_energy_month": {
+        "name": "Parallel systeem netteruglevering L1 deze maand"
+      },
+      "parallel_grid_l1_export_energy_year": {
+        "name": "Parallel systeem netteruglevering L1 dit jaar"
+      },
+      "parallel_grid_l1_export_energy_total": {
+        "name": "Parallel systeem netteruglevering L1 totaal"
+      },
+      "parallel_grid_l2_export_energy_today": {
+        "name": "Parallel systeem netteruglevering L2 vandaag"
+      },
+      "parallel_grid_l2_export_energy_month": {
+        "name": "Parallel systeem netteruglevering L2 deze maand"
+      },
+      "parallel_grid_l2_export_energy_year": {
+        "name": "Parallel systeem netteruglevering L2 dit jaar"
+      },
+      "parallel_grid_l2_export_energy_total": {
+        "name": "Parallel systeem netteruglevering L2 totaal"
+      },
+      "parallel_grid_l3_export_energy_today": {
+        "name": "Parallel systeem netteruglevering L3 vandaag"
+      },
+      "parallel_grid_l3_export_energy_month": {
+        "name": "Parallel systeem netteruglevering L3 deze maand"
+      },
+      "parallel_grid_l3_export_energy_year": {
+        "name": "Parallel systeem netteruglevering L3 dit jaar"
+      },
+      "parallel_grid_l3_export_energy_total": {
+        "name": "Parallel systeem netteruglevering L3 totaal"
+      },
+      "parallel_grid_l1_import_energy_today": {
+        "name": "Parallel systeem netafname L1 vandaag"
+      },
+      "parallel_grid_l1_import_energy_month": {
+        "name": "Parallel systeem netafname L1 deze maand"
+      },
+      "parallel_grid_l1_import_energy_year": {
+        "name": "Parallel systeem netafname L1 dit jaar"
+      },
+      "parallel_grid_l1_import_energy_total": {
+        "name": "Parallel systeem netafname L1 totaal"
+      },
+      "parallel_grid_l2_import_energy_today": {
+        "name": "Parallel systeem netafname L2 vandaag"
+      },
+      "parallel_grid_l2_import_energy_month": {
+        "name": "Parallel systeem netafname L2 deze maand"
+      },
+      "parallel_grid_l2_import_energy_year": {
+        "name": "Parallel systeem netafname L2 dit jaar"
+      },
+      "parallel_grid_l2_import_energy_total": {
+        "name": "Parallel systeem netafname L2 totaal"
+      },
+      "parallel_grid_l3_import_energy_today": {
+        "name": "Parallel systeem netafname L3 vandaag"
+      },
+      "parallel_grid_l3_import_energy_month": {
+        "name": "Parallel systeem netafname L3 deze maand"
+      },
+      "parallel_grid_l3_import_energy_year": {
+        "name": "Parallel systeem netafname L3 dit jaar"
+      },
+      "parallel_grid_l3_import_energy_total": {
+        "name": "Parallel systeem netafname L3 totaal"
+      },
+      "parallel_load_energy_today": {
+        "name": "Parallel systeem huisverbruik vandaag"
+      },
+      "parallel_load_energy_month": {
+        "name": "Parallel systeem huisverbruik deze maand"
+      },
+      "parallel_load_energy_year": {
+        "name": "Parallel systeem huisverbruik dit jaar"
+      },
+      "parallel_load_energy_total": {
+        "name": "Parallel systeem huisverbruik totaal"
+      },
+      "parallel_grid_import_energy_today": {
+        "name": "Parallel systeem netafname vandaag"
+      },
+      "parallel_grid_import_energy_month": {
+        "name": "Parallel systeem netafname deze maand"
+      },
+      "parallel_grid_import_energy_year": {
+        "name": "Parallel systeem netafname dit jaar"
+      },
+      "parallel_grid_import_energy_total": {
+        "name": "Parallel systeem netafname totaal"
+      },
+      "parallel_grid_export_energy_today": {
+        "name": "Parallel systeem netteruglevering vandaag"
+      },
+      "parallel_grid_export_energy_month": {
+        "name": "Parallel systeem netteruglevering deze maand"
+      },
+      "parallel_grid_export_energy_year": {
+        "name": "Parallel systeem netteruglevering dit jaar"
+      },
+      "parallel_grid_export_energy_total": {
+        "name": "Parallel systeem netteruglevering totaal"
+      },
+      "parallel_pv_meter_energy_today": {
+        "name": "Parallel systeem zonnemeterenergie vandaag"
+      },
+      "parallel_pv_meter_energy_month": {
+        "name": "Parallel systeem zonnemeterenergie deze maand"
+      },
+      "parallel_pv_meter_energy_year": {
+        "name": "Parallel systeem zonnemeterenergie dit jaar"
+      },
+      "parallel_pv_meter_energy_total": {
+        "name": "Parallel systeem zonnemeterenergie totaal"
+      },
+      "ev_settings_protocol_version": {
+        "name": "Protocolversie van instellingen EV-lader"
+      },
+      "five_minute_average_grid_power": {
+        "name": "Netvermogen (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_l1_power": {
+        "name": "Netvermogen L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_l1_voltage": {
+        "name": "Netspanning L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_l1_current": {
+        "name": "Netstroom L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_l1_frequency": {
+        "name": "Netfrequentie L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_l2_power": {
+        "name": "Netvermogen L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_l2_voltage": {
+        "name": "Netspanning L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_l2_current": {
+        "name": "Netstroom L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_l2_frequency": {
+        "name": "Netfrequentie L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_l3_power": {
+        "name": "Netvermogen L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_l3_voltage": {
+        "name": "Netspanning L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_l3_current": {
+        "name": "Netstroom L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_l3_frequency": {
+        "name": "Netfrequentie L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_power": {
+        "name": "Omvormervermogen (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_l1_power": {
+        "name": "Omvormervermogen L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_l1_voltage": {
+        "name": "Omvormerspanning L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_l1_current": {
+        "name": "Omvormerstroom L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_l1_frequency": {
+        "name": "Omvormerfrequentie L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_l2_power": {
+        "name": "Omvormervermogen L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_l2_voltage": {
+        "name": "Omvormerspanning L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_l2_current": {
+        "name": "Omvormerstroom L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_l2_frequency": {
+        "name": "Omvormerfrequentie L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_l3_power": {
+        "name": "Omvormervermogen L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_l3_voltage": {
+        "name": "Omvormerspanning L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_l3_current": {
+        "name": "Omvormerstroom L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_inverter_l3_frequency": {
+        "name": "Omvormerfrequentie L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_power": {
+        "name": "Huisvermogen (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_l1_power": {
+        "name": "Huisvermogen L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_l1_voltage": {
+        "name": "Huisspanning L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_l1_current": {
+        "name": "Huisstroom L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_l1_frequency": {
+        "name": "Huisfrequentie L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_l2_power": {
+        "name": "Huisvermogen L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_l2_voltage": {
+        "name": "Huisspanning L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_l2_current": {
+        "name": "Huisstroom L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_l2_frequency": {
+        "name": "Huisfrequentie L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_l3_power": {
+        "name": "Huisvermogen L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_l3_voltage": {
+        "name": "Huisspanning L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_l3_current": {
+        "name": "Huisstroom L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_load_l3_frequency": {
+        "name": "Huisfrequentie L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_power": {
+        "name": "Netbelastingvermogen (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_l1_power": {
+        "name": "Netbelastingvermogen L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_l1_voltage": {
+        "name": "Netbelastingspanning L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_l1_current": {
+        "name": "Netbelastingstroom L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_l1_frequency": {
+        "name": "Netbelastingfrequentie L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_l2_power": {
+        "name": "Netbelastingvermogen L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_l2_voltage": {
+        "name": "Netbelastingspanning L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_l2_current": {
+        "name": "Netbelastingstroom L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_l2_frequency": {
+        "name": "Netbelastingfrequentie L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_l3_power": {
+        "name": "Netbelastingvermogen L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_l3_voltage": {
+        "name": "Netbelastingspanning L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_l3_current": {
+        "name": "Netbelastingstroom L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_grid_load_l3_frequency": {
+        "name": "Netbelastingfrequentie L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_power": {
+        "name": "Back-upvermogen (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_l1_power": {
+        "name": "Back-upvermogen L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_l1_voltage": {
+        "name": "Back-upspanning L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_l1_current": {
+        "name": "Back-upstroom L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_l1_frequency": {
+        "name": "Back-upfrequentie L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_l2_power": {
+        "name": "Back-upvermogen L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_l2_voltage": {
+        "name": "Back-upspanning L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_l2_current": {
+        "name": "Back-upstroom L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_l2_frequency": {
+        "name": "Back-upfrequentie L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_l3_power": {
+        "name": "Back-upvermogen L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_l3_voltage": {
+        "name": "Back-upspanning L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_l3_current": {
+        "name": "Back-upstroom L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_backup_l3_frequency": {
+        "name": "Back-upfrequentie L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_pv_power": {
+        "name": "Zonnevermogen (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_pv1_voltage": {
+        "name": "PV1-spanning (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_pv1_current": {
+        "name": "PV1-stroom (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_pv1_power": {
+        "name": "PV1-vermogen (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_pv2_voltage": {
+        "name": "PV2-spanning (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_pv2_current": {
+        "name": "PV2-stroom (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_pv2_power": {
+        "name": "PV2-vermogen (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_power": {
+        "name": "Generatorvermogen (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_l1_power": {
+        "name": "Generatorvermogen L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_l1_voltage": {
+        "name": "Generatorspanning L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_l1_current": {
+        "name": "Generatorstroom L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_l1_frequency": {
+        "name": "Generatorfrequentie L1 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_l2_power": {
+        "name": "Generatorvermogen L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_l2_voltage": {
+        "name": "Generatorspanning L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_l2_current": {
+        "name": "Generatorstroom L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_l2_frequency": {
+        "name": "Generatorfrequentie L2 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_l3_power": {
+        "name": "Generatorvermogen L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_l3_voltage": {
+        "name": "Generatorspanning L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_l3_current": {
+        "name": "Generatorstroom L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_generator_l3_frequency": {
+        "name": "Generatorfrequentie L3 (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_battery_power": {
+        "name": "Batterijvermogen (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_battery_soc": {
+        "name": "Batterijlaadniveau (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_battery_pack1_power": {
+        "name": "Batterijpack 1 vermogen (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_battery_pack1_voltage": {
+        "name": "Batterijpack 1 spanning (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_battery_pack1_current": {
+        "name": "Batterijpack 1 stroom (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_battery_pack1_soc": {
+        "name": "Batterijpack 1 laadniveau (gemiddelde over 5 minuten)"
+      },
+      "five_minute_average_battery_pack1_temperature": {
+        "name": "Batterijpack 1 temperatuur (gemiddelde over 5 minuten)"
+      },
+      "product_code": {
+        "name": "Productcode"
+      },
+      "display_software_version": {
+        "name": "Displaysoftwareversie"
+      },
+      "master_software_version": {
+        "name": "Mastersoftwareversie"
+      },
+      "slave_software_version": {
+        "name": "Slavesoftwareversie"
+      },
+      "display_hardware_version": {
+        "name": "Displayhardwareversie"
+      },
+      "control_hardware_version": {
+        "name": "Hardwareversie regeling"
+      },
+      "power_hardware_version": {
+        "name": "Hardwareversie vermogen"
+      },
+      "battery_pack_count": {
+        "name": "Aantal batterijpacks"
+      },
+      "battery_capacity": {
+        "name": "Batterijcapaciteit"
+      },
+      "battery_usable_capacity": {
+        "name": "Bruikbare batterijcapaciteit"
+      },
+      "battery_online_code": {
+        "name": "Batterijonlinecode"
+      },
+      "battery_pack1_soc": {
+        "name": "Batterijpack 1 laadniveau"
+      },
+      "battery_pack1_soh": {
+        "name": "Batterijpack 1 gezondheidstoestand"
+      },
+      "battery_pack1_voltage": {
+        "name": "Batterijpack 1 spanning"
+      },
+      "battery_pack1_current": {
+        "name": "Batterijpack 1 stroom"
+      },
+      "battery_pack1_temperature": {
+        "name": "Batterijpack 1 temperatuur"
+      },
+      "battery_pack1_cycles": {
+        "name": "Batterijpack 1 cycli"
+      },
+      "battery_pack1_discharged_energy": {
+        "name": "Batterijpack 1 ontlaadenergie"
+      },
+      "battery_discharge_current_limit": {
+        "name": "Limiet ontlaadstroom batterij"
+      },
+      "battery_charge_current_limit": {
+        "name": "Limiet oplaadstroom batterij"
+      },
+      "meter_a_status": {
+        "name": "Meter A status",
+        "state": {
+          "offline": "Offline",
+          "online": "Online"
+        }
+      },
+      "meter_a_l1_voltage": {
+        "name": "Meter A L1 spanning"
+      },
+      "meter_a_l1_current": {
+        "name": "Meter A L1 stroom"
+      },
+      "meter_a_l1_power": {
+        "name": "Meter A L1 vermogen"
+      },
+      "meter_a_l1_apparent_power": {
+        "name": "Meter A L1 schijnbaar vermogen"
+      },
+      "meter_a_l1_power_factor": {
+        "name": "Meter A L1 arbeidsfactor"
+      },
+      "meter_a_l1_frequency": {
+        "name": "Meter A L1 frequentie"
+      },
+      "meter_a_l2_voltage": {
+        "name": "Meter A L2 spanning"
+      },
+      "meter_a_l2_current": {
+        "name": "Meter A L2 stroom"
+      },
+      "meter_a_l2_power": {
+        "name": "Meter A L2 vermogen"
+      },
+      "meter_a_l2_apparent_power": {
+        "name": "Meter A L2 schijnbaar vermogen"
+      },
+      "meter_a_l2_power_factor": {
+        "name": "Meter A L2 arbeidsfactor"
+      },
+      "meter_a_l2_frequency": {
+        "name": "Meter A L2 frequentie"
+      },
+      "meter_a_l3_voltage": {
+        "name": "Meter A L3 spanning"
+      },
+      "meter_a_l3_current": {
+        "name": "Meter A L3 stroom"
+      },
+      "meter_a_l3_power": {
+        "name": "Meter A L3 vermogen"
+      },
+      "meter_a_l3_apparent_power": {
+        "name": "Meter A L3 schijnbaar vermogen"
+      },
+      "meter_a_l3_power_factor": {
+        "name": "Meter A L3 arbeidsfactor"
+      },
+      "meter_a_l3_frequency": {
+        "name": "Meter A L3 frequentie"
+      },
+      "meter_b_status": {
+        "name": "Meter B status",
+        "state": {
+          "offline": "Offline",
+          "online": "Online"
+        }
+      },
+      "meter_b_l1_voltage": {
+        "name": "Meter B L1 spanning"
+      },
+      "meter_b_l1_current": {
+        "name": "Meter B L1 stroom"
+      },
+      "meter_b_l1_power": {
+        "name": "Meter B L1 vermogen"
+      },
+      "meter_b_l1_apparent_power": {
+        "name": "Meter B L1 schijnbaar vermogen"
+      },
+      "meter_b_l1_power_factor": {
+        "name": "Meter B L1 arbeidsfactor"
+      },
+      "meter_b_l1_frequency": {
+        "name": "Meter B L1 frequentie"
+      },
+      "meter_b_l2_voltage": {
+        "name": "Meter B L2 spanning"
+      },
+      "meter_b_l2_current": {
+        "name": "Meter B L2 stroom"
+      },
+      "meter_b_l2_power": {
+        "name": "Meter B L2 vermogen"
+      },
+      "meter_b_l2_apparent_power": {
+        "name": "Meter B L2 schijnbaar vermogen"
+      },
+      "meter_b_l2_power_factor": {
+        "name": "Meter B L2 arbeidsfactor"
+      },
+      "meter_b_l2_frequency": {
+        "name": "Meter B L2 frequentie"
+      },
+      "meter_b_l3_voltage": {
+        "name": "Meter B L3 spanning"
+      },
+      "meter_b_l3_current": {
+        "name": "Meter B L3 stroom"
+      },
+      "meter_b_l3_power": {
+        "name": "Meter B L3 vermogen"
+      },
+      "meter_b_l3_apparent_power": {
+        "name": "Meter B L3 schijnbaar vermogen"
+      },
+      "meter_b_l3_power_factor": {
+        "name": "Meter B L3 arbeidsfactor"
+      },
+      "meter_b_l3_frequency": {
+        "name": "Meter B L3 frequentie"
+      },
+      "meter_a_l1_reactive_power": {
+        "name": "Meter A L1 blindvermogen"
+      },
+      "meter_a_l2_reactive_power": {
+        "name": "Meter A L2 blindvermogen"
+      },
+      "meter_a_l3_reactive_power": {
+        "name": "Meter A L3 blindvermogen"
+      },
+      "meter_b_l1_reactive_power": {
+        "name": "Meter B L1 blindvermogen"
+      },
+      "meter_b_l2_reactive_power": {
+        "name": "Meter B L2 blindvermogen"
+      },
+      "meter_b_l3_reactive_power": {
+        "name": "Meter B L3 blindvermogen"
+      },
+      "meter_a_power": {
+        "name": "Meter A vermogen"
+      },
+      "meter_b_power": {
+        "name": "Meter B vermogen"
+      },
+      "parallel_backup_load_power": {
+        "name": "Parallel systeem back-upbelastingvermogen"
+      },
+      "parallel_battery_power": {
+        "name": "Parallel systeem batterijvermogen"
+      },
+      "parallel_grid_load_power": {
+        "name": "Parallel systeem netbelastingvermogen"
+      },
+      "parallel_grid_power": {
+        "name": "Parallel systeem netvermogen"
+      },
+      "parallel_load_power": {
+        "name": "Parallel systeem huisvermogen"
+      },
+      "parallel_pv_power": {
+        "name": "Parallel systeem zonnevermogen"
+      },
+      "pv3_insulation_resistance": {
+        "name": "PV3-isolatieweerstand"
+      },
+      "pv4_insulation_resistance": {
+        "name": "PV4-isolatieweerstand"
+      },
+      "pv3_voltage": {
+        "name": "PV3-spanning"
+      },
+      "pv3_current": {
+        "name": "PV3-stroom"
+      },
+      "pv3_power": {
+        "name": "PV3-vermogen"
+      },
+      "pv4_voltage": {
+        "name": "PV4-spanning"
+      },
+      "pv4_current": {
+        "name": "PV4-stroom"
+      },
+      "pv4_power": {
+        "name": "PV4-vermogen"
+      },
+      "ct_grid_power": {
+        "name": "CT-netvermogen"
+      },
+      "ct_grid_apparent_power": {
+        "name": "Schijnbaar CT-netvermogen"
+      },
+      "ct_pv_power": {
+        "name": "CT-zonnevermogen"
+      },
+      "ct_pv_apparent_power": {
+        "name": "Schijnbaar CT-zonnevermogen"
+      },
+      "grid_apparent_power": {
+        "name": "Schijnbaar netvermogen"
+      },
+      "inverter_apparent_power": {
+        "name": "Schijnbaar omvormervermogen"
+      },
+      "backup_load_power": {
+        "name": "Back-upbelastingvermogen"
+      },
+      "backup_load_apparent_power": {
+        "name": "Schijnbaar back-upbelastingvermogen"
+      },
+      "inverter_energy_today": {
+        "name": "Omvormerenergie vandaag"
+      },
+      "inverter_energy_month": {
+        "name": "Omvormerenergie deze maand"
+      },
+      "inverter_energy_year": {
+        "name": "Omvormerenergie dit jaar"
+      },
+      "inverter_energy_total": {
+        "name": "Omvormerenergie totaal"
+      },
+      "pv2_energy_today": {
+        "name": "PV2-energie vandaag"
+      },
+      "pv2_energy_month": {
+        "name": "PV2-energie deze maand"
+      },
+      "pv2_energy_year": {
+        "name": "PV2-energie dit jaar"
+      },
+      "pv2_energy_total": {
+        "name": "PV2-energie totaal"
+      },
+      "pv3_energy_today": {
+        "name": "PV3-energie vandaag"
+      },
+      "pv3_energy_month": {
+        "name": "PV3-energie deze maand"
+      },
+      "pv3_energy_year": {
+        "name": "PV3-energie dit jaar"
+      },
+      "pv3_energy_total": {
+        "name": "PV3-energie totaal"
+      },
+      "identity_protocol_version": {
+        "name": "Protocolversie identiteit"
+      },
+      "battery_pack2_soc": {
+        "name": "Batterijpack 2 laadniveau"
+      },
+      "battery_pack2_soh": {
+        "name": "Batterijpack 2 gezondheidstoestand"
+      },
+      "battery_pack2_voltage": {
+        "name": "Batterijpack 2 spanning"
+      },
+      "battery_pack2_current": {
+        "name": "Batterijpack 2 stroom"
+      },
+      "battery_pack2_temperature": {
+        "name": "Batterijpack 2 temperatuur"
+      },
+      "battery_pack2_cycles": {
+        "name": "Batterijpack 2 cycli"
+      },
+      "battery_pack3_soc": {
+        "name": "Batterijpack 3 laadniveau"
+      },
+      "battery_pack3_soh": {
+        "name": "Batterijpack 3 gezondheidstoestand"
+      },
+      "battery_pack3_voltage": {
+        "name": "Batterijpack 3 spanning"
+      },
+      "battery_pack3_current": {
+        "name": "Batterijpack 3 stroom"
+      },
+      "battery_pack3_temperature": {
+        "name": "Batterijpack 3 temperatuur"
+      },
+      "battery_pack3_cycles": {
+        "name": "Batterijpack 3 cycli"
+      },
+      "battery_pack4_soc": {
+        "name": "Batterijpack 4 laadniveau"
+      },
+      "battery_pack4_soh": {
+        "name": "Batterijpack 4 gezondheidstoestand"
+      },
+      "battery_pack4_voltage": {
+        "name": "Batterijpack 4 spanning"
+      },
+      "battery_pack4_current": {
+        "name": "Batterijpack 4 stroom"
+      },
+      "battery_pack4_temperature": {
+        "name": "Batterijpack 4 temperatuur"
+      },
+      "battery_pack4_cycles": {
+        "name": "Batterijpack 4 cycli"
+      },
+      "battery_pack2_discharged_energy": {
+        "name": "Batterijpack 2 ontlaadenergie"
+      },
+      "battery_pack3_discharged_energy": {
+        "name": "Batterijpack 3 ontlaadenergie"
+      },
+      "battery_pack4_discharged_energy": {
+        "name": "Batterijpack 4 ontlaadenergie"
+      },
+      "battery_voltage_high_protection": {
+        "name": "Batterijbeveiliging hoge spanning"
+      },
+      "battery_charge_voltage": {
+        "name": "Batterijoplaadspanning"
+      },
+      "battery_discharge_cutoff_voltage": {
+        "name": "Ontlaadafschakelspanning batterij"
+      },
+      "off_grid_mode": {
+        "name": "Off-gridmodus",
+        "state": {
+          "off": "Uit",
+          "on": "Aan"
+        }
+      },
+      "inverter_stop": {
+        "name": "Omvormerstop",
+        "state": {
+          "running": "In bedrijf",
+          "stopped": "Gestopt"
+        }
+      },
+      "inverter_error_count": {
+        "name": "Aantal omvormerfouten"
+      },
+      "drm_hardware_status": {
+        "name": "DRM-hardwarestatus"
+      },
+      "drm_software_status": {
+        "name": "DRM-softwarestatus"
+      },
+      "fault_record_sequence": {
+        "name": "Volgnummer storingsrecord"
+      },
+      "application_mode_active": {
+        "name": "Toepassingsmodus (van kracht)",
+        "state": {
+          "self_use": "Eigen verbruik",
+          "time_of_use": "Tijdgestuurd",
+          "backup": "Back-up",
+          "passive": "Passief",
+          "legacy": "Legacy",
+          "ai_saving": "AI-besparing",
+          "peak_shaving": "Piekafvlakking"
+        }
+      },
+      "battery_controller_1_current": {
+        "name": "Batterijregelaar 1 stroom"
+      },
+      "battery_controller_2_current": {
+        "name": "Batterijregelaar 2 stroom"
+      },
+      "pv_generation_time_today": {
+        "name": "Zonne-opwektijd vandaag"
+      },
+      "pv_generation_time_total": {
+        "name": "Zonne-opwektijd totaal"
+      },
+      "battery_voltage_low_warning": {
+        "name": "Batterijwaarschuwing lage spanning"
+      },
+      "battery_pack1_bms_type": {
+        "name": "Batterijpack 1 BMS-type"
+      },
+      "battery_pack1_bms_serial_number": {
+        "name": "Batterijpack 1 BMS-serienummer"
+      },
+      "battery_pack1_bms_software_version": {
+        "name": "Batterijpack 1 BMS-softwareversie"
+      },
+      "battery_pack1_bms_hardware_version": {
+        "name": "Batterijpack 1 BMS-hardwareversie"
+      },
+      "battery_pack1_type": {
+        "name": "Batterijpack 1 type",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack1_serial_number": {
+        "name": "Batterijpack 1 serienummer"
+      },
+      "battery_pack2_bms_type": {
+        "name": "Batterijpack 2 BMS-type"
+      },
+      "battery_pack2_bms_serial_number": {
+        "name": "Batterijpack 2 BMS-serienummer"
+      },
+      "battery_pack2_bms_software_version": {
+        "name": "Batterijpack 2 BMS-softwareversie"
+      },
+      "battery_pack2_bms_hardware_version": {
+        "name": "Batterijpack 2 BMS-hardwareversie"
+      },
+      "battery_pack2_type": {
+        "name": "Batterijpack 2 type",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack2_serial_number": {
+        "name": "Batterijpack 2 serienummer"
+      },
+      "battery_pack3_bms_type": {
+        "name": "Batterijpack 3 BMS-type"
+      },
+      "battery_pack3_bms_serial_number": {
+        "name": "Batterijpack 3 BMS-serienummer"
+      },
+      "battery_pack3_bms_software_version": {
+        "name": "Batterijpack 3 BMS-softwareversie"
+      },
+      "battery_pack3_bms_hardware_version": {
+        "name": "Batterijpack 3 BMS-hardwareversie"
+      },
+      "battery_pack3_type": {
+        "name": "Batterijpack 3 type",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack3_serial_number": {
+        "name": "Batterijpack 3 serienummer"
+      },
+      "battery_pack4_bms_type": {
+        "name": "Batterijpack 4 BMS-type"
+      },
+      "battery_pack4_bms_serial_number": {
+        "name": "Batterijpack 4 BMS-serienummer"
+      },
+      "battery_pack4_bms_software_version": {
+        "name": "Batterijpack 4 BMS-softwareversie"
+      },
+      "battery_pack4_bms_hardware_version": {
+        "name": "Batterijpack 4 BMS-hardwareversie"
+      },
+      "battery_pack4_type": {
+        "name": "Batterijpack 4 type",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack4_serial_number": {
+        "name": "Batterijpack 4 serienummer"
+      },
+      "battery_pack5_bms_type": {
+        "name": "Batterijpack 5 BMS-type"
+      },
+      "battery_pack5_bms_serial_number": {
+        "name": "Batterijpack 5 BMS-serienummer"
+      },
+      "battery_pack5_bms_software_version": {
+        "name": "Batterijpack 5 BMS-softwareversie"
+      },
+      "battery_pack5_bms_hardware_version": {
+        "name": "Batterijpack 5 BMS-hardwareversie"
+      },
+      "battery_pack5_type": {
+        "name": "Batterijpack 5 type",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack5_serial_number": {
+        "name": "Batterijpack 5 serienummer"
+      },
+      "battery_input_mode": {
+        "name": "Batterijingangsmodus",
+        "state": {
+          "independent": "Onafhankelijk",
+          "parallel": "Parallel"
+        }
+      },
+      "battery_protocol": {
+        "name": "Batterijprotocol",
+        "state": {
+          "not_in_use": "Niet in gebruik",
+          "saj_bu3": "SAJ BU3",
+          "lead_acid": "Loodzuur",
+          "dyness_h": "Dyness DYNESS-H",
+          "pylon_sc0500": "Pylon SC0500",
+          "b2_can": "B2 CAN"
+        }
+      },
+      "bms_update_id": {
+        "name": "BMS-update-ID"
+      },
+      "bms_update_mode": {
+        "name": "BMS-updatemodus"
+      },
+      "ethernet_mode": {
+        "name": "Ethernet-modus",
+        "state": {
+          "manual": "Handmatig",
+          "automatic": "Automatisch"
+        }
+      },
+      "ev_address": {
+        "name": "EV-laderadres"
+      },
+      "ev_baud_rate": {
+        "name": "EV-laderbaudrate",
+        "state": {
+          "115200": "115200 baud",
+          "57600": "57600 baud",
+          "38400": "38400 baud",
+          "19200": "19200 baud",
+          "9600": "9600 baud",
+          "4800": "4800 baud",
+          "2400": "2400 baud",
+          "1200": "1200 baud"
+        }
+      },
+      "ev_charger_count": {
+        "name": "Aantal EV-laders"
+      },
+      "ev_communication_timeout": {
+        "name": "EV-ladercommunicatie-time-out"
+      },
+      "ev_port_address": {
+        "name": "EV-laderpoortadres"
+      },
+      "ev_port_mode": {
+        "name": "EV-laderpoortmodus",
+        "state": {
+          "invalid": "Ongeldig",
+          "host": "Host",
+          "modbus_slave": "Modbus-slave"
+        }
+      },
+      "fcas_frequency_hysteresis": {
+        "name": "FCAS-frequentiehysterese"
+      },
+      "function_flags_1": {
+        "name": "Functievlaggen 1"
+      },
+      "function_flags_2": {
+        "name": "Functievlaggen 2"
+      },
+      "grid_type": {
+        "name": "Nettype",
+        "state": {
+          "single_phase": "Eenfasig",
+          "split_phase": "Split-fase",
+          "three_phase_three_wire": "Driefasig driedraads",
+          "three_phase_four_wire": "Driefasig vierdraads"
+        }
+      },
+      "insulation_resistance_limit": {
+        "name": "Isolatieweerstandslimiet"
+      },
+      "lead_acid_capacity": {
+        "name": "Loodzuurcapaciteit"
+      },
+      "lead_acid_charge_current_limit": {
+        "name": "Loodzuuroplaadstroomlimiet"
+      },
+      "lead_acid_charge_cutoff_voltage": {
+        "name": "Loodzuuroplaadafschakelspanning"
+      },
+      "lead_acid_discharge_current_limit": {
+        "name": "Loodzuurontlaadstroomlimiet"
+      },
+      "lead_acid_equalising_charge_voltage": {
+        "name": "Loodzuuregalisatielaadspanning"
+      },
+      "lead_acid_float_charge_voltage": {
+        "name": "Loodzuurdruppellaadspanning"
+      },
+      "lead_acid_high_voltage_protection": {
+        "name": "Loodzuurbeveiliging hoge spanning"
+      },
+      "lead_acid_low_voltage_warning": {
+        "name": "Loodzuurwaarschuwing lage spanning"
+      },
+      "lead_acid_off_grid_discharge_cutoff_voltage": {
+        "name": "Ontlaadafschakelspanning loodzuur off-grid"
+      },
+      "lead_acid_on_grid_discharge_cutoff_voltage": {
+        "name": "Ontlaadafschakelspanning loodzuur on-grid"
+      },
+      "machine_model": {
+        "name": "Machinemodel"
+      },
+      "max_dc_current_component": {
+        "name": "Maximale gelijkstroomcomponent"
+      },
+      "max_dc_voltage_component": {
+        "name": "Maximale gelijkspanningscomponent"
+      },
+      "max_leakage_current": {
+        "name": "Maximale lekstroom"
+      },
+      "meter_address": {
+        "name": "Meteradres"
+      },
+      "meter_configuration": {
+        "name": "Meterconfiguratie",
+        "state": {
+          "no_meter_or_ct": "Geen meter of CT",
+          "single_phase_meter": "Eenfasige meter",
+          "three_phase_three_wire_meter": "Driefasige driedraadsmeter",
+          "three_phase_four_wire_meter_on_single_phase_machine": "Driefasige vierdraadsmeter op een eenfasige machine",
+          "three_phase_four_wire_meter_grid_and_pv": "Driefasige vierdraadsmeter (net en PV)",
+          "two_three_phase_three_wire_meters": "Twee driefasige driedraadsmeters",
+          "two_three_phase_four_wire_meters": "Twee driefasige vierdraadsmeters",
+          "two_single_phase_meters": "Twee eenfasige meters",
+          "single_phase_meter_with_two_ct_channels": "Eenfasige meter met twee CT-kanalen",
+          "one_grid_ct": "Eén net-CT",
+          "grid_and_pv_cts": "Net- en PV-CT's",
+          "dual_circuit_three_phase_four_wire_meter_with_six_ct_channels": "Driefasige vierdraadsmeter met twee circuits en zes CT-kanalen"
+        }
+      },
+      "motor_enable": {
+        "name": "Motor inschakelen"
+      },
+      "mppt_scan_time": {
+        "name": "MPPT-scantijd"
+      },
+      "mppt_voltage_high": {
+        "name": "MPPT-spanning hoog"
+      },
+      "mppt_voltage_low": {
+        "name": "MPPT-spanning laag"
+      },
+      "off_grid_output_frequency": {
+        "name": "Uitgangsfrequentie off-grid"
+      },
+      "off_grid_output_voltage": {
+        "name": "Uitgangsspanning off-grid"
+      },
+      "parallel_configured_mode": {
+        "name": "Parallel geconfigureerde modus",
+        "state": {
+          "not_parallel": "Niet parallel",
+          "on_grid": "On-grid",
+          "off_grid": "Off-grid",
+          "on_and_off_grid": "On-grid en off-grid"
+        }
+      },
+      "parallel_number": {
+        "name": "Parallelnummer"
+      },
+      "parallel_role": {
+        "name": "Parallelrol"
+      },
+      "pv_input_mode": {
+        "name": "PV-ingangsmodus",
+        "state": {
+          "automatic": "Automatisch",
+          "independent": "Onafhankelijk",
+          "parallel": "Parallel"
+        }
+      },
+      "pv_shutdown_voltage": {
+        "name": "PV-uitschakelspanning"
+      },
+      "pv_start_voltage": {
+        "name": "PV-startspanning"
+      },
+      "rated_power": {
+        "name": "Nominaal vermogen"
+      },
+      "reverse_flow_mode": {
+        "name": "Terugstroommodus",
+        "state": {
+          "off": "Uit",
+          "master": "Master",
+          "slave": "Slave"
+        }
+      },
+      "rs485_address": {
+        "name": "RS485-adres"
+      },
+      "rs485_baud_rate": {
+        "name": "RS485-baudrate",
+        "state": {
+          "115200": "115200 baud",
+          "57600": "57600 baud",
+          "38400": "38400 baud",
+          "19200": "19200 baud",
+          "9600": "9600 baud",
+          "4800": "4800 baud",
+          "2400": "2400 baud",
+          "1200": "1200 baud"
+        }
+      },
+      "rs485_slave_address": {
+        "name": "RS485-slave-adres"
+      },
+      "rs485_slave_baud_rate": {
+        "name": "RS485-slave-baudrate",
+        "state": {
+          "115200": "115200 baud",
+          "57600": "57600 baud",
+          "38400": "38400 baud",
+          "19200": "19200 baud",
+          "9600": "9600 baud",
+          "4800": "4800 baud",
+          "2400": "2400 baud",
+          "1200": "1200 baud"
+        }
+      },
+      "settings_sequence": {
+        "name": "Volgnummer instellingen"
+      },
+      "ethernet_ip_address": {
+        "name": "Ethernet-IP-adres"
+      },
+      "ethernet_subnet_mask": {
+        "name": "Ethernet-subnetmasker"
+      },
+      "ethernet_gateway": {
+        "name": "Ethernet-gateway"
+      },
+      "ethernet_dns_primary": {
+        "name": "Ethernet primaire DNS"
+      },
+      "ethernet_dns_secondary": {
+        "name": "Ethernet secundaire DNS"
+      }
+    },
+    "binary_sensor": {
+      "control_allowed": {
+        "name": "Bediening toegestaan"
+      },
+      "inverter_fault": {
+        "name": "Omvormerstoring"
+      },
+      "inverter_fault_unrecognised": {
+        "name": "Niet-herkende omvormerstoring"
+      },
+      "inverter_fault_internal_communication": {
+        "name": "Interne communicatie verloren"
+      },
+      "inverter_fault_meter_communication": {
+        "name": "Metercommunicatie verloren"
+      },
+      "inverter_fault_display_memory": {
+        "name": "Geheugenstoring displaybord"
+      },
+      "inverter_fault_display_clock": {
+        "name": "Klokstoring displaybord"
+      },
+      "inverter_fault_bms_device": {
+        "name": "BMS-apparaatstoring"
+      },
+      "inverter_fault_bms_communication": {
+        "name": "BMS-communicatie verloren"
+      },
+      "inverter_fault_ct_device": {
+        "name": "CT-apparaatstoring"
+      },
+      "inverter_fault_afci_communication": {
+        "name": "Communicatie met boogdetectiebord verloren"
+      },
+      "inverter_fault_slave_communication": {
+        "name": "Communicatie met slave-regelaar verloren"
+      },
+      "inverter_fault_pv_meter_communication": {
+        "name": "Communicatie met zonnemeter verloren"
+      },
+      "inverter_fault_ev_charger_communication": {
+        "name": "Communicatie met EV-lader verloren"
+      },
+      "inverter_fault_grid_phase_r_overvoltage": {
+        "name": "Netfase R overspanning"
+      },
+      "inverter_fault_grid_phase_r_undervoltage": {
+        "name": "Netfase R onderspanning"
+      },
+      "inverter_fault_grid_phase_s_overvoltage": {
+        "name": "Netfase S overspanning"
+      },
+      "inverter_fault_grid_phase_s_undervoltage": {
+        "name": "Netfase S onderspanning"
+      },
+      "inverter_fault_grid_phase_t_overvoltage": {
+        "name": "Netfase T overspanning"
+      },
+      "inverter_fault_grid_phase_t_undervoltage": {
+        "name": "Netfase T onderspanning"
+      },
+      "inverter_fault_grid_overfrequency": {
+        "name": "Netoverfrequentie"
+      },
+      "inverter_fault_grid_underfrequency": {
+        "name": "Netonderfrequentie"
+      },
+      "inverter_fault_dcdc_communication": {
+        "name": "Communicatie met DC-DC-eenheid verloren"
+      },
+      "inverter_fault_dcdc_device": {
+        "name": "Storing DC-DC-eenheid"
+      },
+      "inverter_fault_parallel_communication": {
+        "name": "Communicatie met parallel systeem verloren"
+      },
+      "inverter_fault_grid_lost": {
+        "name": "Net verloren"
+      },
+      "inverter_fault_pv_input_mode": {
+        "name": "Storing PV-ingangsmodus"
+      },
+      "inverter_fault_pv_hardware_overcurrent": {
+        "name": "PV-hardware-overstroom"
+      },
+      "inverter_fault_pv_overvoltage": {
+        "name": "PV-overspanning"
+      },
+      "inverter_fault_bus_hardware_overvoltage": {
+        "name": "Hardware-overspanning DC-bus"
+      },
+      "inverter_fault_bus_overvoltage": {
+        "name": "Overspanning DC-bus"
+      },
+      "inverter_fault_bus_undervoltage": {
+        "name": "Onderspanning DC-bus"
+      },
+      "inverter_fault_grid_phase": {
+        "name": "Storing netfase"
+      },
+      "inverter_fault_islanding": {
+        "name": "Eilandvorming"
+      },
+      "inverter_fault_arc_device": {
+        "name": "Storing boogdetectieapparaat"
+      },
+      "inverter_fault_pv_input": {
+        "name": "Storing PV-ingang"
+      },
+      "inverter_fault_hardware_overcurrent": {
+        "name": "Hardware-overstroom omvormer"
+      },
+      "inverter_fault_neutral_earth_voltage": {
+        "name": "Storing spanning nulleider naar aarde"
+      },
+      "inverter_fault_drm0": {
+        "name": "DRM0-storing"
+      },
+      "inverter_fault_fan_1": {
+        "name": "Storing ventilator 1"
+      },
+      "inverter_fault_fan_2": {
+        "name": "Storing ventilator 2"
+      },
+      "inverter_fault_fan_3": {
+        "name": "Storing ventilator 3"
+      },
+      "inverter_fault_fan_4": {
+        "name": "Storing ventilator 4"
+      },
+      "inverter_fault_arc": {
+        "name": "Boogstoring"
+      },
+      "inverter_fault_pv_software_overcurrent": {
+        "name": "PV-software-overstroom"
+      },
+      "inverter_fault_battery_overvoltage": {
+        "name": "Overspanning batterijpoort"
+      },
+      "inverter_fault_battery_overcurrent": {
+        "name": "Overstroom batterijpoort"
+      },
+      "inverter_fault_battery_charge_overvoltage": {
+        "name": "Batterijoplaadspanning hoog"
+      },
+      "inverter_fault_battery_overload": {
+        "name": "Overbelasting batterijpoort"
+      },
+      "inverter_fault_battery_soft_start": {
+        "name": "Time-out zachte start batterij"
+      },
+      "inverter_fault_output_overload": {
+        "name": "Uitgangsoverbelasting"
+      },
+      "inverter_fault_battery_open_circuit": {
+        "name": "Open circuit batterij"
+      },
+      "inverter_fault_battery_discharge_undervoltage": {
+        "name": "Batterijontlaadspanning laag"
+      },
+      "inverter_fault_authorisation_expired": {
+        "name": "Autorisatie verlopen"
+      },
+      "inverter_fault_display_communication": {
+        "name": "Communicatie met displaybord verloren"
+      },
+      "inverter_fault_relay": {
+        "name": "Relaisstoring"
+      },
+      "inverter_fault_controller_memory": {
+        "name": "Geheugenstoring regelaar"
+      },
+      "inverter_fault_over_temperature": {
+        "name": "Te hoge temperatuur"
+      },
+      "inverter_fault_under_temperature": {
+        "name": "Te lage temperatuur"
+      },
+      "inverter_fault_leakage_current_device": {
+        "name": "Storing lekstroomsensor"
+      },
+      "inverter_fault_dc_injection_device": {
+        "name": "Storing DC-injectiesensor"
+      },
+      "inverter_fault_current_sensor": {
+        "name": "Storing stroomsensor"
+      },
+      "inverter_fault_grid_average_overvoltage": {
+        "name": "Overspanning 10-minutengemiddelde net"
+      },
+      "inverter_fault_off_grid_undervoltage": {
+        "name": "Off-griduitgang onderspanning"
+      },
+      "inverter_fault_grid_phase_r_dc_voltage": {
+        "name": "Netfase R gelijkspanning hoog"
+      },
+      "inverter_fault_grid_phase_s_dc_voltage": {
+        "name": "Netfase S gelijkspanning hoog"
+      },
+      "inverter_fault_grid_phase_t_dc_voltage": {
+        "name": "Netfase T gelijkspanning hoog"
+      },
+      "inverter_fault_leakage_current": {
+        "name": "Lekstroomstoring"
+      },
+      "inverter_fault_grid_phase_r_dc_injection": {
+        "name": "Netfase R DC-injectie hoog"
+      },
+      "inverter_fault_grid_phase_s_dc_injection": {
+        "name": "Netfase S DC-injectie hoog"
+      },
+      "inverter_fault_grid_phase_t_dc_injection": {
+        "name": "Netfase T DC-injectie hoog"
+      },
+      "inverter_fault_insulation": {
+        "name": "Isolatiestoring"
+      },
+      "inverter_fault_bus_imbalance": {
+        "name": "DC-busspanning onbalans"
+      },
+      "battery_fault": {
+        "name": "Batterijstoring"
+      },
+      "battery_fault_unrecognised": {
+        "name": "Niet-herkende batterijstoring"
+      },
+      "battery_fault_internal_communication": {
+        "name": "Interne BMS-communicatie batterij verloren"
+      },
+      "battery_fault_pack_sequence": {
+        "name": "Storing adressering batterijpack"
+      },
+      "battery_fault_discharge_overcurrent": {
+        "name": "Batterijontlaadoverstroom"
+      },
+      "battery_fault_charge_overcurrent": {
+        "name": "Batterijoplaadoverstroom"
+      },
+      "battery_fault_total_undervoltage": {
+        "name": "Totale batterijspanning laag"
+      },
+      "battery_fault_total_overvoltage": {
+        "name": "Totale batterijspanning hoog"
+      },
+      "battery_fault_cell_undervoltage": {
+        "name": "Batterijcelonderspanning"
+      },
+      "battery_fault_cell_overvoltage": {
+        "name": "Batterijceloverspanning"
+      },
+      "battery_fault_hardware": {
+        "name": "BMS-hardwarestoring batterij"
+      },
+      "battery_fault_charge_cold": {
+        "name": "Batterij te koud om op te laden"
+      },
+      "battery_fault_charge_hot": {
+        "name": "Batterij te heet om op te laden"
+      },
+      "battery_fault_discharge_cold": {
+        "name": "Batterij te koud om te ontladen"
+      },
+      "battery_fault_discharge_hot": {
+        "name": "Batterij te heet om te ontladen"
+      },
+      "battery_fault_relay": {
+        "name": "BMS-relaisstoring batterij"
+      },
+      "battery_fault_precharge": {
+        "name": "Batterijvoorlaadstoring"
+      },
+      "battery_fault_insulation": {
+        "name": "BMS-isolatiestoring batterij"
+      },
+      "battery_fault_bms_incompatible": {
+        "name": "BMS-fabrikant batterij niet compatibel"
+      },
+      "battery_fault_cell_supplier_incompatible": {
+        "name": "Batterijcelfabrikant komt niet overeen"
+      },
+      "battery_fault_cell_incompatible": {
+        "name": "Batterijcel komt niet overeen"
+      },
+      "battery_fault_voltage_level_mismatch": {
+        "name": "Batterijspanningsniveau komt niet overeen"
+      },
+      "battery_fault_breaker_open": {
+        "name": "Batterijstroomonderbreker open"
+      },
+      "battery_fault_cell_temperature_difference": {
+        "name": "Batterijceltemperatuurverschil te groot"
+      },
+      "battery_fault_cell_voltage_difference_2": {
+        "name": "Batterijcelspanningsverschil te groot, niveau 2"
+      },
+      "battery_fault_cell_voltage_difference_1": {
+        "name": "Batterijcelspanningsverschil te groot, niveau 1"
+      },
+      "battery_fault_cell_over_temperature": {
+        "name": "Batterijcel te hoge temperatuur"
+      },
+      "battery_fault_short_circuit": {
+        "name": "Batterijkortsluiting"
+      },
+      "battery_fault_total_voltage_matching": {
+        "name": "Afstemming totale batterijspanning mislukt"
+      },
+      "battery_fault_system_locked": {
+        "name": "Batterijsysteem vergrendeld"
+      },
+      "battery_fault_fuse": {
+        "name": "Batterijzekeringstoring"
+      },
+      "battery_fault_charging_port_overvoltage": {
+        "name": "Overspanning oplaadpoort batterij"
+      },
+      "battery_pack1_fault": {
+        "name": "Batterijpack 1 storing"
+      },
+      "battery_pack1_warning": {
+        "name": "Batterijpack 1 waarschuwing"
+      },
+      "battery_pack2_fault": {
+        "name": "Batterijpack 2 storing"
+      },
+      "battery_pack2_warning": {
+        "name": "Batterijpack 2 waarschuwing"
+      },
+      "battery_pack3_fault": {
+        "name": "Batterijpack 3 storing"
+      },
+      "battery_pack3_warning": {
+        "name": "Batterijpack 3 waarschuwing"
+      },
+      "battery_pack4_fault": {
+        "name": "Batterijpack 4 storing"
+      },
+      "battery_pack4_warning": {
+        "name": "Batterijpack 4 waarschuwing"
+      },
+      "ev_fault": {
+        "name": "EV-laderstoring"
+      },
+      "ev_fault_unrecognised": {
+        "name": "Niet-herkende EV-laderstoring"
+      },
+      "ev_fault_relay_over_temperature": {
+        "name": "Relais EV-lader te hoge temperatuur"
+      },
+      "ev_fault_overload": {
+        "name": "EV-laderoverbelasting"
+      },
+      "ev_fault_ac_overvoltage": {
+        "name": "AC-overspanning EV-lader"
+      },
+      "ev_fault_ac_undervoltage": {
+        "name": "AC-onderspanning EV-lader"
+      },
+      "ev_fault_ac_overcurrent": {
+        "name": "AC-overstroom EV-lader"
+      },
+      "ev_fault_ac_overfrequency": {
+        "name": "AC-overfrequentie EV-lader"
+      },
+      "ev_fault_ac_underfrequency": {
+        "name": "AC-onderfrequentie EV-lader"
+      },
+      "ev_fault_dc_residual_current_a": {
+        "name": "DC-reststroomstoring A EV-lader"
+      },
+      "ev_fault_emergency_stop": {
+        "name": "EV-ladernoodstop"
+      },
+      "ev_fault_under_temperature": {
+        "name": "EV-lader te lage temperatuur"
+      },
+      "ev_fault_ac_residual_current": {
+        "name": "AC-reststroom EV-lader"
+      },
+      "ev_fault_input_terminal_over_temperature": {
+        "name": "Ingangsklem EV-lader te hoge temperatuur"
+      },
+      "ev_fault_bluetooth": {
+        "name": "Bluetooth-storing EV-lader"
+      },
+      "ev_fault_dc_residual_current_b": {
+        "name": "DC-reststroomstoring B EV-lader"
+      },
+      "ev_fault_relay": {
+        "name": "EV-laderrelaisstoring"
+      },
+      "ev_fault_grounding": {
+        "name": "EV-laderaardingsstoring"
+      },
+      "ev_fault_phase_sequence": {
+        "name": "EV-laderfasevolgordestoring"
+      },
+      "ev_fault_rcd_circuit": {
+        "name": "RCD-circuitstoring EV-lader"
+      },
+      "ev_fault_rs485_timeout": {
+        "name": "RS485-communicatie-time-out EV-lader"
+      },
+      "ev_fault_supply": {
+        "name": "EV-laderstroomvoorzieningsstoring"
+      },
+      "ev_fault_meter": {
+        "name": "EV-ladermeterstoring"
+      },
+      "ev_fault_control_pilot": {
+        "name": "Control pilot-storing EV-lader (onder 2 V)"
+      },
+      "ev_fault_connector_lock": {
+        "name": "Vergrendelingsstoring connector EV-lader"
+      },
+      "ev_fault_connector_current": {
+        "name": "Stroomstoring connector EV-lader"
+      },
+      "ev_fault_dc_residual_current_c": {
+        "name": "DC-reststroomstoring C EV-lader"
+      }
+    },
+    "number": {
+      "charge_slot_1_power": {
+        "name": "Oplaadtijdvak 1 vermogen"
+      },
+      "charge_slot_1_days": {
+        "name": "Oplaadtijdvak 1 weekdagen"
+      },
+      "charge_slot_2_power": {
+        "name": "Oplaadtijdvak 2 vermogen"
+      },
+      "charge_slot_2_days": {
+        "name": "Oplaadtijdvak 2 weekdagen"
+      },
+      "charge_slot_3_power": {
+        "name": "Oplaadtijdvak 3 vermogen"
+      },
+      "charge_slot_3_days": {
+        "name": "Oplaadtijdvak 3 weekdagen"
+      },
+      "charge_slot_4_power": {
+        "name": "Oplaadtijdvak 4 vermogen"
+      },
+      "charge_slot_4_days": {
+        "name": "Oplaadtijdvak 4 weekdagen"
+      },
+      "charge_slot_5_power": {
+        "name": "Oplaadtijdvak 5 vermogen"
+      },
+      "charge_slot_5_days": {
+        "name": "Oplaadtijdvak 5 weekdagen"
+      },
+      "charge_slot_6_power": {
+        "name": "Oplaadtijdvak 6 vermogen"
+      },
+      "charge_slot_6_days": {
+        "name": "Oplaadtijdvak 6 weekdagen"
+      },
+      "charge_slot_7_power": {
+        "name": "Oplaadtijdvak 7 vermogen"
+      },
+      "charge_slot_7_days": {
+        "name": "Oplaadtijdvak 7 weekdagen"
+      },
+      "discharge_slot_1_power": {
+        "name": "Ontlaadtijdvak 1 vermogen"
+      },
+      "discharge_slot_1_days": {
+        "name": "Ontlaadtijdvak 1 weekdagen"
+      },
+      "discharge_slot_2_power": {
+        "name": "Ontlaadtijdvak 2 vermogen"
+      },
+      "discharge_slot_2_days": {
+        "name": "Ontlaadtijdvak 2 weekdagen"
+      },
+      "discharge_slot_3_power": {
+        "name": "Ontlaadtijdvak 3 vermogen"
+      },
+      "discharge_slot_3_days": {
+        "name": "Ontlaadtijdvak 3 weekdagen"
+      },
+      "discharge_slot_4_power": {
+        "name": "Ontlaadtijdvak 4 vermogen"
+      },
+      "discharge_slot_4_days": {
+        "name": "Ontlaadtijdvak 4 weekdagen"
+      },
+      "discharge_slot_5_power": {
+        "name": "Ontlaadtijdvak 5 vermogen"
+      },
+      "discharge_slot_5_days": {
+        "name": "Ontlaadtijdvak 5 weekdagen"
+      },
+      "discharge_slot_6_power": {
+        "name": "Ontlaadtijdvak 6 vermogen"
+      },
+      "discharge_slot_6_days": {
+        "name": "Ontlaadtijdvak 6 weekdagen"
+      },
+      "discharge_slot_7_power": {
+        "name": "Ontlaadtijdvak 7 vermogen"
+      },
+      "discharge_slot_7_days": {
+        "name": "Ontlaadtijdvak 7 weekdagen"
+      },
+      "passive_mode": {
+        "name": "Passieve modus"
+      },
+      "passive_grid_charge_power": {
+        "name": "Passief netoplaadvermogen"
+      },
+      "passive_grid_discharge_power": {
+        "name": "Passief netontlaadvermogen"
+      },
+      "passive_battery_charge_power": {
+        "name": "Passief batterijoplaadvermogen"
+      },
+      "passive_battery_discharge_power": {
+        "name": "Passief batterijontlaadvermogen"
+      },
+      "battery_discharge_soc_limit_on_grid": {
+        "name": "Ontlaadlimiet batterij (laadniveau, on-grid)"
+      },
+      "battery_discharge_soc_limit_off_grid": {
+        "name": "Ontlaadlimiet batterij (laadniveau, off-grid)"
+      },
+      "battery_charge_soc_limit": {
+        "name": "Oplaadlimiet batterij (laadniveau)"
+      },
+      "battery_charge_power_limit": {
+        "name": "Limiet oplaadvermogen batterij"
+      },
+      "battery_discharge_power_limit": {
+        "name": "Limiet ontlaadvermogen batterij"
+      },
+      "grid_import_power_limit": {
+        "name": "Limiet afnamevermogen net"
+      },
+      "grid_export_power_limit": {
+        "name": "Limiet terugleveringsvermogen net"
+      },
+      "backup_reserve_soc": {
+        "name": "Laadniveau back-upreserve"
+      },
+      "export_limit_power": {
+        "name": "Limiet terugleveringsvermogen"
+      },
+      "export_limit_current": {
+        "name": "Limiet terugleveringsstroom"
+      },
+      "ev_charge_power": {
+        "name": "EV-oplaadvermogen"
+      },
+      "ev_ems_charge_current": {
+        "name": "EMS-oplaadstroom EV-lader"
+      },
+      "ev_slot_1_days": {
+        "name": "EV-ladertijdvak 1 weekdagen"
+      },
+      "ev_slot_1_power": {
+        "name": "EV-ladertijdvak 1 vermogen"
+      },
+      "ev_slot_2_days": {
+        "name": "EV-ladertijdvak 2 weekdagen"
+      },
+      "ev_slot_2_power": {
+        "name": "EV-ladertijdvak 2 vermogen"
+      },
+      "ev_slot_3_days": {
+        "name": "EV-ladertijdvak 3 weekdagen"
+      },
+      "ev_slot_3_power": {
+        "name": "EV-ladertijdvak 3 vermogen"
+      },
+      "ev_slot_4_days": {
+        "name": "EV-ladertijdvak 4 weekdagen"
+      },
+      "ev_slot_4_power": {
+        "name": "EV-ladertijdvak 4 vermogen"
+      },
+      "ev_slot_5_days": {
+        "name": "EV-ladertijdvak 5 weekdagen"
+      },
+      "ev_slot_5_power": {
+        "name": "EV-ladertijdvak 5 vermogen"
+      },
+      "ev_slot_6_days": {
+        "name": "EV-ladertijdvak 6 weekdagen"
+      },
+      "ev_slot_6_power": {
+        "name": "EV-ladertijdvak 6 vermogen"
+      },
+      "ev_slot_7_days": {
+        "name": "EV-ladertijdvak 7 weekdagen"
+      },
+      "ev_slot_7_power": {
+        "name": "EV-ladertijdvak 7 vermogen"
+      },
+      "ems_timeout": {
+        "name": "EMS-time-out"
+      },
+      "ems_battery_charge_current_limit": {
+        "name": "EMS-limiet oplaadstroom batterij"
+      },
+      "ems_battery_discharge_current_limit": {
+        "name": "EMS-limiet ontlaadstroom batterij"
+      },
+      "ems_inverter_import_power_limit": {
+        "name": "EMS-limiet afnamevermogen omvormer"
+      },
+      "ems_inverter_export_power_limit": {
+        "name": "EMS-limiet terugleveringsvermogen omvormer"
+      },
+      "ems_pv_power_limit": {
+        "name": "EMS-limiet zonnevermogen"
+      },
+      "battery_power_target": {
+        "name": "Vermogensdoel batterij"
+      },
+      "grid_power_target": {
+        "name": "Vermogensdoel net"
+      },
+      "inverter_power_target": {
+        "name": "Vermogensdoel omvormer"
+      },
+      "battery_forced_charge_power_limit": {
+        "name": "Limiet geforceerd oplaadvermogen batterij"
+      }
+    },
+    "select": {
+      "application_mode": {
+        "name": "Toepassingsmodus",
+        "state": {
+          "self_use": "Eigen verbruik",
+          "time_of_use": "Tijdgestuurd",
+          "backup": "Back-up",
+          "ems": "EMS",
+          "passive": "Passief",
+          "legacy": "Legacy",
+          "time_of_use_bms": "Tijdgestuurd (BMS)",
+          "ai_saving": "AI-besparing",
+          "peak_shaving": "Piekafvlakking"
+        }
+      },
+      "export_limit_mode": {
+        "name": "Modus terugleveringslimiet",
+        "state": {
+          "off": "Uit",
+          "total_power": "Totaal vermogen",
+          "phase_current": "Fasestroom",
+          "phase_power": "Fasevermogen"
+        }
+      },
+      "time_of_use_idle_mode": {
+        "name": "Tijdgestuurd inactieve modus",
+        "state": {
+          "standby": "Stand-by",
+          "self_use": "Eigen verbruik"
+        }
+      },
+      "led_mode": {
+        "name": "LED-modus",
+        "state": {
+          "all_off": "Alles uit",
+          "outer_ring_on": "Buitenste ring aan",
+          "inner_ring_on": "Binnenste ring aan",
+          "all_on": "Alles aan"
+        }
+      },
+      "ev_ems_phase_mode": {
+        "name": "EMS-fasemodus EV-lader",
+        "state": {
+          "three_phase": "Driefasig",
+          "single_phase": "Eenfasig"
+        }
+      },
+      "ev_mode": {
+        "name": "EV-ladermodus",
+        "state": {
+          "disabled": "Uitgeschakeld",
+          "standard": "Standaard",
+          "time_based": "Tijdgebaseerd",
+          "pv_surplus": "PV-overschot",
+          "ems": "EMS"
+        }
+      },
+      "ev_slot_1_mode": {
+        "name": "EV-ladertijdvak 1 modus",
+        "state": {
+          "not_set": "Niet ingesteld",
+          "standard": "Standaard",
+          "pv_surplus": "PV-overschot"
+        }
+      },
+      "ev_slot_2_mode": {
+        "name": "EV-ladertijdvak 2 modus",
+        "state": {
+          "not_set": "Niet ingesteld",
+          "standard": "Standaard",
+          "pv_surplus": "PV-overschot"
+        }
+      },
+      "ev_slot_3_mode": {
+        "name": "EV-ladertijdvak 3 modus",
+        "state": {
+          "not_set": "Niet ingesteld",
+          "standard": "Standaard",
+          "pv_surplus": "PV-overschot"
+        }
+      },
+      "ev_slot_4_mode": {
+        "name": "EV-ladertijdvak 4 modus",
+        "state": {
+          "not_set": "Niet ingesteld",
+          "standard": "Standaard",
+          "pv_surplus": "PV-overschot"
+        }
+      },
+      "ev_slot_5_mode": {
+        "name": "EV-ladertijdvak 5 modus",
+        "state": {
+          "not_set": "Niet ingesteld",
+          "standard": "Standaard",
+          "pv_surplus": "PV-overschot"
+        }
+      },
+      "ev_slot_6_mode": {
+        "name": "EV-ladertijdvak 6 modus",
+        "state": {
+          "not_set": "Niet ingesteld",
+          "standard": "Standaard",
+          "pv_surplus": "PV-overschot"
+        }
+      },
+      "ev_slot_7_mode": {
+        "name": "EV-ladertijdvak 7 modus",
+        "state": {
+          "not_set": "Niet ingesteld",
+          "standard": "Standaard",
+          "pv_surplus": "PV-overschot"
+        }
+      }
+    },
+    "switch": {
+      "charge_slot_1_enabled": {
+        "name": "Oplaadtijdvak 1 ingeschakeld"
+      },
+      "charge_slot_2_enabled": {
+        "name": "Oplaadtijdvak 2 ingeschakeld"
+      },
+      "charge_slot_3_enabled": {
+        "name": "Oplaadtijdvak 3 ingeschakeld"
+      },
+      "charge_slot_4_enabled": {
+        "name": "Oplaadtijdvak 4 ingeschakeld"
+      },
+      "charge_slot_5_enabled": {
+        "name": "Oplaadtijdvak 5 ingeschakeld"
+      },
+      "charge_slot_6_enabled": {
+        "name": "Oplaadtijdvak 6 ingeschakeld"
+      },
+      "charge_slot_7_enabled": {
+        "name": "Oplaadtijdvak 7 ingeschakeld"
+      },
+      "discharge_slot_1_enabled": {
+        "name": "Ontlaadtijdvak 1 ingeschakeld"
+      },
+      "discharge_slot_2_enabled": {
+        "name": "Ontlaadtijdvak 2 ingeschakeld"
+      },
+      "discharge_slot_3_enabled": {
+        "name": "Ontlaadtijdvak 3 ingeschakeld"
+      },
+      "discharge_slot_4_enabled": {
+        "name": "Ontlaadtijdvak 4 ingeschakeld"
+      },
+      "discharge_slot_5_enabled": {
+        "name": "Ontlaadtijdvak 5 ingeschakeld"
+      },
+      "discharge_slot_6_enabled": {
+        "name": "Ontlaadtijdvak 6 ingeschakeld"
+      },
+      "discharge_slot_7_enabled": {
+        "name": "Ontlaadtijdvak 7 ingeschakeld"
+      },
+      "battery_auto_wake": {
+        "name": "Batterij automatisch ontwaken"
+      },
+      "time_of_use_grid_discharge": {
+        "name": "Tijdgestuurde netontlading"
+      },
+      "ev_enabled": {
+        "name": "EV-lader ingeschakeld"
+      },
+      "ev_slot_1_grid_charging": {
+        "name": "EV-ladertijdvak 1 opladen via net"
+      },
+      "ev_slot_1_battery_discharge": {
+        "name": "EV-ladertijdvak 1 batterijontlading"
+      },
+      "ev_slot_2_grid_charging": {
+        "name": "EV-ladertijdvak 2 opladen via net"
+      },
+      "ev_slot_2_battery_discharge": {
+        "name": "EV-ladertijdvak 2 batterijontlading"
+      },
+      "ev_slot_3_grid_charging": {
+        "name": "EV-ladertijdvak 3 opladen via net"
+      },
+      "ev_slot_3_battery_discharge": {
+        "name": "EV-ladertijdvak 3 batterijontlading"
+      },
+      "ev_slot_4_grid_charging": {
+        "name": "EV-ladertijdvak 4 opladen via net"
+      },
+      "ev_slot_4_battery_discharge": {
+        "name": "EV-ladertijdvak 4 batterijontlading"
+      },
+      "ev_slot_5_grid_charging": {
+        "name": "EV-ladertijdvak 5 opladen via net"
+      },
+      "ev_slot_5_battery_discharge": {
+        "name": "EV-ladertijdvak 5 batterijontlading"
+      },
+      "ev_slot_6_grid_charging": {
+        "name": "EV-ladertijdvak 6 opladen via net"
+      },
+      "ev_slot_6_battery_discharge": {
+        "name": "EV-ladertijdvak 6 batterijontlading"
+      },
+      "ev_slot_7_grid_charging": {
+        "name": "EV-ladertijdvak 7 opladen via net"
+      },
+      "ev_slot_7_battery_discharge": {
+        "name": "EV-ladertijdvak 7 batterijontlading"
+      },
+      "ev_minimum_current_charging": {
+        "name": "EV-lader opladen met minimale stroom"
+      },
+      "ev_ems_charging": {
+        "name": "EMS-opladen EV-lader"
+      },
+      "battery_power_control": {
+        "name": "Vermogensregeling batterij"
+      },
+      "grid_power_control": {
+        "name": "Vermogensregeling net"
+      },
+      "inverter_power_control": {
+        "name": "Vermogensregeling omvormer"
+      },
+      "buzzer": {
+        "name": "Zoemer"
+      }
+    },
+    "time": {
+      "charge_slot_1_start": {
+        "name": "Oplaadtijdvak 1 starttijd"
+      },
+      "charge_slot_1_end": {
+        "name": "Oplaadtijdvak 1 eindtijd"
+      },
+      "charge_slot_2_start": {
+        "name": "Oplaadtijdvak 2 starttijd"
+      },
+      "charge_slot_2_end": {
+        "name": "Oplaadtijdvak 2 eindtijd"
+      },
+      "charge_slot_3_start": {
+        "name": "Oplaadtijdvak 3 starttijd"
+      },
+      "charge_slot_3_end": {
+        "name": "Oplaadtijdvak 3 eindtijd"
+      },
+      "charge_slot_4_start": {
+        "name": "Oplaadtijdvak 4 starttijd"
+      },
+      "charge_slot_4_end": {
+        "name": "Oplaadtijdvak 4 eindtijd"
+      },
+      "charge_slot_5_start": {
+        "name": "Oplaadtijdvak 5 starttijd"
+      },
+      "charge_slot_5_end": {
+        "name": "Oplaadtijdvak 5 eindtijd"
+      },
+      "charge_slot_6_start": {
+        "name": "Oplaadtijdvak 6 starttijd"
+      },
+      "charge_slot_6_end": {
+        "name": "Oplaadtijdvak 6 eindtijd"
+      },
+      "charge_slot_7_start": {
+        "name": "Oplaadtijdvak 7 starttijd"
+      },
+      "charge_slot_7_end": {
+        "name": "Oplaadtijdvak 7 eindtijd"
+      },
+      "discharge_slot_1_start": {
+        "name": "Ontlaadtijdvak 1 starttijd"
+      },
+      "discharge_slot_1_end": {
+        "name": "Ontlaadtijdvak 1 eindtijd"
+      },
+      "discharge_slot_2_start": {
+        "name": "Ontlaadtijdvak 2 starttijd"
+      },
+      "discharge_slot_2_end": {
+        "name": "Ontlaadtijdvak 2 eindtijd"
+      },
+      "discharge_slot_3_start": {
+        "name": "Ontlaadtijdvak 3 starttijd"
+      },
+      "discharge_slot_3_end": {
+        "name": "Ontlaadtijdvak 3 eindtijd"
+      },
+      "discharge_slot_4_start": {
+        "name": "Ontlaadtijdvak 4 starttijd"
+      },
+      "discharge_slot_4_end": {
+        "name": "Ontlaadtijdvak 4 eindtijd"
+      },
+      "discharge_slot_5_start": {
+        "name": "Ontlaadtijdvak 5 starttijd"
+      },
+      "discharge_slot_5_end": {
+        "name": "Ontlaadtijdvak 5 eindtijd"
+      },
+      "discharge_slot_6_start": {
+        "name": "Ontlaadtijdvak 6 starttijd"
+      },
+      "discharge_slot_6_end": {
+        "name": "Ontlaadtijdvak 6 eindtijd"
+      },
+      "discharge_slot_7_start": {
+        "name": "Ontlaadtijdvak 7 starttijd"
+      },
+      "discharge_slot_7_end": {
+        "name": "Ontlaadtijdvak 7 eindtijd"
+      },
+      "ev_slot_1_start": {
+        "name": "EV-ladertijdvak 1 starttijd"
+      },
+      "ev_slot_1_end": {
+        "name": "EV-ladertijdvak 1 eindtijd"
+      },
+      "ev_slot_2_start": {
+        "name": "EV-ladertijdvak 2 starttijd"
+      },
+      "ev_slot_2_end": {
+        "name": "EV-ladertijdvak 2 eindtijd"
+      },
+      "ev_slot_3_start": {
+        "name": "EV-ladertijdvak 3 starttijd"
+      },
+      "ev_slot_3_end": {
+        "name": "EV-ladertijdvak 3 eindtijd"
+      },
+      "ev_slot_4_start": {
+        "name": "EV-ladertijdvak 4 starttijd"
+      },
+      "ev_slot_4_end": {
+        "name": "EV-ladertijdvak 4 eindtijd"
+      },
+      "ev_slot_5_start": {
+        "name": "EV-ladertijdvak 5 starttijd"
+      },
+      "ev_slot_5_end": {
+        "name": "EV-ladertijdvak 5 eindtijd"
+      },
+      "ev_slot_6_start": {
+        "name": "EV-ladertijdvak 6 starttijd"
+      },
+      "ev_slot_6_end": {
+        "name": "EV-ladertijdvak 6 eindtijd"
+      },
+      "ev_slot_7_start": {
+        "name": "EV-ladertijdvak 7 starttijd"
+      },
+      "ev_slot_7_end": {
+        "name": "EV-ladertijdvak 7 eindtijd"
+      }
+    },
+    "button": {
+      "clear_current_fault": {
+        "name": "Huidige storing wissen"
+      },
+      "restart_inverter": {
+        "name": "Omvormer herstarten"
+      },
+      "synchronise_clock": {
+        "name": "Klok synchroniseren"
+      },
+      "ems_pv_power_limit_remove": {
+        "name": "EMS-limiet zonnevermogen verwijderen"
+      }
+    }
+  },
+  "issues": {
+    "equipment_not_detected": {
+      "title": "{equipment} wordt niet meer gedetecteerd",
+      "description": "{installation} is ingesteld met {equipment}, maar de omvormer meldt nu dat deze er niet is. De entiteiten van {equipment} blijven bestaan en tonen wat de omvormer antwoordt. Controleer de {equipment}, of stel deze in op Niet geïnstalleerd bij Configureren om de entiteiten te verwijderen."
+    },
+    "model_mismatch": {
+      "title": "{installation} is op het verkeerde model ingesteld",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "De gedetecteerde omvormer overnemen",
+            "description": "{installation} is ingesteld op {selected_model}, maar het apparaat op het adres identificeert zich als {model} met serienummer {serial}, dus het is niet geladen. De {model} overnemen? Uw entiteiten, hun ID's en hun historische gegevens blijven bij deze installatie, en de apparaatgegevens veranderen. Bediening toestaan en alle andere instellingen blijven zoals ze zijn. Controleer het adres bij Configureren om {selected_model} te behouden."
+          }
+        },
+        "error": {
+          "cannot_connect": "De omvormer kon niet worden bereikt. Controleer of hij aan staat en of niets anders de verbinding vasthoudt, en probeer het opnieuw.",
+          "timeout": "De omvormer antwoordde niet op tijd. Probeer het opnieuw.",
+          "read_rejected": "De omvormer weigerde een vereiste meting. Probeer het opnieuw.",
+          "invalid_device_data": "De omvormer antwoordde met gegevens die niet gelezen konden worden. Probeer het opnieuw.",
+          "unsupported_device": "Het apparaat op het adres is geen herkend model, dus er is niets om over te nemen. Kies het model bij Configureren.",
+          "already_configured": "Een andere installatie gebruikt deze omvormer al, dus hij kan hier niet worden overgenomen.",
+          "device_changed": "Het apparaat meldt nu {model} met serienummer {serial}, wat niet is wat u eerder te zien kreeg. Bevestig opnieuw om over te nemen wat nu wordt getoond."
+        },
+        "abort": {
+          "entry_removed": "Deze installatie bestaat niet meer.",
+          "already_configured": "Een andere installatie gebruikt deze omvormer al, dus hij kan hier niet worden overgenomen.",
+          "prefix_unavailable": "Het voorvoegsel van de entiteits-ID's van deze installatie is niet meer beschikbaar."
+        }
+      }
+    },
+    "identity_mismatch": {
+      "title": "{installation} bereikt nu een andere omvormer",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "De gedetecteerde omvormer overnemen",
+            "description": "{installation} is ingesteld met de omvormer met serienummer {approved_serial}, maar het apparaat op het adres heeft serienummer {serial} en identificeert zich als {model}. De nieuwe omvormer overnemen? Uw entiteiten, hun ID's en hun historische gegevens blijven bij deze installatie, en de apparaatgegevens veranderen. Bediening toestaan en alle andere instellingen blijven zoals ze zijn. Controleer het adres bij Configureren om de oorspronkelijke omvormer te behouden."
+          }
+        },
+        "error": {
+          "cannot_connect": "De omvormer op dit adres kon niet worden bereikt, dus het serienummer kon niet worden gecontroleerd. Zorg dat hij stroom heeft en niet wordt vastgehouden door een andere Modbus-client, en bevestig dan opnieuw.",
+          "timeout": "De omvormer deed er te lang over om zijn serienummer te geven. Bevestig over een moment opnieuw.",
+          "read_rejected": "De omvormer weigerde een meting die nodig is om het serienummer te controleren. Bevestig over een moment opnieuw.",
+          "invalid_device_data": "De omvormer gaf een serienummer dat niet gelezen kon worden. Bevestig over een moment opnieuw.",
+          "unsupported_device": "Het apparaat op dit adres is nu geen herkend model, dus het serienummer kan niet worden overgenomen. Kies het model bij Configureren.",
+          "already_configured": "De omvormer op dit adres hoort al bij een andere installatie, dus hij kan hier niet worden overgenomen.",
+          "device_changed": "De omvormer op dit adres heeft nu serienummer {serial} en meldt {model}, wat afwijkt van wat u te zien kreeg. Bevestig opnieuw om precies over te nemen wat nu wordt vermeld."
+        },
+        "abort": {
+          "entry_removed": "Deze installatie is verwijderd, dus er is niets om de omvormer in over te nemen.",
+          "already_configured": "De omvormer op dit adres hoort al bij een andere installatie, dus hij kan hier niet worden overgenomen.",
+          "prefix_unavailable": "Het voorvoegsel van de entiteits-ID's van deze installatie kan niet meer worden gebruikt, dus de omvormer is niet overgenomen."
+        }
+      }
+    },
+    "unsupported_device": {
+      "title": "{installation} bereikt een niet-herkend apparaat",
+      "description": "Het apparaat op het adres van {installation} meldt type {device_type}, dat geen herkend model is. Het is niet geladen. Bij Configureren kan een model worden gekozen, dat dan niet geverifieerd wordt gebruikt."
+    },
+    "registers_refused": {
+      "title": "{installation} heeft metingen die de omvormer weigert",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "De geweigerde entiteiten uitschakelen",
+            "description": "De omvormer blijft deze metingen van {installation} weigeren, dus ze worden niet meer uitgelezen: {entities}. Ze worden één keer per dag opnieuw geprobeerd en telkens wanneer de integratie wordt geladen, en deze reparatie verdwijnt vanzelf wanneer ze weer antwoorden. Ze uitschakelen om te voorkomen dat ze nog worden uitgelezen? U kunt ze weer inschakelen via de entiteitsinstellingen."
+          }
+        }
+      }
+    },
+    "endpoint_unreachable": {
+      "title": "{installation} antwoordt niet meer",
+      "description": "{installation} heeft 15 minuten lang niet geantwoord op {host}:{port}. Controleer of de omvormer en zijn communicatiemodule stroom hebben, of het netwerk tussen Home Assistant en de omvormer werkt, en of geen andere Modbus-client de verbinding vasthoudt. Deze reparatie verdwijnt bij de eerste goede meting."
+    }
+  },
+  "exceptions": {
+    "unsupported_device": {
+      "message": "Het aangesloten apparaat meldt type {device_type}, dat niet wordt herkend. Kies het model bij Configureren."
+    },
+    "invalid_device_data": {
+      "message": "De omvormer gaf ongeldige identiteits- of telemetriegegevens terug."
+    },
+    "cannot_connect": {
+      "message": "De communicatie met de omvormer is mislukt. Controleer het eindpunt, het Unit-ID en de verbinding."
+    },
+    "timeout": {
+      "message": "De omvormer antwoordde niet voordat het verzoek verliep. Controleer de stroomvoorziening, het netwerk en het Unit-ID."
+    },
+    "read_rejected": {
+      "message": "De omvormer weigerde het uitlezen van een vereist register. Controleer het gekozen apparaattype en de registertoegang."
+    },
+    "identity_mismatch": {
+      "message": "Het eindpunt identificeert nu een andere omvormer. Controleer het geconfigureerde eindpunt."
+    },
+    "model_mismatch": {
+      "message": "Het aangesloten apparaat identificeert zich als {detected_model}, niet als {selected_model}. Kies {detected_model} of Automatisch bij Configureren."
+    },
+    "unknown_model": {
+      "message": "Het opgeslagen model {selection} is geen bekend model. Kies Automatisch of een vermeld model bij Configureren."
+    },
+    "backing_off": {
+      "message": "Het eindpunt van de omvormer wacht na herhaalde fouten, dus er is geen verbinding geprobeerd. Home Assistant probeert het automatisch opnieuw."
+    },
+    "control_not_enabled": {
+      "message": "Bediening is niet ingeschakeld voor deze installatie, dus de omvormer is niet gewijzigd. Om wijzigingen toe te staan, opent u Instellingen, Apparaten & services, SAJ Local, Configureren en schakelt u Bediening toestaan in."
+    },
+    "model_unverified": {
+      "message": "Het model van deze omvormer kon niet worden geverifieerd, dus de instellingen kunnen niet worden gewijzigd. De omvormer is niet gewijzigd."
+    },
+    "protected_setting": {
+      "message": "{setting} is een instelling voor ingebruikname en kan niet vanuit Home Assistant worden gewijzigd. De omvormer is niet gewijzigd."
+    },
+    "unknown_setting": {
+      "message": "{setting} kan niet op deze omvormer worden geschreven. De omvormer is niet gewijzigd."
+    },
+    "separate_registers": {
+      "message": "Deze wijzigingen worden niet samen in één register opgeslagen en kunnen niet in één stap worden gemaakt. De omvormer is niet gewijzigd."
+    },
+    "invalid_value_not_a_number": {
+      "message": "De waarde is geen getal. De omvormer is niet gewijzigd."
+    },
+    "invalid_value_out_of_range": {
+      "message": "De waarde ligt buiten het bereik dat deze instelling toestaat. De omvormer is niet gewijzigd."
+    },
+    "invalid_value_not_an_option": {
+      "message": "De waarde is geen van de opties die deze instelling biedt. De omvormer is niet gewijzigd."
+    },
+    "invalid_value_not_a_time": {
+      "message": "De waarde is geen geldig tijdstip van de dag. De omvormer is niet gewijzigd."
+    },
+    "invalid_value_not_a_clock": {
+      "message": "De waarde is geen geldige datum en tijd. De omvormer is niet gewijzigd."
+    },
+    "invalid_value_does_not_fit": {
+      "message": "De waarde past niet in het register waarin ze wordt opgeslagen. De omvormer is niet gewijzigd."
+    },
+    "invalid_value_unsupported_encoding": {
+      "message": "Deze instelling kan niet vanuit Home Assistant worden geschreven. De omvormer is niet gewijzigd."
+    },
+    "link_unavailable": {
+      "message": "De omvormer is op dit moment niet bereikbaar, dus er is niets verzonden en de omvormer is niet gewijzigd. Home Assistant maakt zelf opnieuw verbinding."
+    },
+    "write_allowance": {
+      "message": "Te veel wijzigingen: er zijn niet meer dan {limit} schrijfacties toegestaan in {window} seconden, om de omvormer te beschermen. Er is niets verzonden en de omvormer is niet gewijzigd. Probeer het over een moment opnieuw."
+    },
+    "ems_timeout_too_short": {
+      "message": "De EMS-time-out van {timeout} seconden van de omvormer is niet langer dan de EMS-hartslag van {interval} seconden, dus EMS zou tussen de slagen wegvallen. De omvormer is niet gewijzigd. Verhoog de time-out boven de hartslag, of wijzig de hartslag bij Configureren."
+    },
+    "write_rejected": {
+      "message": "De omvormer weigerde de wijziging met uitzonderingscode {exception_code}. De omvormer is niet gewijzigd."
+    },
+    "write_unconfirmed": {
+      "message": "De omvormer bevestigde de wijziging niet. Ze is mogelijk wel of niet toegepast, dus de omvormer verkeert in een onbekende toestand. De wijziging is niet opnieuw verzonden. Home Assistant maakt opnieuw verbinding en leest de omvormer opnieuw uit."
+    },
+    "write_mismatch": {
+      "message": "De omvormer accepteerde de wijziging maar bevat nu een andere waarde, die wordt getoond. De omvormer is gewijzigd, maar niet naar de waarde die u vroeg."
+    },
+    "no_power_target": {
+      "message": "Voor de functie {function} is geen vermogen ingesteld. Stel eerst het vermogensdoel in. De omvormer is niet gewijzigd."
+    },
+    "another_function_running": {
+      "message": "De functie {running} is actief, en er kan maar één vermogensregelfunctie tegelijk actief zijn. Schakel die eerst uit. De omvormer is niet gewijzigd."
+    },
+    "unusable_power": {
+      "message": "Het vermogen moet een geheel aantal watts zijn van {minimum} tot {maximum}. De omvormer is niet gewijzigd."
+    }
+  },
+  "selector": {
+    "model": {
+      "options": {
+        "automatic": "Automatisch",
+        "hs3": "HS3",
+        "h2": "H2"
+      }
+    },
+    "block": {
+      "options": {
+        "network": "Netwerk",
+        "ev_data": "EV-ladergegevens",
+        "settings": "Instellingen",
+        "realtime": "Realtime",
+        "energy": "Energie",
+        "parallel": "Parallelle machines",
+        "ev_settings": "EV-laderinstellingen",
+        "averages": "Vijfminutengemiddelden",
+        "ems": "EMS",
+        "identity": "Versies",
+        "battery": "Batterij",
+        "meters": "Meters",
+        "battery_identity": "Batterijidentiteit"
+      }
+    },
+    "entity_state": {
+      "options": {
+        "disabled": "{entity} (uitgeschakeld)"
+      }
+    },
+    "equipment": {
+      "options": {
+        "battery": "Batterij",
+        "meter_a": "Meter A",
+        "meter_b": "Meter B",
+        "ev_charger": "EV-lader",
+        "parallel": "Parallel systeem",
+        "none": "geen optionele apparatuur"
+      }
+    },
+    "equipment_setting": {
+      "options": {
+        "automatic": "Automatisch",
+        "fitted": "Geïnstalleerd",
+        "not_fitted": "Niet geïnstalleerd"
+      }
+    },
+    "power_function": {
+      "options": {
+        "battery": "Batterij",
+        "grid": "Net",
+        "inverter": "Omvormer"
+      }
+    }
+  }
+}

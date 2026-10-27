@@ -1,3 +1,5 @@
+en | [de](../../../de/user/cards/weekdays-feature.md) | [nl](../../../nl/user/cards/weekdays-feature.md) | [fr](../../../fr/user/cards/weekdays-feature.md) | [zh](../../../zh-hans/user/cards/weekdays-feature.md) | [es](../../../es/user/cards/weekdays-feature.md) | [it](../../../it/user/cards/weekdays-feature.md) | [pl](../../../pl/user/cards/weekdays-feature.md) | [sv](../../../sv/user/cards/weekdays-feature.md)
+
 # Weekdays tile card feature
 
 The Weekdays tile card feature page explains the weekdays feature, which puts seven day buttons on a tile card to set the days of a slot. The full list is in the [Weekdays tile card feature](../../../../frontend/docs/features.md#weekdays-tile-card-feature) section of the cards feature list. The days of a slot are the Weekdays entities of the charge, discharge and EV charger slots, listed in the [Battery](../entities/battery.md) and [EV charger](../entities/ev-charger.md) areas of the entity reference.

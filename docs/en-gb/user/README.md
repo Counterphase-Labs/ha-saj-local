@@ -1,3 +1,5 @@
+en | [de](../../de/user/README.md) | [nl](../../nl/user/README.md) | [fr](../../fr/user/README.md) | [zh](../../zh-hans/user/README.md) | [es](../../es/user/README.md) | [it](../../it/user/README.md) | [pl](../../pl/user/README.md) | [sv](../../sv/user/README.md)
+
 # SAJ Local user documentation
 
 SAJ Local is a local Home Assistant integration. SAJ Local reads a SAJ HS3 or H2 solar system straight from the inverter over Modbus TCP on your own network and, when you allow control, changes the settings of the inverter from Home Assistant. SAJ Local needs no cloud account, and limits the requests to the inverter so the communication module of the inverter keeps working.
@@ -29,6 +31,10 @@ SAJ Local is in development and has no published release yet. Each page below st
 ## Dashboards
 
 - [Dashboard cards](cards/README.md): the cards, the tile card feature and the badge that SAJ Local adds to Home Assistant.
+
+## Terms
+
+- [Nomenclature](nomenclature.md): the SAJ and Home Assistant terms that the integration, the cards and the documentation use, with their meaning.
 
 ## When something is wrong
 

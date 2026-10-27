@@ -1,3 +1,5 @@
+en | [de](../../de/user/getting-started.md) | [nl](../../nl/user/getting-started.md) | [fr](../../fr/user/getting-started.md) | [zh](../../zh-hans/user/getting-started.md) | [es](../../es/user/getting-started.md) | [it](../../it/user/getting-started.md) | [pl](../../pl/user/getting-started.md) | [sv](../../sv/user/getting-started.md)
+
 # Get started
 
 The Get started page adds your SAJ system to Home Assistant and says what you get afterwards. The full list of what setup does is in the [Setup and detection](../../../custom_components/saj_local/docs/features.md#setup-and-detection) section of the integration feature list. [Install SAJ Local](installation.md) first, and check that your inverter is in the [supported equipment](supported-equipment.md).

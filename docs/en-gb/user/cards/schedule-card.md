@@ -1,3 +1,5 @@
+en | [de](../../../de/user/cards/schedule-card.md) | [nl](../../../nl/user/cards/schedule-card.md) | [fr](../../../fr/user/cards/schedule-card.md) | [zh](../../../zh-hans/user/cards/schedule-card.md) | [es](../../../es/user/cards/schedule-card.md) | [it](../../../it/user/cards/schedule-card.md) | [pl](../../../pl/user/cards/schedule-card.md) | [sv](../../../sv/user/cards/schedule-card.md)
+
 # Schedule card
 
 The Schedule card page explains the schedule card, which shows and edits the charge, discharge and EV charger slots. The full list is in the [Schedule card](../../../../frontend/docs/features.md#schedule-card) section of the cards feature list. [Add an element](README.md#add-an-element) explains how to add the card and choose a system.

@@ -1,0 +1,3313 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "连接 SAJ 逆变器",
+        "description": "输入本地 Modbus TCP 端点、轮询间隔和型号。除非逆变器无法被识别，否则请将型号保持为“自动”。",
+        "data": {
+          "host": "主机",
+          "port": "端口",
+          "unit_id": "单元 ID",
+          "scan_interval": "更新间隔（秒）",
+          "model": "型号",
+          "prefix": "前缀",
+          "allow_control": "允许控制"
+        },
+        "data_description": {
+          "prefix": "可选。为此安装的实体 ID 添加前缀，例如用 sensor.saj_house_pv_power 代替 sensor.saj_pv_power。有多个 SAJ 系统时使用。只能使用小写字母和数字，不能含下划线，最多 32 个字符，且两个安装不能使用同一个前缀。",
+          "allow_control": "默认关闭。开启后，实体更改、按钮和自动化可以更改逆变器的设置。用于调试逆变器的设置（电表、RS485、电池协议、网络、充电桩连接）仍为只读。开启时会要求你确认。"
+        }
+      },
+      "confirm_model": {
+        "title": "确认型号",
+        "description": "设备上报的类型为 {device_type}，无法识别为 {model}，因此无法验证其为该型号。其必需的寄存器已应答，但如果它是其他型号，读数可能有误。仍然使用 {model} 吗？"
+      },
+      "confirm_control": {
+        "title": "确认允许控制",
+        "description": "允许控制后，实体更改和自动化会更改你的逆变器的设置。错误的设置可能使逆变器停机、改变逆变器使用电池或电网的方式，或使你蒙受损失。\n\n启用 EMS 功能会关闭逆变器的防逆流保护。\n\n当 Home Assistant 停止或此安装被重新加载时，会尝试关闭你从 Home Assistant 打开的功能。这只是尽力而为，并不保证成功。如果无法连接逆变器，或 Home Assistant 突然停止，这些功能可能保持开启。逆变器自身的 EMS 超时可能随后将其结束，但这一点尚未被证明可靠。\n\n允许控制还会启用此系统最多 {count} 个控制实体，例如计划时段和电池限制，以便在仪表盘上显示和更改。读取这些实体会使负载从 {before} 升至最多 {after}（预算为每分钟 {budget} 次请求）。这些实体在保存后约 30 秒出现。请等它们出现后再更改任何内容：它们出现时系统会再重新加载一次，该次重新加载会关闭此前已打开的所有功率控制功能。\n\n允许控制吗？",
+        "data": {
+          "ems_heartbeat": "EMS 心跳（秒）"
+        },
+        "data_description": {
+          "ems_heartbeat": "读取你从 Home Assistant 打开的 EMS 功能的目标以及 EMS 限制以保持其有效的间隔，范围为 30 到 3600 秒。逆变器的 EMS 超时必须长于此值。仅对带 EMS 的型号显示。"
+        }
+      }
+    },
+    "error": {
+      "already_configured": "此端点已配置。",
+      "invalid_host": "请输入主机名或 IP 地址。",
+      "invalid_unit_id": "请输入 1 到 247 的整数单元 ID。",
+      "cannot_connect": "无法连接或读取逆变器。请检查端点后重试。",
+      "unsupported_device": "设备上报的类型为 {device_type}，无法自动识别。请手动选择其型号。",
+      "invalid_device_data": "逆变器返回了无效的标识或遥测数据。",
+      "timeout": "逆变器未在规定时间内响应。请检查端点后重试。",
+      "read_rejected": "逆变器拒绝了一次必需的寄存器读取。请确认这是受支持的 SAJ 设备和型号。",
+      "invalid_port": "请输入 1 到 65535 的整数端口。",
+      "invalid_endpoint": "请输入有效的端口和单元 ID。",
+      "invalid_scan_interval": "请输入不小于 10 秒的整数轮询间隔。",
+      "model_mismatch": "此设备识别为 {detected_model}，而不是 {selected_model}。请选择 {detected_model} 或“自动”。",
+      "unknown_model": "型号 {selection} 不是已知型号。请选择“自动”或列出的型号之一。",
+      "invalid_prefix": "只能使用小写字母和数字，不能含下划线，最多 32 个字符。",
+      "prefix_in_use": "另一个 SAJ Local 安装已使用此前缀。留空也算在内，因此只有一个安装可以不设前缀。",
+      "entity_id_taken": "实体 ID {entity_id} 在 Home Assistant 中已被占用。请选择其他前缀。",
+      "prefix_shadows_entity": "此前缀会生成与某个实体名称冲突的实体 ID。请选择其他前缀。",
+      "invalid_ems_heartbeat": "请输入 30 到 3600 秒的整数心跳。"
+    },
+    "abort": {
+      "already_configured": "此逆变器已配置。",
+      "confirmation_not_pending": "没有等待确认的已验证更改。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "连接与轮询",
+        "description": "输入本地 Modbus TCP 端点、轮询间隔和型号。设置会在端点验证后保存。集成每分钟最多向逆变器发送 {budget} 次请求，以免其通信模块过载。此安装目前使用其中的 {load} 次。",
+        "data": {
+          "host": "主机",
+          "port": "端口",
+          "unit_id": "单元 ID",
+          "scan_interval": "更新间隔（秒）",
+          "model": "型号",
+          "prefix": "前缀",
+          "allow_control": "允许控制",
+          "ems_heartbeat": "EMS 心跳（秒）"
+        },
+        "data_description": {
+          "prefix": "可选。为此安装的实体 ID 添加前缀，例如用 sensor.saj_house_pv_power 代替 sensor.saj_pv_power。有多个 SAJ 系统时使用。只能使用小写字母和数字，不能含下划线，最多 32 个字符，且两个安装不能使用同一个前缀。更改前缀后，经你确认，此安装的实体会被重命名。",
+          "allow_control": "默认关闭。开启后，实体更改、按钮和自动化可以更改逆变器的设置。用于调试逆变器的设置（电表、RS485、电池协议、网络、充电桩连接）仍为只读。开启时会要求你确认。",
+          "ems_heartbeat": "读取你从 Home Assistant 打开的 EMS 功能的目标以及 EMS 限制以保持其有效的间隔，范围为 30 到 3600 秒。逆变器的 EMS 超时必须长于此值。仅对带 EMS 的型号显示。"
+        },
+        "sections": {
+          "equipment": {
+            "name": "设备",
+            "description": "当前视为已安装：{equipment_fitted}。“自动”会在每次启动和每次重新加载时检测每一项，并保留检测到的结果，直到你选择“未安装”。“已安装”不经检测直接创建其实体。“未安装”会从 Home Assistant 中移除其实体（包括你对这些实体所做的自定义），并忘记检测到的结果。再次设为已安装时实体 ID 保持不变，因此历史记录得以延续。",
+            "data": {
+              "battery": "电池",
+              "meter_a": "电表 A",
+              "meter_b": "电表 B",
+              "ev_charger": "充电桩",
+              "parallel": "并机系统"
+            },
+            "data_description": {
+              "battery": "电池实体。逆变器不应答检测时，视为有电池。",
+              "meter_a": "第一块电表的实体。逆变器不应答检测时，视为有该电表。",
+              "meter_b": "第二块电表的实体，根据逆变器的电表 B 状态检测。",
+              "ev_charger": "SAJ 充电桩的实体，根据逆变器的充电桩启用设置检测。",
+              "parallel": "并机系统的实体，根据逆变器的并机模式和在线机器数量检测。"
+            }
+          }
+        }
+      },
+      "confirm_replacement": {
+        "title": "确认更换逆变器",
+        "description": "要用序列号为 {serial} 的 {model} 替换此现有安装的硬件吗？你的实体及其历史数据仍保留在此安装中。"
+      },
+      "confirm_model": {
+        "title": "确认型号",
+        "description": "设备上报的类型为 {device_type}，无法识别为 {model}，因此无法验证其为该型号。其必需的寄存器已应答，但如果它是其他型号，读数可能有误。仍然使用 {model} 吗？"
+      },
+      "confirm_prefix": {
+        "title": "确认更改实体 ID",
+        "description": "每种实体类型的实体 ID 将从 `{old_pattern}` 更改为 `{new_pattern}`。\n\n历史记录和长期统计数据会迁移到新的实体 ID。\n\n使用旧实体 ID 的自动化、脚本、仪表盘、模板和能源设置将停止工作，直到你更新它们。\n\n你自己重命名过的实体不受影响。要更改实体 ID 吗？"
+      },
+      "confirm_load": {
+        "title": "确认放慢轮询",
+        "description": "使用此默认间隔时，安装每分钟需要 {after} 次请求，高于原来的 {before} 次。集成每分钟最多向逆变器发送 {budget} 次请求，以免其通信模块过载。由于超出该限制，实体的读取会慢于所配置的频率。仍要保存此间隔吗？"
+      },
+      "confirm_control": {
+        "title": "确认允许控制",
+        "description": "允许控制后，实体更改和自动化会更改你的逆变器的设置。错误的设置可能使逆变器停机、改变逆变器使用电池或电网的方式，或使你蒙受损失。\n\n启用 EMS 功能会关闭逆变器的防逆流保护。\n\n当 Home Assistant 停止或此安装被重新加载时，会尝试关闭你从 Home Assistant 打开的功能。这只是尽力而为，并不保证成功。如果无法连接逆变器，或 Home Assistant 突然停止，这些功能可能保持开启。逆变器自身的 EMS 超时可能随后将其结束，但这一点尚未被证明可靠。\n\n允许控制还会启用此系统的 {count} 个控制实体，例如计划时段和电池限制，以便在仪表盘上显示和更改。读取这些实体会使负载从 {before} 升至 {after}（预算为每分钟 {budget} 次请求）。这些实体在保存后约 30 秒出现。请等它们出现后再更改任何内容：它们出现时系统会再重新加载一次，该次重新加载会关闭此前已打开的所有功率控制功能。\n\n允许控制吗？"
+      }
+    },
+    "error": {
+      "already_configured": "另一个 SAJ Local 条目已占用此端点或逆变器序列号。",
+      "invalid_host": "请输入主机名或 IP 地址。",
+      "invalid_port": "请输入 1 到 65535 的整数端口。",
+      "invalid_unit_id": "请输入 1 到 247 的整数单元 ID。",
+      "invalid_endpoint": "请输入有效的端口和单元 ID。",
+      "invalid_scan_interval": "请输入不小于 10 秒的整数轮询间隔。",
+      "cannot_connect": "无法连接或读取逆变器。请检查端点后重试。",
+      "unsupported_device": "设备上报的类型为 {device_type}，无法自动识别。请手动选择其型号。",
+      "invalid_device_data": "逆变器返回了无效的标识或遥测数据。",
+      "timeout": "逆变器未在规定时间内响应。请检查端点后重试。",
+      "read_rejected": "逆变器拒绝了一次必需的寄存器读取。请确认这是受支持的 SAJ 设备和型号。",
+      "model_mismatch": "此设备识别为 {detected_model}，而不是 {selected_model}。请选择 {detected_model} 或“自动”。",
+      "unknown_model": "型号 {selection} 不是已知型号。请选择“自动”或列出的型号之一。",
+      "invalid_prefix": "只能使用小写字母和数字，不能含下划线，最多 32 个字符。",
+      "prefix_in_use": "另一个 SAJ Local 安装已使用此前缀。留空也算在内，因此只有一个安装可以不设前缀。",
+      "entity_id_taken": "实体 ID {entity_id} 在 Home Assistant 中已被占用。请选择其他前缀。",
+      "statistics_exist": "Home Assistant 已在 {entity_id} 下保存了长期统计数据，因此无法把此安装的历史记录迁移到该处。请选择其他前缀。",
+      "prefix_shadows_entity": "此前缀会生成与某个实体名称冲突的实体 ID。请选择其他前缀。",
+      "invalid_ems_heartbeat": "请输入 30 到 3600 秒的整数心跳。",
+      "invalid_equipment": "请为每个设备选择“自动”、“已安装”或“未安装”。"
+    },
+    "abort": {
+      "changes_saved": "SAJ Local 设置已保存。",
+      "already_configured": "另一个 SAJ Local 条目现已占用此端点或逆变器序列号。",
+      "confirmation_not_pending": "没有等待确认的已验证更改。",
+      "prefix_unavailable": "在你确认期间，该前缀或其某个实体 ID 已被占用。未做任何更改。"
+    }
+  },
+  "config_subentries": {
+    "polling_group": {
+      "entry_type": "轮询组",
+      "initiate_flow": {
+        "user": "添加轮询组"
+      },
+      "step": {
+        "user": {
+          "title": "添加轮询组",
+          "description": "轮询组中的实体按该组自己的间隔读取。所有其他实体按默认间隔读取。集成每分钟最多向逆变器发送 {budget} 次请求，以免其通信模块过载。此安装目前使用其中的 {load} 次。已禁用的实体现在也可以分组，在启用之前不产生任何开销。",
+          "data": {
+            "name": "名称",
+            "scan_interval": "更新间隔（秒）",
+            "keys": "实体"
+          },
+          "data_description": {
+            "keys": "按寄存器顺序列出，每个实体附带其读取所在的寄存器数据块。同一数据块中的实体可以共用一次请求。"
+          }
+        },
+        "reconfigure": {
+          "title": "编辑轮询组",
+          "description": "轮询组中的实体按该组自己的间隔读取。一个实体只能属于一个组。集成每分钟最多向逆变器发送 {budget} 次请求，以免其通信模块过载。此安装目前使用其中的 {load} 次。已禁用的实体现在也可以分组，在启用之前不产生任何开销。",
+          "data": {
+            "name": "名称",
+            "scan_interval": "更新间隔（秒）",
+            "keys": "实体"
+          },
+          "data_description": {
+            "keys": "按寄存器顺序列出，每个实体附带其读取所在的寄存器数据块。同一数据块中的实体可以共用一次请求。"
+          }
+        },
+        "review_group": {
+          "title": "查看请求负载",
+          "description": "读取此组一次所需的请求数：{requests}。\n\n集成每分钟最多向逆变器发送 {budget} 次请求，以免其通信模块过载。此安装现在使用其中的 {before} 次，保存此组后将使用 {after} 次。",
+          "menu_options": {
+            "save_group": "保存此组",
+            "change_selection": "更改所选内容"
+          }
+        },
+        "review_group_over_budget": {
+          "title": "查看请求负载",
+          "description": "读取此组一次所需的请求数：{requests}。\n\n集成每分钟最多向逆变器发送 {budget} 次请求，以免其通信模块过载。此安装现在使用其中的 {before} 次，保存此组后将需要 {after} 次。由于超出该限制，实体的读取会慢于所配置的频率。你仍然可以保存此组。",
+          "menu_options": {
+            "save_group": "保存此组",
+            "change_selection": "更改所选内容"
+          }
+        }
+      },
+      "error": {
+        "invalid_scan_interval": "请输入不小于 10 秒的整数轮询间隔。",
+        "no_sensors_selected": "请至少选择一个实体。",
+        "sensor_in_other_group": "所选的某个实体已属于另一个轮询组。"
+      },
+      "abort": {
+        "no_sensors": "此安装还没有任何实体，因此无法创建轮询组。",
+        "all_sensors_assigned": "每个实体都已属于某个轮询组，没有可添加的实体了。",
+        "reconfigure_successful": "轮询组已保存。",
+        "confirmation_not_pending": "没有等待决定的已验证轮询组。"
+      }
+    },
+    "power_schedule": {
+      "entry_type": "功率控制计划",
+      "initiate_flow": {
+        "user": "添加功率控制计划"
+      },
+      "step": {
+        "user": {
+          "title": "添加功率控制计划",
+          "description": "选择要保持在设定功率的功能，以及指明时间的 Home Assistant 计划表辅助元素。计划开启时，集成打开该功能；计划关闭时，集成关闭该功能。计划块可以携带附加数据 power，单位为整瓦，负数表示充电或购电，正数表示放电或馈电；没有该数据时使用该功能的功率目标。必须开启“允许控制”。",
+          "data": {
+            "function": "功能",
+            "schedule": "计划"
+          },
+          "data_description": {
+            "function": "每个功能可以遵循一个计划。",
+            "schedule": "一个计划表辅助元素只能被此系统的一个功能使用。"
+          }
+        },
+        "reconfigure": {
+          "title": "编辑功率控制计划",
+          "description": "选择要保持在设定功率的功能，以及指明时间的 Home Assistant 计划表辅助元素。计划开启时，集成打开该功能；计划关闭时，集成关闭该功能。计划块可以携带附加数据 power，单位为整瓦，负数表示充电或购电，正数表示放电或馈电；没有该数据时使用该功能的功率目标。必须开启“允许控制”。",
+          "data": {
+            "function": "功能",
+            "schedule": "计划"
+          },
+          "data_description": {
+            "function": "每个功能可以遵循一个计划。",
+            "schedule": "一个计划表辅助元素只能被此系统的一个功能使用。"
+          }
+        }
+      },
+      "error": {
+        "control_not_allowed": "“允许控制”已关闭，因此计划不会起任何作用。请先在“配置”中开启“允许控制”。",
+        "function_already_scheduled": "此功能在此系统中已遵循一个计划。",
+        "schedule_in_use": "此计划表辅助元素已被此系统的另一个功率控制计划使用。",
+        "schedule_not_registered": "此计划表辅助元素在实体注册表中没有条目，因此功率控制计划无法跟随该辅助元素的重命名。请选择在界面中创建的计划表辅助元素。"
+      },
+      "abort": {
+        "reconfigure_successful": "功率控制计划已保存。"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "ethernet_protocol_version": {
+        "name": "以太网协议版本"
+      },
+      "ethernet_mac_address": {
+        "name": "以太网 MAC 地址"
+      },
+      "ev_serial_number": {
+        "name": "充电桩序列号"
+      },
+      "ev_model": {
+        "name": "充电桩型号"
+      },
+      "ev_software_version": {
+        "name": "充电桩软件版本"
+      },
+      "ev_hardware_version": {
+        "name": "充电桩硬件版本"
+      },
+      "ev_phase_count": {
+        "name": "充电桩相数"
+      },
+      "ev_minimum_power": {
+        "name": "充电桩最小功率"
+      },
+      "ev_maximum_power": {
+        "name": "充电桩最大功率"
+      },
+      "ev_work_mode": {
+        "name": "充电桩工作模式",
+        "state": {
+          "disabled": "已禁用",
+          "standard": "标准",
+          "time_based": "定时",
+          "pv_surplus": "光伏余电",
+          "ems": "EMS"
+        }
+      },
+      "ev_status": {
+        "name": "充电桩状态",
+        "state": {
+          "idle": "空闲",
+          "ready": "就绪",
+          "charging": "充电",
+          "charger_suspended": "充电桩已暂停",
+          "vehicle_suspended": "车辆已暂停",
+          "complete": "已完成"
+        }
+      },
+      "ev_l1_voltage": {
+        "name": "充电桩 L1 电压"
+      },
+      "ev_l1_current": {
+        "name": "充电桩 L1 电流"
+      },
+      "ev_l2_voltage": {
+        "name": "充电桩 L2 电压"
+      },
+      "ev_l2_current": {
+        "name": "充电桩 L2 电流"
+      },
+      "ev_l3_voltage": {
+        "name": "充电桩 L3 电压"
+      },
+      "ev_l3_current": {
+        "name": "充电桩 L3 电流"
+      },
+      "ev_power": {
+        "name": "充电桩功率"
+      },
+      "ev_charge_duration": {
+        "name": "电动汽车充电时长"
+      },
+      "ev_session_energy": {
+        "name": "充电桩本次充电电量"
+      },
+      "ev_total_energy": {
+        "name": "充电桩累计电量"
+      },
+      "ev_control_pilot_voltage": {
+        "name": "充电桩控制导引电压"
+      },
+      "ev_duty_cycle": {
+        "name": "充电桩占空比"
+      },
+      "ev_remote_control": {
+        "name": "充电桩远程控制",
+        "state": {
+          "off": "关",
+          "on": "开"
+        }
+      },
+      "ev_current_setpoint": {
+        "name": "充电桩电流设定值"
+      },
+      "ev_session_start": {
+        "name": "充电桩本次充电开始"
+      },
+      "ev_session_end": {
+        "name": "充电桩本次充电结束"
+      },
+      "settings_protocol_version": {
+        "name": "设置协议版本"
+      },
+      "inverter_clock": {
+        "name": "逆变器时钟"
+      },
+      "operating_mode": {
+        "name": "运行模式",
+        "state": {
+          "initialisation": "初始化",
+          "standby": "待机",
+          "operating": "运行",
+          "off_grid": "离网",
+          "grid_connected_load_bypass": "并网负载 / 旁路",
+          "fault": "故障",
+          "upgrade": "升级",
+          "debugging": "调试",
+          "self_check": "自检",
+          "reset": "复位"
+        }
+      },
+      "inverter_temperature": {
+        "name": "逆变器温度"
+      },
+      "ambient_temperature": {
+        "name": "环境温度"
+      },
+      "leakage_current": {
+        "name": "漏电流"
+      },
+      "pv1_insulation_resistance": {
+        "name": "PV1 绝缘电阻"
+      },
+      "pv2_insulation_resistance": {
+        "name": "PV2 绝缘电阻"
+      },
+      "grid_connection_countdown": {
+        "name": "并网倒计时"
+      },
+      "inverter_discharge_power_setpoint": {
+        "name": "逆变器放电功率设定值"
+      },
+      "inverter_charge_power_setpoint": {
+        "name": "逆变器充电功率设定值"
+      },
+      "battery_discharge_current_setpoint": {
+        "name": "电池放电电流设定值"
+      },
+      "battery_charge_current_setpoint": {
+        "name": "电池充电电流设定值"
+      },
+      "battery_status_code": {
+        "name": "电池状态码"
+      },
+      "battery_protocol_active": {
+        "name": "电池协议（生效中）"
+      },
+      "battery_charge_limit_active": {
+        "name": "电池充电限制（生效中）"
+      },
+      "battery_discharge_limit_active": {
+        "name": "电池放电限制（生效中）"
+      },
+      "battery_depth_of_discharge_active": {
+        "name": "电池放电深度（生效中）"
+      },
+      "backup_reserve_soc_active": {
+        "name": "备用电量荷电状态（生效中）"
+      },
+      "meter_configuration_active": {
+        "name": "电表配置（生效中）"
+      },
+      "grid_l1_voltage": {
+        "name": "电网 L1 电压"
+      },
+      "grid_l1_current": {
+        "name": "电网 L1 电流"
+      },
+      "grid_l1_frequency": {
+        "name": "电网 L1 频率"
+      },
+      "grid_l1_dc_current": {
+        "name": "电网 L1 直流电流"
+      },
+      "grid_l1_power": {
+        "name": "电网 L1 功率"
+      },
+      "grid_l1_apparent_power": {
+        "name": "电网 L1 视在功率"
+      },
+      "grid_l1_power_factor": {
+        "name": "电网 L1 功率因数"
+      },
+      "grid_l2_voltage": {
+        "name": "电网 L2 电压"
+      },
+      "grid_l2_current": {
+        "name": "电网 L2 电流"
+      },
+      "grid_l2_frequency": {
+        "name": "电网 L2 频率"
+      },
+      "grid_l2_dc_current": {
+        "name": "电网 L2 直流电流"
+      },
+      "grid_l2_power": {
+        "name": "电网 L2 功率"
+      },
+      "grid_l2_apparent_power": {
+        "name": "电网 L2 视在功率"
+      },
+      "grid_l2_power_factor": {
+        "name": "电网 L2 功率因数"
+      },
+      "grid_l3_voltage": {
+        "name": "电网 L3 电压"
+      },
+      "grid_l3_current": {
+        "name": "电网 L3 电流"
+      },
+      "grid_l3_frequency": {
+        "name": "电网 L3 频率"
+      },
+      "grid_l3_dc_current": {
+        "name": "电网 L3 直流电流"
+      },
+      "grid_l3_power": {
+        "name": "电网 L3 功率"
+      },
+      "grid_l3_apparent_power": {
+        "name": "电网 L3 视在功率"
+      },
+      "grid_l3_power_factor": {
+        "name": "电网 L3 功率因数"
+      },
+      "inverter_l1_voltage": {
+        "name": "逆变器 L1 电压"
+      },
+      "inverter_l1_current": {
+        "name": "逆变器 L1 电流"
+      },
+      "inverter_l1_frequency": {
+        "name": "逆变器 L1 频率"
+      },
+      "inverter_l1_power": {
+        "name": "逆变器 L1 功率"
+      },
+      "inverter_l1_apparent_power": {
+        "name": "逆变器 L1 视在功率"
+      },
+      "inverter_l2_voltage": {
+        "name": "逆变器 L2 电压"
+      },
+      "inverter_l2_current": {
+        "name": "逆变器 L2 电流"
+      },
+      "inverter_l2_frequency": {
+        "name": "逆变器 L2 频率"
+      },
+      "inverter_l2_power": {
+        "name": "逆变器 L2 功率"
+      },
+      "inverter_l2_apparent_power": {
+        "name": "逆变器 L2 视在功率"
+      },
+      "inverter_l3_voltage": {
+        "name": "逆变器 L3 电压"
+      },
+      "inverter_l3_current": {
+        "name": "逆变器 L3 电流"
+      },
+      "inverter_l3_frequency": {
+        "name": "逆变器 L3 频率"
+      },
+      "inverter_l3_power": {
+        "name": "逆变器 L3 功率"
+      },
+      "inverter_l3_apparent_power": {
+        "name": "逆变器 L3 视在功率"
+      },
+      "backup_l1_voltage": {
+        "name": "备用 L1 电压"
+      },
+      "backup_l1_current": {
+        "name": "备用 L1 电流"
+      },
+      "backup_l1_frequency": {
+        "name": "备用 L1 频率"
+      },
+      "backup_l1_dc_voltage": {
+        "name": "备用 L1 直流电压"
+      },
+      "backup_l1_power": {
+        "name": "备用 L1 功率"
+      },
+      "backup_l1_apparent_power": {
+        "name": "备用 L1 视在功率"
+      },
+      "backup_l2_voltage": {
+        "name": "备用 L2 电压"
+      },
+      "backup_l2_current": {
+        "name": "备用 L2 电流"
+      },
+      "backup_l2_frequency": {
+        "name": "备用 L2 频率"
+      },
+      "backup_l2_dc_voltage": {
+        "name": "备用 L2 直流电压"
+      },
+      "backup_l2_power": {
+        "name": "备用 L2 功率"
+      },
+      "backup_l2_apparent_power": {
+        "name": "备用 L2 视在功率"
+      },
+      "backup_l3_voltage": {
+        "name": "备用 L3 电压"
+      },
+      "backup_l3_current": {
+        "name": "备用 L3 电流"
+      },
+      "backup_l3_frequency": {
+        "name": "备用 L3 频率"
+      },
+      "backup_l3_dc_voltage": {
+        "name": "备用 L3 直流电压"
+      },
+      "backup_l3_power": {
+        "name": "备用 L3 功率"
+      },
+      "backup_l3_apparent_power": {
+        "name": "备用 L3 视在功率"
+      },
+      "dc_bus_voltage": {
+        "name": "直流母线电压"
+      },
+      "dc_bus_slave_voltage": {
+        "name": "直流母线从机电压"
+      },
+      "battery_voltage": {
+        "name": "电池电压"
+      },
+      "battery_current": {
+        "name": "电池电流"
+      },
+      "battery_port_power": {
+        "name": "电池端口功率"
+      },
+      "battery_temperature": {
+        "name": "电池温度"
+      },
+      "battery_soc": {
+        "name": "电池荷电状态"
+      },
+      "pv1_voltage": {
+        "name": "PV1 电压"
+      },
+      "pv1_current": {
+        "name": "PV1 电流"
+      },
+      "pv1_power": {
+        "name": "PV1 功率"
+      },
+      "pv2_voltage": {
+        "name": "PV2 电压"
+      },
+      "pv2_current": {
+        "name": "PV2 电流"
+      },
+      "pv2_power": {
+        "name": "PV2 功率"
+      },
+      "grid_output_l1_voltage": {
+        "name": "电网输出 L1 电压"
+      },
+      "grid_output_l1_current": {
+        "name": "电网输出 L1 电流"
+      },
+      "grid_output_l1_frequency": {
+        "name": "电网输出 L1 频率"
+      },
+      "grid_output_l1_power": {
+        "name": "电网输出 L1 功率"
+      },
+      "grid_output_l2_voltage": {
+        "name": "电网输出 L2 电压"
+      },
+      "grid_output_l2_power": {
+        "name": "电网输出 L2 功率"
+      },
+      "grid_output_l3_voltage": {
+        "name": "电网输出 L3 电压"
+      },
+      "grid_output_l3_power": {
+        "name": "电网输出 L3 功率"
+      },
+      "load_power": {
+        "name": "家庭负载功率"
+      },
+      "pv_power": {
+        "name": "光伏功率"
+      },
+      "battery_power": {
+        "name": "电池功率"
+      },
+      "grid_power": {
+        "name": "电网功率"
+      },
+      "inverter_power": {
+        "name": "逆变器功率"
+      },
+      "grid_load_power": {
+        "name": "电网负载功率"
+      },
+      "pv_energy_today": {
+        "name": "光伏今日电量"
+      },
+      "pv_energy_month": {
+        "name": "光伏本月电量"
+      },
+      "pv_energy_year": {
+        "name": "光伏本年电量"
+      },
+      "pv_energy_total": {
+        "name": "光伏累计电量"
+      },
+      "battery_charge_energy_today": {
+        "name": "电池充电今日电量"
+      },
+      "battery_charge_energy_month": {
+        "name": "电池充电本月电量"
+      },
+      "battery_charge_energy_year": {
+        "name": "电池充电本年电量"
+      },
+      "battery_charge_energy_total": {
+        "name": "电池充电累计电量"
+      },
+      "battery_discharge_energy_today": {
+        "name": "电池放电今日电量"
+      },
+      "battery_discharge_energy_month": {
+        "name": "电池放电本月电量"
+      },
+      "battery_discharge_energy_year": {
+        "name": "电池放电本年电量"
+      },
+      "battery_discharge_energy_total": {
+        "name": "电池放电累计电量"
+      },
+      "load_energy_today": {
+        "name": "家庭负载今日电量"
+      },
+      "load_energy_month": {
+        "name": "家庭负载本月电量"
+      },
+      "load_energy_year": {
+        "name": "家庭负载本年电量"
+      },
+      "load_energy_total": {
+        "name": "家庭负载累计电量"
+      },
+      "backup_load_energy_today": {
+        "name": "备用负载今日电量"
+      },
+      "backup_load_energy_month": {
+        "name": "备用负载本月电量"
+      },
+      "backup_load_energy_year": {
+        "name": "备用负载本年电量"
+      },
+      "backup_load_energy_total": {
+        "name": "备用负载累计电量"
+      },
+      "grid_l1_export_energy_today": {
+        "name": "电网 L1 馈电今日电量"
+      },
+      "grid_l1_export_energy_month": {
+        "name": "电网 L1 馈电本月电量"
+      },
+      "grid_l1_export_energy_year": {
+        "name": "电网 L1 馈电本年电量"
+      },
+      "grid_l1_export_energy_total": {
+        "name": "电网 L1 馈电累计电量"
+      },
+      "grid_l1_import_energy_today": {
+        "name": "电网 L1 购电今日电量"
+      },
+      "grid_l1_import_energy_month": {
+        "name": "电网 L1 购电本月电量"
+      },
+      "grid_l1_import_energy_year": {
+        "name": "电网 L1 购电本年电量"
+      },
+      "grid_l1_import_energy_total": {
+        "name": "电网 L1 购电累计电量"
+      },
+      "grid_l2_export_energy_today": {
+        "name": "电网 L2 馈电今日电量"
+      },
+      "grid_l2_export_energy_month": {
+        "name": "电网 L2 馈电本月电量"
+      },
+      "grid_l2_export_energy_year": {
+        "name": "电网 L2 馈电本年电量"
+      },
+      "grid_l2_export_energy_total": {
+        "name": "电网 L2 馈电累计电量"
+      },
+      "grid_l3_export_energy_today": {
+        "name": "电网 L3 馈电今日电量"
+      },
+      "grid_l3_export_energy_month": {
+        "name": "电网 L3 馈电本月电量"
+      },
+      "grid_l3_export_energy_year": {
+        "name": "电网 L3 馈电本年电量"
+      },
+      "grid_l3_export_energy_total": {
+        "name": "电网 L3 馈电累计电量"
+      },
+      "grid_l2_import_energy_today": {
+        "name": "电网 L2 购电今日电量"
+      },
+      "grid_l2_import_energy_month": {
+        "name": "电网 L2 购电本月电量"
+      },
+      "grid_l2_import_energy_year": {
+        "name": "电网 L2 购电本年电量"
+      },
+      "grid_l2_import_energy_total": {
+        "name": "电网 L2 购电累计电量"
+      },
+      "grid_l3_import_energy_today": {
+        "name": "电网 L3 购电今日电量"
+      },
+      "grid_l3_import_energy_month": {
+        "name": "电网 L3 购电本月电量"
+      },
+      "grid_l3_import_energy_year": {
+        "name": "电网 L3 购电本年电量"
+      },
+      "grid_l3_import_energy_total": {
+        "name": "电网 L3 购电累计电量"
+      },
+      "grid_import_energy_today": {
+        "name": "电网购电今日电量"
+      },
+      "grid_import_energy_month": {
+        "name": "电网购电本月电量"
+      },
+      "grid_import_energy_year": {
+        "name": "电网购电本年电量"
+      },
+      "grid_import_energy_total": {
+        "name": "电网购电累计电量"
+      },
+      "grid_export_energy_today": {
+        "name": "电网馈电今日电量"
+      },
+      "grid_export_energy_month": {
+        "name": "电网馈电本月电量"
+      },
+      "grid_export_energy_year": {
+        "name": "电网馈电本年电量"
+      },
+      "grid_export_energy_total": {
+        "name": "电网馈电累计电量"
+      },
+      "parallel_mode": {
+        "name": "并机模式"
+      },
+      "parallel_id": {
+        "name": "并机机器 ID"
+      },
+      "parallel_count": {
+        "name": "并机机器数量"
+      },
+      "parallel_online_count": {
+        "name": "在线并机机器数"
+      },
+      "parallel_battery_soc": {
+        "name": "并机系统电池荷电状态"
+      },
+      "parallel_battery_capacity": {
+        "name": "并机系统电池容量"
+      },
+      "parallel_meter_b_power": {
+        "name": "并机系统电表 B 功率"
+      },
+      "parallel_pv_energy_today": {
+        "name": "并机系统光伏今日电量"
+      },
+      "parallel_pv_energy_month": {
+        "name": "并机系统光伏本月电量"
+      },
+      "parallel_pv_energy_year": {
+        "name": "并机系统光伏本年电量"
+      },
+      "parallel_pv_energy_total": {
+        "name": "并机系统光伏累计电量"
+      },
+      "parallel_battery_charge_energy_today": {
+        "name": "并机系统电池充电今日电量"
+      },
+      "parallel_battery_charge_energy_month": {
+        "name": "并机系统电池充电本月电量"
+      },
+      "parallel_battery_charge_energy_year": {
+        "name": "并机系统电池充电本年电量"
+      },
+      "parallel_battery_charge_energy_total": {
+        "name": "并机系统电池充电累计电量"
+      },
+      "parallel_battery_discharge_energy_today": {
+        "name": "并机系统电池放电今日电量"
+      },
+      "parallel_battery_discharge_energy_month": {
+        "name": "并机系统电池放电本月电量"
+      },
+      "parallel_battery_discharge_energy_year": {
+        "name": "并机系统电池放电本年电量"
+      },
+      "parallel_battery_discharge_energy_total": {
+        "name": "并机系统电池放电累计电量"
+      },
+      "parallel_grid_l1_export_energy_today": {
+        "name": "并机系统电网 L1 馈电今日电量"
+      },
+      "parallel_grid_l1_export_energy_month": {
+        "name": "并机系统电网 L1 馈电本月电量"
+      },
+      "parallel_grid_l1_export_energy_year": {
+        "name": "并机系统电网 L1 馈电本年电量"
+      },
+      "parallel_grid_l1_export_energy_total": {
+        "name": "并机系统电网 L1 馈电累计电量"
+      },
+      "parallel_grid_l2_export_energy_today": {
+        "name": "并机系统电网 L2 馈电今日电量"
+      },
+      "parallel_grid_l2_export_energy_month": {
+        "name": "并机系统电网 L2 馈电本月电量"
+      },
+      "parallel_grid_l2_export_energy_year": {
+        "name": "并机系统电网 L2 馈电本年电量"
+      },
+      "parallel_grid_l2_export_energy_total": {
+        "name": "并机系统电网 L2 馈电累计电量"
+      },
+      "parallel_grid_l3_export_energy_today": {
+        "name": "并机系统电网 L3 馈电今日电量"
+      },
+      "parallel_grid_l3_export_energy_month": {
+        "name": "并机系统电网 L3 馈电本月电量"
+      },
+      "parallel_grid_l3_export_energy_year": {
+        "name": "并机系统电网 L3 馈电本年电量"
+      },
+      "parallel_grid_l3_export_energy_total": {
+        "name": "并机系统电网 L3 馈电累计电量"
+      },
+      "parallel_grid_l1_import_energy_today": {
+        "name": "并机系统电网 L1 购电今日电量"
+      },
+      "parallel_grid_l1_import_energy_month": {
+        "name": "并机系统电网 L1 购电本月电量"
+      },
+      "parallel_grid_l1_import_energy_year": {
+        "name": "并机系统电网 L1 购电本年电量"
+      },
+      "parallel_grid_l1_import_energy_total": {
+        "name": "并机系统电网 L1 购电累计电量"
+      },
+      "parallel_grid_l2_import_energy_today": {
+        "name": "并机系统电网 L2 购电今日电量"
+      },
+      "parallel_grid_l2_import_energy_month": {
+        "name": "并机系统电网 L2 购电本月电量"
+      },
+      "parallel_grid_l2_import_energy_year": {
+        "name": "并机系统电网 L2 购电本年电量"
+      },
+      "parallel_grid_l2_import_energy_total": {
+        "name": "并机系统电网 L2 购电累计电量"
+      },
+      "parallel_grid_l3_import_energy_today": {
+        "name": "并机系统电网 L3 购电今日电量"
+      },
+      "parallel_grid_l3_import_energy_month": {
+        "name": "并机系统电网 L3 购电本月电量"
+      },
+      "parallel_grid_l3_import_energy_year": {
+        "name": "并机系统电网 L3 购电本年电量"
+      },
+      "parallel_grid_l3_import_energy_total": {
+        "name": "并机系统电网 L3 购电累计电量"
+      },
+      "parallel_load_energy_today": {
+        "name": "并机系统家庭负载今日电量"
+      },
+      "parallel_load_energy_month": {
+        "name": "并机系统家庭负载本月电量"
+      },
+      "parallel_load_energy_year": {
+        "name": "并机系统家庭负载本年电量"
+      },
+      "parallel_load_energy_total": {
+        "name": "并机系统家庭负载累计电量"
+      },
+      "parallel_grid_import_energy_today": {
+        "name": "并机系统电网购电今日电量"
+      },
+      "parallel_grid_import_energy_month": {
+        "name": "并机系统电网购电本月电量"
+      },
+      "parallel_grid_import_energy_year": {
+        "name": "并机系统电网购电本年电量"
+      },
+      "parallel_grid_import_energy_total": {
+        "name": "并机系统电网购电累计电量"
+      },
+      "parallel_grid_export_energy_today": {
+        "name": "并机系统电网馈电今日电量"
+      },
+      "parallel_grid_export_energy_month": {
+        "name": "并机系统电网馈电本月电量"
+      },
+      "parallel_grid_export_energy_year": {
+        "name": "并机系统电网馈电本年电量"
+      },
+      "parallel_grid_export_energy_total": {
+        "name": "并机系统电网馈电累计电量"
+      },
+      "parallel_pv_meter_energy_today": {
+        "name": "并机系统光伏电表今日电量"
+      },
+      "parallel_pv_meter_energy_month": {
+        "name": "并机系统光伏电表本月电量"
+      },
+      "parallel_pv_meter_energy_year": {
+        "name": "并机系统光伏电表本年电量"
+      },
+      "parallel_pv_meter_energy_total": {
+        "name": "并机系统光伏电表累计电量"
+      },
+      "ev_settings_protocol_version": {
+        "name": "充电桩设置协议版本"
+      },
+      "five_minute_average_grid_power": {
+        "name": "电网功率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_l1_power": {
+        "name": "电网 L1 功率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_l1_voltage": {
+        "name": "电网 L1 电压（5 分钟平均值）"
+      },
+      "five_minute_average_grid_l1_current": {
+        "name": "电网 L1 电流（5 分钟平均值）"
+      },
+      "five_minute_average_grid_l1_frequency": {
+        "name": "电网 L1 频率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_l2_power": {
+        "name": "电网 L2 功率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_l2_voltage": {
+        "name": "电网 L2 电压（5 分钟平均值）"
+      },
+      "five_minute_average_grid_l2_current": {
+        "name": "电网 L2 电流（5 分钟平均值）"
+      },
+      "five_minute_average_grid_l2_frequency": {
+        "name": "电网 L2 频率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_l3_power": {
+        "name": "电网 L3 功率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_l3_voltage": {
+        "name": "电网 L3 电压（5 分钟平均值）"
+      },
+      "five_minute_average_grid_l3_current": {
+        "name": "电网 L3 电流（5 分钟平均值）"
+      },
+      "five_minute_average_grid_l3_frequency": {
+        "name": "电网 L3 频率（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_power": {
+        "name": "逆变器功率（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_l1_power": {
+        "name": "逆变器 L1 功率（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_l1_voltage": {
+        "name": "逆变器 L1 电压（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_l1_current": {
+        "name": "逆变器 L1 电流（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_l1_frequency": {
+        "name": "逆变器 L1 频率（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_l2_power": {
+        "name": "逆变器 L2 功率（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_l2_voltage": {
+        "name": "逆变器 L2 电压（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_l2_current": {
+        "name": "逆变器 L2 电流（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_l2_frequency": {
+        "name": "逆变器 L2 频率（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_l3_power": {
+        "name": "逆变器 L3 功率（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_l3_voltage": {
+        "name": "逆变器 L3 电压（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_l3_current": {
+        "name": "逆变器 L3 电流（5 分钟平均值）"
+      },
+      "five_minute_average_inverter_l3_frequency": {
+        "name": "逆变器 L3 频率（5 分钟平均值）"
+      },
+      "five_minute_average_load_power": {
+        "name": "家庭负载功率（5 分钟平均值）"
+      },
+      "five_minute_average_load_l1_power": {
+        "name": "家庭负载 L1 功率（5 分钟平均值）"
+      },
+      "five_minute_average_load_l1_voltage": {
+        "name": "家庭负载 L1 电压（5 分钟平均值）"
+      },
+      "five_minute_average_load_l1_current": {
+        "name": "家庭负载 L1 电流（5 分钟平均值）"
+      },
+      "five_minute_average_load_l1_frequency": {
+        "name": "家庭负载 L1 频率（5 分钟平均值）"
+      },
+      "five_minute_average_load_l2_power": {
+        "name": "家庭负载 L2 功率（5 分钟平均值）"
+      },
+      "five_minute_average_load_l2_voltage": {
+        "name": "家庭负载 L2 电压（5 分钟平均值）"
+      },
+      "five_minute_average_load_l2_current": {
+        "name": "家庭负载 L2 电流（5 分钟平均值）"
+      },
+      "five_minute_average_load_l2_frequency": {
+        "name": "家庭负载 L2 频率（5 分钟平均值）"
+      },
+      "five_minute_average_load_l3_power": {
+        "name": "家庭负载 L3 功率（5 分钟平均值）"
+      },
+      "five_minute_average_load_l3_voltage": {
+        "name": "家庭负载 L3 电压（5 分钟平均值）"
+      },
+      "five_minute_average_load_l3_current": {
+        "name": "家庭负载 L3 电流（5 分钟平均值）"
+      },
+      "five_minute_average_load_l3_frequency": {
+        "name": "家庭负载 L3 频率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_power": {
+        "name": "电网负载功率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_l1_power": {
+        "name": "电网负载 L1 功率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_l1_voltage": {
+        "name": "电网负载 L1 电压（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_l1_current": {
+        "name": "电网负载 L1 电流（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_l1_frequency": {
+        "name": "电网负载 L1 频率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_l2_power": {
+        "name": "电网负载 L2 功率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_l2_voltage": {
+        "name": "电网负载 L2 电压（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_l2_current": {
+        "name": "电网负载 L2 电流（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_l2_frequency": {
+        "name": "电网负载 L2 频率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_l3_power": {
+        "name": "电网负载 L3 功率（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_l3_voltage": {
+        "name": "电网负载 L3 电压（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_l3_current": {
+        "name": "电网负载 L3 电流（5 分钟平均值）"
+      },
+      "five_minute_average_grid_load_l3_frequency": {
+        "name": "电网负载 L3 频率（5 分钟平均值）"
+      },
+      "five_minute_average_backup_power": {
+        "name": "备用功率（5 分钟平均值）"
+      },
+      "five_minute_average_backup_l1_power": {
+        "name": "备用 L1 功率（5 分钟平均值）"
+      },
+      "five_minute_average_backup_l1_voltage": {
+        "name": "备用 L1 电压（5 分钟平均值）"
+      },
+      "five_minute_average_backup_l1_current": {
+        "name": "备用 L1 电流（5 分钟平均值）"
+      },
+      "five_minute_average_backup_l1_frequency": {
+        "name": "备用 L1 频率（5 分钟平均值）"
+      },
+      "five_minute_average_backup_l2_power": {
+        "name": "备用 L2 功率（5 分钟平均值）"
+      },
+      "five_minute_average_backup_l2_voltage": {
+        "name": "备用 L2 电压（5 分钟平均值）"
+      },
+      "five_minute_average_backup_l2_current": {
+        "name": "备用 L2 电流（5 分钟平均值）"
+      },
+      "five_minute_average_backup_l2_frequency": {
+        "name": "备用 L2 频率（5 分钟平均值）"
+      },
+      "five_minute_average_backup_l3_power": {
+        "name": "备用 L3 功率（5 分钟平均值）"
+      },
+      "five_minute_average_backup_l3_voltage": {
+        "name": "备用 L3 电压（5 分钟平均值）"
+      },
+      "five_minute_average_backup_l3_current": {
+        "name": "备用 L3 电流（5 分钟平均值）"
+      },
+      "five_minute_average_backup_l3_frequency": {
+        "name": "备用 L3 频率（5 分钟平均值）"
+      },
+      "five_minute_average_pv_power": {
+        "name": "光伏功率（5 分钟平均值）"
+      },
+      "five_minute_average_pv1_voltage": {
+        "name": "PV1 电压（5 分钟平均值）"
+      },
+      "five_minute_average_pv1_current": {
+        "name": "PV1 电流（5 分钟平均值）"
+      },
+      "five_minute_average_pv1_power": {
+        "name": "PV1 功率（5 分钟平均值）"
+      },
+      "five_minute_average_pv2_voltage": {
+        "name": "PV2 电压（5 分钟平均值）"
+      },
+      "five_minute_average_pv2_current": {
+        "name": "PV2 电流（5 分钟平均值）"
+      },
+      "five_minute_average_pv2_power": {
+        "name": "PV2 功率（5 分钟平均值）"
+      },
+      "five_minute_average_generator_power": {
+        "name": "发电机功率（5 分钟平均值）"
+      },
+      "five_minute_average_generator_l1_power": {
+        "name": "发电机 L1 功率（5 分钟平均值）"
+      },
+      "five_minute_average_generator_l1_voltage": {
+        "name": "发电机 L1 电压（5 分钟平均值）"
+      },
+      "five_minute_average_generator_l1_current": {
+        "name": "发电机 L1 电流（5 分钟平均值）"
+      },
+      "five_minute_average_generator_l1_frequency": {
+        "name": "发电机 L1 频率（5 分钟平均值）"
+      },
+      "five_minute_average_generator_l2_power": {
+        "name": "发电机 L2 功率（5 分钟平均值）"
+      },
+      "five_minute_average_generator_l2_voltage": {
+        "name": "发电机 L2 电压（5 分钟平均值）"
+      },
+      "five_minute_average_generator_l2_current": {
+        "name": "发电机 L2 电流（5 分钟平均值）"
+      },
+      "five_minute_average_generator_l2_frequency": {
+        "name": "发电机 L2 频率（5 分钟平均值）"
+      },
+      "five_minute_average_generator_l3_power": {
+        "name": "发电机 L3 功率（5 分钟平均值）"
+      },
+      "five_minute_average_generator_l3_voltage": {
+        "name": "发电机 L3 电压（5 分钟平均值）"
+      },
+      "five_minute_average_generator_l3_current": {
+        "name": "发电机 L3 电流（5 分钟平均值）"
+      },
+      "five_minute_average_generator_l3_frequency": {
+        "name": "发电机 L3 频率（5 分钟平均值）"
+      },
+      "five_minute_average_battery_power": {
+        "name": "电池功率（5 分钟平均值）"
+      },
+      "five_minute_average_battery_soc": {
+        "name": "电池荷电状态（5 分钟平均值）"
+      },
+      "five_minute_average_battery_pack1_power": {
+        "name": "电池包 1 功率（5 分钟平均值）"
+      },
+      "five_minute_average_battery_pack1_voltage": {
+        "name": "电池包 1 电压（5 分钟平均值）"
+      },
+      "five_minute_average_battery_pack1_current": {
+        "name": "电池包 1 电流（5 分钟平均值）"
+      },
+      "five_minute_average_battery_pack1_soc": {
+        "name": "电池包 1 荷电状态（5 分钟平均值）"
+      },
+      "five_minute_average_battery_pack1_temperature": {
+        "name": "电池包 1 温度（5 分钟平均值）"
+      },
+      "product_code": {
+        "name": "产品代码"
+      },
+      "display_software_version": {
+        "name": "显示板软件版本"
+      },
+      "master_software_version": {
+        "name": "主控软件版本"
+      },
+      "slave_software_version": {
+        "name": "从控软件版本"
+      },
+      "display_hardware_version": {
+        "name": "显示板硬件版本"
+      },
+      "control_hardware_version": {
+        "name": "控制板硬件版本"
+      },
+      "power_hardware_version": {
+        "name": "功率板硬件版本"
+      },
+      "battery_pack_count": {
+        "name": "电池包数量"
+      },
+      "battery_capacity": {
+        "name": "电池容量"
+      },
+      "battery_usable_capacity": {
+        "name": "电池可用容量"
+      },
+      "battery_online_code": {
+        "name": "电池在线码"
+      },
+      "battery_pack1_soc": {
+        "name": "电池包 1 荷电状态"
+      },
+      "battery_pack1_soh": {
+        "name": "电池包 1 健康状态"
+      },
+      "battery_pack1_voltage": {
+        "name": "电池包 1 电压"
+      },
+      "battery_pack1_current": {
+        "name": "电池包 1 电流"
+      },
+      "battery_pack1_temperature": {
+        "name": "电池包 1 温度"
+      },
+      "battery_pack1_cycles": {
+        "name": "电池包 1 循环次数"
+      },
+      "battery_pack1_discharged_energy": {
+        "name": "电池包 1 放电电量"
+      },
+      "battery_discharge_current_limit": {
+        "name": "电池放电电流限制"
+      },
+      "battery_charge_current_limit": {
+        "name": "电池充电电流限制"
+      },
+      "meter_a_status": {
+        "name": "电表 A 状态",
+        "state": {
+          "offline": "离线",
+          "online": "在线"
+        }
+      },
+      "meter_a_l1_voltage": {
+        "name": "电表 A L1 电压"
+      },
+      "meter_a_l1_current": {
+        "name": "电表 A L1 电流"
+      },
+      "meter_a_l1_power": {
+        "name": "电表 A L1 功率"
+      },
+      "meter_a_l1_apparent_power": {
+        "name": "电表 A L1 视在功率"
+      },
+      "meter_a_l1_power_factor": {
+        "name": "电表 A L1 功率因数"
+      },
+      "meter_a_l1_frequency": {
+        "name": "电表 A L1 频率"
+      },
+      "meter_a_l2_voltage": {
+        "name": "电表 A L2 电压"
+      },
+      "meter_a_l2_current": {
+        "name": "电表 A L2 电流"
+      },
+      "meter_a_l2_power": {
+        "name": "电表 A L2 功率"
+      },
+      "meter_a_l2_apparent_power": {
+        "name": "电表 A L2 视在功率"
+      },
+      "meter_a_l2_power_factor": {
+        "name": "电表 A L2 功率因数"
+      },
+      "meter_a_l2_frequency": {
+        "name": "电表 A L2 频率"
+      },
+      "meter_a_l3_voltage": {
+        "name": "电表 A L3 电压"
+      },
+      "meter_a_l3_current": {
+        "name": "电表 A L3 电流"
+      },
+      "meter_a_l3_power": {
+        "name": "电表 A L3 功率"
+      },
+      "meter_a_l3_apparent_power": {
+        "name": "电表 A L3 视在功率"
+      },
+      "meter_a_l3_power_factor": {
+        "name": "电表 A L3 功率因数"
+      },
+      "meter_a_l3_frequency": {
+        "name": "电表 A L3 频率"
+      },
+      "meter_b_status": {
+        "name": "电表 B 状态",
+        "state": {
+          "offline": "离线",
+          "online": "在线"
+        }
+      },
+      "meter_b_l1_voltage": {
+        "name": "电表 B L1 电压"
+      },
+      "meter_b_l1_current": {
+        "name": "电表 B L1 电流"
+      },
+      "meter_b_l1_power": {
+        "name": "电表 B L1 功率"
+      },
+      "meter_b_l1_apparent_power": {
+        "name": "电表 B L1 视在功率"
+      },
+      "meter_b_l1_power_factor": {
+        "name": "电表 B L1 功率因数"
+      },
+      "meter_b_l1_frequency": {
+        "name": "电表 B L1 频率"
+      },
+      "meter_b_l2_voltage": {
+        "name": "电表 B L2 电压"
+      },
+      "meter_b_l2_current": {
+        "name": "电表 B L2 电流"
+      },
+      "meter_b_l2_power": {
+        "name": "电表 B L2 功率"
+      },
+      "meter_b_l2_apparent_power": {
+        "name": "电表 B L2 视在功率"
+      },
+      "meter_b_l2_power_factor": {
+        "name": "电表 B L2 功率因数"
+      },
+      "meter_b_l2_frequency": {
+        "name": "电表 B L2 频率"
+      },
+      "meter_b_l3_voltage": {
+        "name": "电表 B L3 电压"
+      },
+      "meter_b_l3_current": {
+        "name": "电表 B L3 电流"
+      },
+      "meter_b_l3_power": {
+        "name": "电表 B L3 功率"
+      },
+      "meter_b_l3_apparent_power": {
+        "name": "电表 B L3 视在功率"
+      },
+      "meter_b_l3_power_factor": {
+        "name": "电表 B L3 功率因数"
+      },
+      "meter_b_l3_frequency": {
+        "name": "电表 B L3 频率"
+      },
+      "meter_a_l1_reactive_power": {
+        "name": "电表 A L1 无功功率"
+      },
+      "meter_a_l2_reactive_power": {
+        "name": "电表 A L2 无功功率"
+      },
+      "meter_a_l3_reactive_power": {
+        "name": "电表 A L3 无功功率"
+      },
+      "meter_b_l1_reactive_power": {
+        "name": "电表 B L1 无功功率"
+      },
+      "meter_b_l2_reactive_power": {
+        "name": "电表 B L2 无功功率"
+      },
+      "meter_b_l3_reactive_power": {
+        "name": "电表 B L3 无功功率"
+      },
+      "meter_a_power": {
+        "name": "电表 A 功率"
+      },
+      "meter_b_power": {
+        "name": "电表 B 功率"
+      },
+      "parallel_backup_load_power": {
+        "name": "并机系统备用负载功率"
+      },
+      "parallel_battery_power": {
+        "name": "并机系统电池功率"
+      },
+      "parallel_grid_load_power": {
+        "name": "并机系统电网负载功率"
+      },
+      "parallel_grid_power": {
+        "name": "并机系统电网功率"
+      },
+      "parallel_load_power": {
+        "name": "并机系统家庭负载功率"
+      },
+      "parallel_pv_power": {
+        "name": "并机系统光伏功率"
+      },
+      "pv3_insulation_resistance": {
+        "name": "PV3 绝缘电阻"
+      },
+      "pv4_insulation_resistance": {
+        "name": "PV4 绝缘电阻"
+      },
+      "pv3_voltage": {
+        "name": "PV3 电压"
+      },
+      "pv3_current": {
+        "name": "PV3 电流"
+      },
+      "pv3_power": {
+        "name": "PV3 功率"
+      },
+      "pv4_voltage": {
+        "name": "PV4 电压"
+      },
+      "pv4_current": {
+        "name": "PV4 电流"
+      },
+      "pv4_power": {
+        "name": "PV4 功率"
+      },
+      "ct_grid_power": {
+        "name": "CT 电网功率"
+      },
+      "ct_grid_apparent_power": {
+        "name": "CT 电网视在功率"
+      },
+      "ct_pv_power": {
+        "name": "CT 光伏功率"
+      },
+      "ct_pv_apparent_power": {
+        "name": "CT 光伏视在功率"
+      },
+      "grid_apparent_power": {
+        "name": "电网视在功率"
+      },
+      "inverter_apparent_power": {
+        "name": "逆变器视在功率"
+      },
+      "backup_load_power": {
+        "name": "备用负载功率"
+      },
+      "backup_load_apparent_power": {
+        "name": "备用负载视在功率"
+      },
+      "inverter_energy_today": {
+        "name": "逆变器今日电量"
+      },
+      "inverter_energy_month": {
+        "name": "逆变器本月电量"
+      },
+      "inverter_energy_year": {
+        "name": "逆变器本年电量"
+      },
+      "inverter_energy_total": {
+        "name": "逆变器累计电量"
+      },
+      "pv2_energy_today": {
+        "name": "PV2 今日电量"
+      },
+      "pv2_energy_month": {
+        "name": "PV2 本月电量"
+      },
+      "pv2_energy_year": {
+        "name": "PV2 本年电量"
+      },
+      "pv2_energy_total": {
+        "name": "PV2 累计电量"
+      },
+      "pv3_energy_today": {
+        "name": "PV3 今日电量"
+      },
+      "pv3_energy_month": {
+        "name": "PV3 本月电量"
+      },
+      "pv3_energy_year": {
+        "name": "PV3 本年电量"
+      },
+      "pv3_energy_total": {
+        "name": "PV3 累计电量"
+      },
+      "identity_protocol_version": {
+        "name": "标识协议版本"
+      },
+      "battery_pack2_soc": {
+        "name": "电池包 2 荷电状态"
+      },
+      "battery_pack2_soh": {
+        "name": "电池包 2 健康状态"
+      },
+      "battery_pack2_voltage": {
+        "name": "电池包 2 电压"
+      },
+      "battery_pack2_current": {
+        "name": "电池包 2 电流"
+      },
+      "battery_pack2_temperature": {
+        "name": "电池包 2 温度"
+      },
+      "battery_pack2_cycles": {
+        "name": "电池包 2 循环次数"
+      },
+      "battery_pack3_soc": {
+        "name": "电池包 3 荷电状态"
+      },
+      "battery_pack3_soh": {
+        "name": "电池包 3 健康状态"
+      },
+      "battery_pack3_voltage": {
+        "name": "电池包 3 电压"
+      },
+      "battery_pack3_current": {
+        "name": "电池包 3 电流"
+      },
+      "battery_pack3_temperature": {
+        "name": "电池包 3 温度"
+      },
+      "battery_pack3_cycles": {
+        "name": "电池包 3 循环次数"
+      },
+      "battery_pack4_soc": {
+        "name": "电池包 4 荷电状态"
+      },
+      "battery_pack4_soh": {
+        "name": "电池包 4 健康状态"
+      },
+      "battery_pack4_voltage": {
+        "name": "电池包 4 电压"
+      },
+      "battery_pack4_current": {
+        "name": "电池包 4 电流"
+      },
+      "battery_pack4_temperature": {
+        "name": "电池包 4 温度"
+      },
+      "battery_pack4_cycles": {
+        "name": "电池包 4 循环次数"
+      },
+      "battery_pack2_discharged_energy": {
+        "name": "电池包 2 放电电量"
+      },
+      "battery_pack3_discharged_energy": {
+        "name": "电池包 3 放电电量"
+      },
+      "battery_pack4_discharged_energy": {
+        "name": "电池包 4 放电电量"
+      },
+      "battery_voltage_high_protection": {
+        "name": "电池电压过高保护"
+      },
+      "battery_charge_voltage": {
+        "name": "电池充电电压"
+      },
+      "battery_discharge_cutoff_voltage": {
+        "name": "电池放电截止电压"
+      },
+      "off_grid_mode": {
+        "name": "离网模式",
+        "state": {
+          "off": "关",
+          "on": "开"
+        }
+      },
+      "inverter_stop": {
+        "name": "逆变器停机",
+        "state": {
+          "running": "运行中",
+          "stopped": "已停止"
+        }
+      },
+      "inverter_error_count": {
+        "name": "逆变器错误计数"
+      },
+      "drm_hardware_status": {
+        "name": "DRM 硬件状态"
+      },
+      "drm_software_status": {
+        "name": "DRM 软件状态"
+      },
+      "fault_record_sequence": {
+        "name": "故障记录序号"
+      },
+      "application_mode_active": {
+        "name": "应用模式（生效中）",
+        "state": {
+          "self_use": "自发自用",
+          "time_of_use": "分时",
+          "backup": "备用",
+          "passive": "被动",
+          "legacy": "传统",
+          "ai_saving": "AI 节能",
+          "peak_shaving": "削峰"
+        }
+      },
+      "battery_controller_1_current": {
+        "name": "电池控制器 1 电流"
+      },
+      "battery_controller_2_current": {
+        "name": "电池控制器 2 电流"
+      },
+      "pv_generation_time_today": {
+        "name": "光伏今日发电时长"
+      },
+      "pv_generation_time_total": {
+        "name": "光伏累计发电时长"
+      },
+      "battery_voltage_low_warning": {
+        "name": "电池电压过低警告"
+      },
+      "battery_pack1_bms_type": {
+        "name": "电池包 1 BMS 类型"
+      },
+      "battery_pack1_bms_serial_number": {
+        "name": "电池包 1 BMS 序列号"
+      },
+      "battery_pack1_bms_software_version": {
+        "name": "电池包 1 BMS 软件版本"
+      },
+      "battery_pack1_bms_hardware_version": {
+        "name": "电池包 1 BMS 硬件版本"
+      },
+      "battery_pack1_type": {
+        "name": "电池包 1 类型",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack1_serial_number": {
+        "name": "电池包 1 序列号"
+      },
+      "battery_pack2_bms_type": {
+        "name": "电池包 2 BMS 类型"
+      },
+      "battery_pack2_bms_serial_number": {
+        "name": "电池包 2 BMS 序列号"
+      },
+      "battery_pack2_bms_software_version": {
+        "name": "电池包 2 BMS 软件版本"
+      },
+      "battery_pack2_bms_hardware_version": {
+        "name": "电池包 2 BMS 硬件版本"
+      },
+      "battery_pack2_type": {
+        "name": "电池包 2 类型",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack2_serial_number": {
+        "name": "电池包 2 序列号"
+      },
+      "battery_pack3_bms_type": {
+        "name": "电池包 3 BMS 类型"
+      },
+      "battery_pack3_bms_serial_number": {
+        "name": "电池包 3 BMS 序列号"
+      },
+      "battery_pack3_bms_software_version": {
+        "name": "电池包 3 BMS 软件版本"
+      },
+      "battery_pack3_bms_hardware_version": {
+        "name": "电池包 3 BMS 硬件版本"
+      },
+      "battery_pack3_type": {
+        "name": "电池包 3 类型",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack3_serial_number": {
+        "name": "电池包 3 序列号"
+      },
+      "battery_pack4_bms_type": {
+        "name": "电池包 4 BMS 类型"
+      },
+      "battery_pack4_bms_serial_number": {
+        "name": "电池包 4 BMS 序列号"
+      },
+      "battery_pack4_bms_software_version": {
+        "name": "电池包 4 BMS 软件版本"
+      },
+      "battery_pack4_bms_hardware_version": {
+        "name": "电池包 4 BMS 硬件版本"
+      },
+      "battery_pack4_type": {
+        "name": "电池包 4 类型",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack4_serial_number": {
+        "name": "电池包 4 序列号"
+      },
+      "battery_pack5_bms_type": {
+        "name": "电池包 5 BMS 类型"
+      },
+      "battery_pack5_bms_serial_number": {
+        "name": "电池包 5 BMS 序列号"
+      },
+      "battery_pack5_bms_software_version": {
+        "name": "电池包 5 BMS 软件版本"
+      },
+      "battery_pack5_bms_hardware_version": {
+        "name": "电池包 5 BMS 硬件版本"
+      },
+      "battery_pack5_type": {
+        "name": "电池包 5 类型",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack5_serial_number": {
+        "name": "电池包 5 序列号"
+      },
+      "battery_input_mode": {
+        "name": "电池输入模式",
+        "state": {
+          "independent": "独立",
+          "parallel": "并联"
+        }
+      },
+      "battery_protocol": {
+        "name": "电池协议",
+        "state": {
+          "not_in_use": "未使用",
+          "saj_bu3": "SAJ BU3",
+          "lead_acid": "铅酸",
+          "dyness_h": "Dyness DYNESS-H",
+          "pylon_sc0500": "Pylon SC0500",
+          "b2_can": "B2 CAN"
+        }
+      },
+      "bms_update_id": {
+        "name": "BMS 升级 ID"
+      },
+      "bms_update_mode": {
+        "name": "BMS 升级模式"
+      },
+      "ethernet_mode": {
+        "name": "以太网模式",
+        "state": {
+          "manual": "手动",
+          "automatic": "自动"
+        }
+      },
+      "ev_address": {
+        "name": "充电桩地址"
+      },
+      "ev_baud_rate": {
+        "name": "充电桩波特率",
+        "state": {
+          "115200": "115200 波特",
+          "57600": "57600 波特",
+          "38400": "38400 波特",
+          "19200": "19200 波特",
+          "9600": "9600 波特",
+          "4800": "4800 波特",
+          "2400": "2400 波特",
+          "1200": "1200 波特"
+        }
+      },
+      "ev_charger_count": {
+        "name": "充电桩数量"
+      },
+      "ev_communication_timeout": {
+        "name": "充电桩通信超时"
+      },
+      "ev_port_address": {
+        "name": "充电桩端口地址"
+      },
+      "ev_port_mode": {
+        "name": "充电桩端口模式",
+        "state": {
+          "invalid": "无效",
+          "host": "主机",
+          "modbus_slave": "Modbus 从站"
+        }
+      },
+      "fcas_frequency_hysteresis": {
+        "name": "FCAS 频率回差"
+      },
+      "function_flags_1": {
+        "name": "功能标志 1"
+      },
+      "function_flags_2": {
+        "name": "功能标志 2"
+      },
+      "grid_type": {
+        "name": "电网类型",
+        "state": {
+          "single_phase": "单相",
+          "split_phase": "分相",
+          "three_phase_three_wire": "三相三线",
+          "three_phase_four_wire": "三相四线"
+        }
+      },
+      "insulation_resistance_limit": {
+        "name": "绝缘电阻限值"
+      },
+      "lead_acid_capacity": {
+        "name": "铅酸电池容量"
+      },
+      "lead_acid_charge_current_limit": {
+        "name": "铅酸电池充电电流限制"
+      },
+      "lead_acid_charge_cutoff_voltage": {
+        "name": "铅酸电池充电截止电压"
+      },
+      "lead_acid_discharge_current_limit": {
+        "name": "铅酸电池放电电流限制"
+      },
+      "lead_acid_equalising_charge_voltage": {
+        "name": "铅酸电池均充电压"
+      },
+      "lead_acid_float_charge_voltage": {
+        "name": "铅酸电池浮充电压"
+      },
+      "lead_acid_high_voltage_protection": {
+        "name": "铅酸电池过压保护"
+      },
+      "lead_acid_low_voltage_warning": {
+        "name": "铅酸电池低压警告"
+      },
+      "lead_acid_off_grid_discharge_cutoff_voltage": {
+        "name": "铅酸电池离网放电截止电压"
+      },
+      "lead_acid_on_grid_discharge_cutoff_voltage": {
+        "name": "铅酸电池并网放电截止电压"
+      },
+      "machine_model": {
+        "name": "机器型号"
+      },
+      "max_dc_current_component": {
+        "name": "最大直流电流分量"
+      },
+      "max_dc_voltage_component": {
+        "name": "最大直流电压分量"
+      },
+      "max_leakage_current": {
+        "name": "最大漏电流"
+      },
+      "meter_address": {
+        "name": "电表地址"
+      },
+      "meter_configuration": {
+        "name": "电表配置",
+        "state": {
+          "no_meter_or_ct": "无电表或 CT",
+          "single_phase_meter": "单相电表",
+          "three_phase_three_wire_meter": "三相三线电表",
+          "three_phase_four_wire_meter_on_single_phase_machine": "单相机器上的三相四线电表",
+          "three_phase_four_wire_meter_grid_and_pv": "三相四线电表（电网和光伏）",
+          "two_three_phase_three_wire_meters": "两块三相三线电表",
+          "two_three_phase_four_wire_meters": "两块三相四线电表",
+          "two_single_phase_meters": "两块单相电表",
+          "single_phase_meter_with_two_ct_channels": "带两路 CT 通道的单相电表",
+          "one_grid_ct": "一个电网 CT",
+          "grid_and_pv_cts": "电网和光伏 CT",
+          "dual_circuit_three_phase_four_wire_meter_with_six_ct_channels": "带六路 CT 通道的双回路三相四线电表"
+        }
+      },
+      "motor_enable": {
+        "name": "电机使能"
+      },
+      "mppt_scan_time": {
+        "name": "MPPT 扫描时间"
+      },
+      "mppt_voltage_high": {
+        "name": "MPPT 电压上限"
+      },
+      "mppt_voltage_low": {
+        "name": "MPPT 电压下限"
+      },
+      "off_grid_output_frequency": {
+        "name": "离网输出频率"
+      },
+      "off_grid_output_voltage": {
+        "name": "离网输出电压"
+      },
+      "parallel_configured_mode": {
+        "name": "并机配置模式",
+        "state": {
+          "not_parallel": "非并机",
+          "on_grid": "并网",
+          "off_grid": "离网",
+          "on_and_off_grid": "并网和离网"
+        }
+      },
+      "parallel_number": {
+        "name": "并机编号"
+      },
+      "parallel_role": {
+        "name": "并机角色"
+      },
+      "pv_input_mode": {
+        "name": "PV 输入模式",
+        "state": {
+          "automatic": "自动",
+          "independent": "独立",
+          "parallel": "并联"
+        }
+      },
+      "pv_shutdown_voltage": {
+        "name": "PV 关机电压"
+      },
+      "pv_start_voltage": {
+        "name": "PV 启动电压"
+      },
+      "rated_power": {
+        "name": "额定功率"
+      },
+      "reverse_flow_mode": {
+        "name": "逆流模式",
+        "state": {
+          "off": "关",
+          "master": "主机",
+          "slave": "从机"
+        }
+      },
+      "rs485_address": {
+        "name": "RS485 地址"
+      },
+      "rs485_baud_rate": {
+        "name": "RS485 波特率",
+        "state": {
+          "115200": "115200 波特",
+          "57600": "57600 波特",
+          "38400": "38400 波特",
+          "19200": "19200 波特",
+          "9600": "9600 波特",
+          "4800": "4800 波特",
+          "2400": "2400 波特",
+          "1200": "1200 波特"
+        }
+      },
+      "rs485_slave_address": {
+        "name": "RS485 从站地址"
+      },
+      "rs485_slave_baud_rate": {
+        "name": "RS485 从站波特率",
+        "state": {
+          "115200": "115200 波特",
+          "57600": "57600 波特",
+          "38400": "38400 波特",
+          "19200": "19200 波特",
+          "9600": "9600 波特",
+          "4800": "4800 波特",
+          "2400": "2400 波特",
+          "1200": "1200 波特"
+        }
+      },
+      "settings_sequence": {
+        "name": "设置序号"
+      },
+      "ethernet_ip_address": {
+        "name": "以太网 IP 地址"
+      },
+      "ethernet_subnet_mask": {
+        "name": "以太网子网掩码"
+      },
+      "ethernet_gateway": {
+        "name": "以太网网关"
+      },
+      "ethernet_dns_primary": {
+        "name": "以太网首选 DNS"
+      },
+      "ethernet_dns_secondary": {
+        "name": "以太网备用 DNS"
+      }
+    },
+    "binary_sensor": {
+      "control_allowed": {
+        "name": "允许控制"
+      },
+      "inverter_fault": {
+        "name": "逆变器故障"
+      },
+      "inverter_fault_unrecognised": {
+        "name": "逆变器未识别的故障"
+      },
+      "inverter_fault_internal_communication": {
+        "name": "内部通信丢失"
+      },
+      "inverter_fault_meter_communication": {
+        "name": "电表通信丢失"
+      },
+      "inverter_fault_display_memory": {
+        "name": "显示板存储器故障"
+      },
+      "inverter_fault_display_clock": {
+        "name": "显示板时钟故障"
+      },
+      "inverter_fault_bms_device": {
+        "name": "BMS 设备故障"
+      },
+      "inverter_fault_bms_communication": {
+        "name": "BMS 通信丢失"
+      },
+      "inverter_fault_ct_device": {
+        "name": "CT 设备故障"
+      },
+      "inverter_fault_afci_communication": {
+        "name": "电弧检测板通信丢失"
+      },
+      "inverter_fault_slave_communication": {
+        "name": "从控制器通信丢失"
+      },
+      "inverter_fault_pv_meter_communication": {
+        "name": "光伏电表通信丢失"
+      },
+      "inverter_fault_ev_charger_communication": {
+        "name": "充电桩通信丢失"
+      },
+      "inverter_fault_grid_phase_r_overvoltage": {
+        "name": "电网 R 相过压"
+      },
+      "inverter_fault_grid_phase_r_undervoltage": {
+        "name": "电网 R 相欠压"
+      },
+      "inverter_fault_grid_phase_s_overvoltage": {
+        "name": "电网 S 相过压"
+      },
+      "inverter_fault_grid_phase_s_undervoltage": {
+        "name": "电网 S 相欠压"
+      },
+      "inverter_fault_grid_phase_t_overvoltage": {
+        "name": "电网 T 相过压"
+      },
+      "inverter_fault_grid_phase_t_undervoltage": {
+        "name": "电网 T 相欠压"
+      },
+      "inverter_fault_grid_overfrequency": {
+        "name": "电网过频"
+      },
+      "inverter_fault_grid_underfrequency": {
+        "name": "电网欠频"
+      },
+      "inverter_fault_dcdc_communication": {
+        "name": "DC-DC 单元通信丢失"
+      },
+      "inverter_fault_dcdc_device": {
+        "name": "DC-DC 单元故障"
+      },
+      "inverter_fault_parallel_communication": {
+        "name": "并机系统通信丢失"
+      },
+      "inverter_fault_grid_lost": {
+        "name": "电网丢失"
+      },
+      "inverter_fault_pv_input_mode": {
+        "name": "PV 输入模式故障"
+      },
+      "inverter_fault_pv_hardware_overcurrent": {
+        "name": "PV 硬件过流"
+      },
+      "inverter_fault_pv_overvoltage": {
+        "name": "PV 过压"
+      },
+      "inverter_fault_bus_hardware_overvoltage": {
+        "name": "直流母线硬件过压"
+      },
+      "inverter_fault_bus_overvoltage": {
+        "name": "直流母线过压"
+      },
+      "inverter_fault_bus_undervoltage": {
+        "name": "直流母线欠压"
+      },
+      "inverter_fault_grid_phase": {
+        "name": "电网相位故障"
+      },
+      "inverter_fault_islanding": {
+        "name": "孤岛"
+      },
+      "inverter_fault_arc_device": {
+        "name": "电弧检测设备故障"
+      },
+      "inverter_fault_pv_input": {
+        "name": "PV 输入故障"
+      },
+      "inverter_fault_hardware_overcurrent": {
+        "name": "逆变器硬件过流"
+      },
+      "inverter_fault_neutral_earth_voltage": {
+        "name": "零地电压故障"
+      },
+      "inverter_fault_drm0": {
+        "name": "DRM0 故障"
+      },
+      "inverter_fault_fan_1": {
+        "name": "风扇 1 故障"
+      },
+      "inverter_fault_fan_2": {
+        "name": "风扇 2 故障"
+      },
+      "inverter_fault_fan_3": {
+        "name": "风扇 3 故障"
+      },
+      "inverter_fault_fan_4": {
+        "name": "风扇 4 故障"
+      },
+      "inverter_fault_arc": {
+        "name": "电弧故障"
+      },
+      "inverter_fault_pv_software_overcurrent": {
+        "name": "PV 软件过流"
+      },
+      "inverter_fault_battery_overvoltage": {
+        "name": "电池端口过压"
+      },
+      "inverter_fault_battery_overcurrent": {
+        "name": "电池端口过流"
+      },
+      "inverter_fault_battery_charge_overvoltage": {
+        "name": "电池充电电压过高"
+      },
+      "inverter_fault_battery_overload": {
+        "name": "电池端口过载"
+      },
+      "inverter_fault_battery_soft_start": {
+        "name": "电池软启动超时"
+      },
+      "inverter_fault_output_overload": {
+        "name": "输出过载"
+      },
+      "inverter_fault_battery_open_circuit": {
+        "name": "电池开路"
+      },
+      "inverter_fault_battery_discharge_undervoltage": {
+        "name": "电池放电电压过低"
+      },
+      "inverter_fault_authorisation_expired": {
+        "name": "授权已过期"
+      },
+      "inverter_fault_display_communication": {
+        "name": "显示板通信丢失"
+      },
+      "inverter_fault_relay": {
+        "name": "继电器故障"
+      },
+      "inverter_fault_controller_memory": {
+        "name": "控制器存储器故障"
+      },
+      "inverter_fault_over_temperature": {
+        "name": "过温"
+      },
+      "inverter_fault_under_temperature": {
+        "name": "低温"
+      },
+      "inverter_fault_leakage_current_device": {
+        "name": "漏电流传感器故障"
+      },
+      "inverter_fault_dc_injection_device": {
+        "name": "直流注入传感器故障"
+      },
+      "inverter_fault_current_sensor": {
+        "name": "电流传感器故障"
+      },
+      "inverter_fault_grid_average_overvoltage": {
+        "name": "电网 10 分钟平均过压"
+      },
+      "inverter_fault_off_grid_undervoltage": {
+        "name": "离网输出欠压"
+      },
+      "inverter_fault_grid_phase_r_dc_voltage": {
+        "name": "电网 R 相直流电压过高"
+      },
+      "inverter_fault_grid_phase_s_dc_voltage": {
+        "name": "电网 S 相直流电压过高"
+      },
+      "inverter_fault_grid_phase_t_dc_voltage": {
+        "name": "电网 T 相直流电压过高"
+      },
+      "inverter_fault_leakage_current": {
+        "name": "漏电流故障"
+      },
+      "inverter_fault_grid_phase_r_dc_injection": {
+        "name": "电网 R 相直流注入过高"
+      },
+      "inverter_fault_grid_phase_s_dc_injection": {
+        "name": "电网 S 相直流注入过高"
+      },
+      "inverter_fault_grid_phase_t_dc_injection": {
+        "name": "电网 T 相直流注入过高"
+      },
+      "inverter_fault_insulation": {
+        "name": "绝缘故障"
+      },
+      "inverter_fault_bus_imbalance": {
+        "name": "直流母线电压不平衡"
+      },
+      "battery_fault": {
+        "name": "电池故障"
+      },
+      "battery_fault_unrecognised": {
+        "name": "电池未识别的故障"
+      },
+      "battery_fault_internal_communication": {
+        "name": "电池 BMS 内部通信丢失"
+      },
+      "battery_fault_pack_sequence": {
+        "name": "电池包寻址故障"
+      },
+      "battery_fault_discharge_overcurrent": {
+        "name": "电池放电过流"
+      },
+      "battery_fault_charge_overcurrent": {
+        "name": "电池充电过流"
+      },
+      "battery_fault_total_undervoltage": {
+        "name": "电池总电压过低"
+      },
+      "battery_fault_total_overvoltage": {
+        "name": "电池总电压过高"
+      },
+      "battery_fault_cell_undervoltage": {
+        "name": "电池单体欠压"
+      },
+      "battery_fault_cell_overvoltage": {
+        "name": "电池单体过压"
+      },
+      "battery_fault_hardware": {
+        "name": "电池 BMS 硬件故障"
+      },
+      "battery_fault_charge_cold": {
+        "name": "电池温度过低，无法充电"
+      },
+      "battery_fault_charge_hot": {
+        "name": "电池温度过高，无法充电"
+      },
+      "battery_fault_discharge_cold": {
+        "name": "电池温度过低，无法放电"
+      },
+      "battery_fault_discharge_hot": {
+        "name": "电池温度过高，无法放电"
+      },
+      "battery_fault_relay": {
+        "name": "电池 BMS 继电器故障"
+      },
+      "battery_fault_precharge": {
+        "name": "电池预充故障"
+      },
+      "battery_fault_insulation": {
+        "name": "电池 BMS 绝缘故障"
+      },
+      "battery_fault_bms_incompatible": {
+        "name": "电池 BMS 厂商不兼容"
+      },
+      "battery_fault_cell_supplier_incompatible": {
+        "name": "电池单体厂商不匹配"
+      },
+      "battery_fault_cell_incompatible": {
+        "name": "电池单体不匹配"
+      },
+      "battery_fault_voltage_level_mismatch": {
+        "name": "电池电压等级不匹配"
+      },
+      "battery_fault_breaker_open": {
+        "name": "电池断路器断开"
+      },
+      "battery_fault_cell_temperature_difference": {
+        "name": "电池单体温差过大"
+      },
+      "battery_fault_cell_voltage_difference_2": {
+        "name": "电池单体压差过大，2 级"
+      },
+      "battery_fault_cell_voltage_difference_1": {
+        "name": "电池单体压差过大，1 级"
+      },
+      "battery_fault_cell_over_temperature": {
+        "name": "电池单体过温"
+      },
+      "battery_fault_short_circuit": {
+        "name": "电池短路"
+      },
+      "battery_fault_total_voltage_matching": {
+        "name": "电池总电压匹配失败"
+      },
+      "battery_fault_system_locked": {
+        "name": "电池系统已锁定"
+      },
+      "battery_fault_fuse": {
+        "name": "电池熔断器故障"
+      },
+      "battery_fault_charging_port_overvoltage": {
+        "name": "电池充电端口过压"
+      },
+      "battery_pack1_fault": {
+        "name": "电池包 1 故障"
+      },
+      "battery_pack1_warning": {
+        "name": "电池包 1 警告"
+      },
+      "battery_pack2_fault": {
+        "name": "电池包 2 故障"
+      },
+      "battery_pack2_warning": {
+        "name": "电池包 2 警告"
+      },
+      "battery_pack3_fault": {
+        "name": "电池包 3 故障"
+      },
+      "battery_pack3_warning": {
+        "name": "电池包 3 警告"
+      },
+      "battery_pack4_fault": {
+        "name": "电池包 4 故障"
+      },
+      "battery_pack4_warning": {
+        "name": "电池包 4 警告"
+      },
+      "ev_fault": {
+        "name": "充电桩故障"
+      },
+      "ev_fault_unrecognised": {
+        "name": "充电桩未识别的故障"
+      },
+      "ev_fault_relay_over_temperature": {
+        "name": "充电桩继电器过温"
+      },
+      "ev_fault_overload": {
+        "name": "充电桩过载"
+      },
+      "ev_fault_ac_overvoltage": {
+        "name": "充电桩交流过压"
+      },
+      "ev_fault_ac_undervoltage": {
+        "name": "充电桩交流欠压"
+      },
+      "ev_fault_ac_overcurrent": {
+        "name": "充电桩交流过流"
+      },
+      "ev_fault_ac_overfrequency": {
+        "name": "充电桩交流过频"
+      },
+      "ev_fault_ac_underfrequency": {
+        "name": "充电桩交流欠频"
+      },
+      "ev_fault_dc_residual_current_a": {
+        "name": "充电桩直流剩余电流故障 A"
+      },
+      "ev_fault_emergency_stop": {
+        "name": "充电桩急停"
+      },
+      "ev_fault_under_temperature": {
+        "name": "充电桩低温"
+      },
+      "ev_fault_ac_residual_current": {
+        "name": "充电桩交流剩余电流"
+      },
+      "ev_fault_input_terminal_over_temperature": {
+        "name": "充电桩输入端子过温"
+      },
+      "ev_fault_bluetooth": {
+        "name": "充电桩蓝牙故障"
+      },
+      "ev_fault_dc_residual_current_b": {
+        "name": "充电桩直流剩余电流故障 B"
+      },
+      "ev_fault_relay": {
+        "name": "充电桩继电器故障"
+      },
+      "ev_fault_grounding": {
+        "name": "充电桩接地故障"
+      },
+      "ev_fault_phase_sequence": {
+        "name": "充电桩相序故障"
+      },
+      "ev_fault_rcd_circuit": {
+        "name": "充电桩 RCD 回路故障"
+      },
+      "ev_fault_rs485_timeout": {
+        "name": "充电桩 RS485 通信超时"
+      },
+      "ev_fault_supply": {
+        "name": "充电桩供电故障"
+      },
+      "ev_fault_meter": {
+        "name": "充电桩电表故障"
+      },
+      "ev_fault_control_pilot": {
+        "name": "充电桩控制导引故障（低于 2 V）"
+      },
+      "ev_fault_connector_lock": {
+        "name": "充电桩连接器锁故障"
+      },
+      "ev_fault_connector_current": {
+        "name": "充电桩连接器电流故障"
+      },
+      "ev_fault_dc_residual_current_c": {
+        "name": "充电桩直流剩余电流故障 C"
+      }
+    },
+    "number": {
+      "charge_slot_1_power": {
+        "name": "充电时段 1 功率"
+      },
+      "charge_slot_1_days": {
+        "name": "充电时段 1 星期"
+      },
+      "charge_slot_2_power": {
+        "name": "充电时段 2 功率"
+      },
+      "charge_slot_2_days": {
+        "name": "充电时段 2 星期"
+      },
+      "charge_slot_3_power": {
+        "name": "充电时段 3 功率"
+      },
+      "charge_slot_3_days": {
+        "name": "充电时段 3 星期"
+      },
+      "charge_slot_4_power": {
+        "name": "充电时段 4 功率"
+      },
+      "charge_slot_4_days": {
+        "name": "充电时段 4 星期"
+      },
+      "charge_slot_5_power": {
+        "name": "充电时段 5 功率"
+      },
+      "charge_slot_5_days": {
+        "name": "充电时段 5 星期"
+      },
+      "charge_slot_6_power": {
+        "name": "充电时段 6 功率"
+      },
+      "charge_slot_6_days": {
+        "name": "充电时段 6 星期"
+      },
+      "charge_slot_7_power": {
+        "name": "充电时段 7 功率"
+      },
+      "charge_slot_7_days": {
+        "name": "充电时段 7 星期"
+      },
+      "discharge_slot_1_power": {
+        "name": "放电时段 1 功率"
+      },
+      "discharge_slot_1_days": {
+        "name": "放电时段 1 星期"
+      },
+      "discharge_slot_2_power": {
+        "name": "放电时段 2 功率"
+      },
+      "discharge_slot_2_days": {
+        "name": "放电时段 2 星期"
+      },
+      "discharge_slot_3_power": {
+        "name": "放电时段 3 功率"
+      },
+      "discharge_slot_3_days": {
+        "name": "放电时段 3 星期"
+      },
+      "discharge_slot_4_power": {
+        "name": "放电时段 4 功率"
+      },
+      "discharge_slot_4_days": {
+        "name": "放电时段 4 星期"
+      },
+      "discharge_slot_5_power": {
+        "name": "放电时段 5 功率"
+      },
+      "discharge_slot_5_days": {
+        "name": "放电时段 5 星期"
+      },
+      "discharge_slot_6_power": {
+        "name": "放电时段 6 功率"
+      },
+      "discharge_slot_6_days": {
+        "name": "放电时段 6 星期"
+      },
+      "discharge_slot_7_power": {
+        "name": "放电时段 7 功率"
+      },
+      "discharge_slot_7_days": {
+        "name": "放电时段 7 星期"
+      },
+      "passive_mode": {
+        "name": "被动模式"
+      },
+      "passive_grid_charge_power": {
+        "name": "被动模式电网充电功率"
+      },
+      "passive_grid_discharge_power": {
+        "name": "被动模式电网放电功率"
+      },
+      "passive_battery_charge_power": {
+        "name": "被动模式电池充电功率"
+      },
+      "passive_battery_discharge_power": {
+        "name": "被动模式电池放电功率"
+      },
+      "battery_discharge_soc_limit_on_grid": {
+        "name": "电池放电限制（荷电状态，并网）"
+      },
+      "battery_discharge_soc_limit_off_grid": {
+        "name": "电池放电限制（荷电状态，离网）"
+      },
+      "battery_charge_soc_limit": {
+        "name": "电池充电限制（荷电状态）"
+      },
+      "battery_charge_power_limit": {
+        "name": "电池充电功率限制"
+      },
+      "battery_discharge_power_limit": {
+        "name": "电池放电功率限制"
+      },
+      "grid_import_power_limit": {
+        "name": "电网购电功率限制"
+      },
+      "grid_export_power_limit": {
+        "name": "电网馈电功率限制"
+      },
+      "backup_reserve_soc": {
+        "name": "备用电量荷电状态"
+      },
+      "export_limit_power": {
+        "name": "馈电限制功率"
+      },
+      "export_limit_current": {
+        "name": "馈电限制电流"
+      },
+      "ev_charge_power": {
+        "name": "电动汽车充电功率"
+      },
+      "ev_ems_charge_current": {
+        "name": "充电桩 EMS 充电电流"
+      },
+      "ev_slot_1_days": {
+        "name": "充电桩时段 1 星期"
+      },
+      "ev_slot_1_power": {
+        "name": "充电桩时段 1 功率"
+      },
+      "ev_slot_2_days": {
+        "name": "充电桩时段 2 星期"
+      },
+      "ev_slot_2_power": {
+        "name": "充电桩时段 2 功率"
+      },
+      "ev_slot_3_days": {
+        "name": "充电桩时段 3 星期"
+      },
+      "ev_slot_3_power": {
+        "name": "充电桩时段 3 功率"
+      },
+      "ev_slot_4_days": {
+        "name": "充电桩时段 4 星期"
+      },
+      "ev_slot_4_power": {
+        "name": "充电桩时段 4 功率"
+      },
+      "ev_slot_5_days": {
+        "name": "充电桩时段 5 星期"
+      },
+      "ev_slot_5_power": {
+        "name": "充电桩时段 5 功率"
+      },
+      "ev_slot_6_days": {
+        "name": "充电桩时段 6 星期"
+      },
+      "ev_slot_6_power": {
+        "name": "充电桩时段 6 功率"
+      },
+      "ev_slot_7_days": {
+        "name": "充电桩时段 7 星期"
+      },
+      "ev_slot_7_power": {
+        "name": "充电桩时段 7 功率"
+      },
+      "ems_timeout": {
+        "name": "EMS 超时"
+      },
+      "ems_battery_charge_current_limit": {
+        "name": "EMS 电池充电电流限制"
+      },
+      "ems_battery_discharge_current_limit": {
+        "name": "EMS 电池放电电流限制"
+      },
+      "ems_inverter_import_power_limit": {
+        "name": "EMS 逆变器输入功率限制"
+      },
+      "ems_inverter_export_power_limit": {
+        "name": "EMS 逆变器输出功率限制"
+      },
+      "ems_pv_power_limit": {
+        "name": "EMS 光伏功率限制"
+      },
+      "battery_power_target": {
+        "name": "电池功率目标"
+      },
+      "grid_power_target": {
+        "name": "电网功率目标"
+      },
+      "inverter_power_target": {
+        "name": "逆变器功率目标"
+      },
+      "battery_forced_charge_power_limit": {
+        "name": "电池强制充电功率限制"
+      }
+    },
+    "select": {
+      "application_mode": {
+        "name": "应用模式",
+        "state": {
+          "self_use": "自发自用",
+          "time_of_use": "分时",
+          "backup": "备用",
+          "ems": "EMS",
+          "passive": "被动",
+          "legacy": "传统",
+          "time_of_use_bms": "分时（BMS）",
+          "ai_saving": "AI 节能",
+          "peak_shaving": "削峰"
+        }
+      },
+      "export_limit_mode": {
+        "name": "馈电限制模式",
+        "state": {
+          "off": "关",
+          "total_power": "总功率",
+          "phase_current": "相电流",
+          "phase_power": "相功率"
+        }
+      },
+      "time_of_use_idle_mode": {
+        "name": "分时空闲模式",
+        "state": {
+          "standby": "待机",
+          "self_use": "自发自用"
+        }
+      },
+      "led_mode": {
+        "name": "LED 模式",
+        "state": {
+          "all_off": "全部关闭",
+          "outer_ring_on": "外圈开启",
+          "inner_ring_on": "内圈开启",
+          "all_on": "全部开启"
+        }
+      },
+      "ev_ems_phase_mode": {
+        "name": "充电桩 EMS 相模式",
+        "state": {
+          "three_phase": "三相",
+          "single_phase": "单相"
+        }
+      },
+      "ev_mode": {
+        "name": "充电桩模式",
+        "state": {
+          "disabled": "已禁用",
+          "standard": "标准",
+          "time_based": "定时",
+          "pv_surplus": "光伏余电",
+          "ems": "EMS"
+        }
+      },
+      "ev_slot_1_mode": {
+        "name": "充电桩时段 1 模式",
+        "state": {
+          "not_set": "未设置",
+          "standard": "标准",
+          "pv_surplus": "光伏余电"
+        }
+      },
+      "ev_slot_2_mode": {
+        "name": "充电桩时段 2 模式",
+        "state": {
+          "not_set": "未设置",
+          "standard": "标准",
+          "pv_surplus": "光伏余电"
+        }
+      },
+      "ev_slot_3_mode": {
+        "name": "充电桩时段 3 模式",
+        "state": {
+          "not_set": "未设置",
+          "standard": "标准",
+          "pv_surplus": "光伏余电"
+        }
+      },
+      "ev_slot_4_mode": {
+        "name": "充电桩时段 4 模式",
+        "state": {
+          "not_set": "未设置",
+          "standard": "标准",
+          "pv_surplus": "光伏余电"
+        }
+      },
+      "ev_slot_5_mode": {
+        "name": "充电桩时段 5 模式",
+        "state": {
+          "not_set": "未设置",
+          "standard": "标准",
+          "pv_surplus": "光伏余电"
+        }
+      },
+      "ev_slot_6_mode": {
+        "name": "充电桩时段 6 模式",
+        "state": {
+          "not_set": "未设置",
+          "standard": "标准",
+          "pv_surplus": "光伏余电"
+        }
+      },
+      "ev_slot_7_mode": {
+        "name": "充电桩时段 7 模式",
+        "state": {
+          "not_set": "未设置",
+          "standard": "标准",
+          "pv_surplus": "光伏余电"
+        }
+      }
+    },
+    "switch": {
+      "charge_slot_1_enabled": {
+        "name": "充电时段 1 已启用"
+      },
+      "charge_slot_2_enabled": {
+        "name": "充电时段 2 已启用"
+      },
+      "charge_slot_3_enabled": {
+        "name": "充电时段 3 已启用"
+      },
+      "charge_slot_4_enabled": {
+        "name": "充电时段 4 已启用"
+      },
+      "charge_slot_5_enabled": {
+        "name": "充电时段 5 已启用"
+      },
+      "charge_slot_6_enabled": {
+        "name": "充电时段 6 已启用"
+      },
+      "charge_slot_7_enabled": {
+        "name": "充电时段 7 已启用"
+      },
+      "discharge_slot_1_enabled": {
+        "name": "放电时段 1 已启用"
+      },
+      "discharge_slot_2_enabled": {
+        "name": "放电时段 2 已启用"
+      },
+      "discharge_slot_3_enabled": {
+        "name": "放电时段 3 已启用"
+      },
+      "discharge_slot_4_enabled": {
+        "name": "放电时段 4 已启用"
+      },
+      "discharge_slot_5_enabled": {
+        "name": "放电时段 5 已启用"
+      },
+      "discharge_slot_6_enabled": {
+        "name": "放电时段 6 已启用"
+      },
+      "discharge_slot_7_enabled": {
+        "name": "放电时段 7 已启用"
+      },
+      "battery_auto_wake": {
+        "name": "电池自动唤醒"
+      },
+      "time_of_use_grid_discharge": {
+        "name": "分时电网放电"
+      },
+      "ev_enabled": {
+        "name": "充电桩已启用"
+      },
+      "ev_slot_1_grid_charging": {
+        "name": "充电桩时段 1 电网充电"
+      },
+      "ev_slot_1_battery_discharge": {
+        "name": "充电桩时段 1 电池放电"
+      },
+      "ev_slot_2_grid_charging": {
+        "name": "充电桩时段 2 电网充电"
+      },
+      "ev_slot_2_battery_discharge": {
+        "name": "充电桩时段 2 电池放电"
+      },
+      "ev_slot_3_grid_charging": {
+        "name": "充电桩时段 3 电网充电"
+      },
+      "ev_slot_3_battery_discharge": {
+        "name": "充电桩时段 3 电池放电"
+      },
+      "ev_slot_4_grid_charging": {
+        "name": "充电桩时段 4 电网充电"
+      },
+      "ev_slot_4_battery_discharge": {
+        "name": "充电桩时段 4 电池放电"
+      },
+      "ev_slot_5_grid_charging": {
+        "name": "充电桩时段 5 电网充电"
+      },
+      "ev_slot_5_battery_discharge": {
+        "name": "充电桩时段 5 电池放电"
+      },
+      "ev_slot_6_grid_charging": {
+        "name": "充电桩时段 6 电网充电"
+      },
+      "ev_slot_6_battery_discharge": {
+        "name": "充电桩时段 6 电池放电"
+      },
+      "ev_slot_7_grid_charging": {
+        "name": "充电桩时段 7 电网充电"
+      },
+      "ev_slot_7_battery_discharge": {
+        "name": "充电桩时段 7 电池放电"
+      },
+      "ev_minimum_current_charging": {
+        "name": "充电桩最小电流充电"
+      },
+      "ev_ems_charging": {
+        "name": "充电桩 EMS 充电"
+      },
+      "battery_power_control": {
+        "name": "电池功率控制"
+      },
+      "grid_power_control": {
+        "name": "电网功率控制"
+      },
+      "inverter_power_control": {
+        "name": "逆变器功率控制"
+      },
+      "buzzer": {
+        "name": "蜂鸣器"
+      }
+    },
+    "time": {
+      "charge_slot_1_start": {
+        "name": "充电时段 1 开始时间"
+      },
+      "charge_slot_1_end": {
+        "name": "充电时段 1 结束时间"
+      },
+      "charge_slot_2_start": {
+        "name": "充电时段 2 开始时间"
+      },
+      "charge_slot_2_end": {
+        "name": "充电时段 2 结束时间"
+      },
+      "charge_slot_3_start": {
+        "name": "充电时段 3 开始时间"
+      },
+      "charge_slot_3_end": {
+        "name": "充电时段 3 结束时间"
+      },
+      "charge_slot_4_start": {
+        "name": "充电时段 4 开始时间"
+      },
+      "charge_slot_4_end": {
+        "name": "充电时段 4 结束时间"
+      },
+      "charge_slot_5_start": {
+        "name": "充电时段 5 开始时间"
+      },
+      "charge_slot_5_end": {
+        "name": "充电时段 5 结束时间"
+      },
+      "charge_slot_6_start": {
+        "name": "充电时段 6 开始时间"
+      },
+      "charge_slot_6_end": {
+        "name": "充电时段 6 结束时间"
+      },
+      "charge_slot_7_start": {
+        "name": "充电时段 7 开始时间"
+      },
+      "charge_slot_7_end": {
+        "name": "充电时段 7 结束时间"
+      },
+      "discharge_slot_1_start": {
+        "name": "放电时段 1 开始时间"
+      },
+      "discharge_slot_1_end": {
+        "name": "放电时段 1 结束时间"
+      },
+      "discharge_slot_2_start": {
+        "name": "放电时段 2 开始时间"
+      },
+      "discharge_slot_2_end": {
+        "name": "放电时段 2 结束时间"
+      },
+      "discharge_slot_3_start": {
+        "name": "放电时段 3 开始时间"
+      },
+      "discharge_slot_3_end": {
+        "name": "放电时段 3 结束时间"
+      },
+      "discharge_slot_4_start": {
+        "name": "放电时段 4 开始时间"
+      },
+      "discharge_slot_4_end": {
+        "name": "放电时段 4 结束时间"
+      },
+      "discharge_slot_5_start": {
+        "name": "放电时段 5 开始时间"
+      },
+      "discharge_slot_5_end": {
+        "name": "放电时段 5 结束时间"
+      },
+      "discharge_slot_6_start": {
+        "name": "放电时段 6 开始时间"
+      },
+      "discharge_slot_6_end": {
+        "name": "放电时段 6 结束时间"
+      },
+      "discharge_slot_7_start": {
+        "name": "放电时段 7 开始时间"
+      },
+      "discharge_slot_7_end": {
+        "name": "放电时段 7 结束时间"
+      },
+      "ev_slot_1_start": {
+        "name": "充电桩时段 1 开始时间"
+      },
+      "ev_slot_1_end": {
+        "name": "充电桩时段 1 结束时间"
+      },
+      "ev_slot_2_start": {
+        "name": "充电桩时段 2 开始时间"
+      },
+      "ev_slot_2_end": {
+        "name": "充电桩时段 2 结束时间"
+      },
+      "ev_slot_3_start": {
+        "name": "充电桩时段 3 开始时间"
+      },
+      "ev_slot_3_end": {
+        "name": "充电桩时段 3 结束时间"
+      },
+      "ev_slot_4_start": {
+        "name": "充电桩时段 4 开始时间"
+      },
+      "ev_slot_4_end": {
+        "name": "充电桩时段 4 结束时间"
+      },
+      "ev_slot_5_start": {
+        "name": "充电桩时段 5 开始时间"
+      },
+      "ev_slot_5_end": {
+        "name": "充电桩时段 5 结束时间"
+      },
+      "ev_slot_6_start": {
+        "name": "充电桩时段 6 开始时间"
+      },
+      "ev_slot_6_end": {
+        "name": "充电桩时段 6 结束时间"
+      },
+      "ev_slot_7_start": {
+        "name": "充电桩时段 7 开始时间"
+      },
+      "ev_slot_7_end": {
+        "name": "充电桩时段 7 结束时间"
+      }
+    },
+    "button": {
+      "clear_current_fault": {
+        "name": "清除当前故障"
+      },
+      "restart_inverter": {
+        "name": "重启逆变器"
+      },
+      "synchronise_clock": {
+        "name": "同步时钟"
+      },
+      "ems_pv_power_limit_remove": {
+        "name": "移除 EMS 光伏功率限制"
+      }
+    }
+  },
+  "issues": {
+    "equipment_not_detected": {
+      "title": "不再检测到{equipment}",
+      "description": "{installation} 设置时带有{equipment}，但逆变器现在上报其不存在。{equipment}实体仍保留，并显示逆变器返回的任何内容。请检查{equipment}，或在“配置”中将其设为“未安装”以移除其实体。"
+    },
+    "model_mismatch": {
+      "title": "{installation} 的型号设置错误",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "采用检测到的逆变器",
+            "description": "{installation} 设置为 {selected_model}，但其地址上的设备识别为序列号 {serial} 的 {model}，因此未加载。要采用该 {model} 吗？你的实体、其 ID 和历史数据仍保留在此安装中，设备详情会更改。“允许控制”和所有其他设置保持不变。如要继续使用 {selected_model}，请在“配置”中检查地址。"
+          }
+        },
+        "error": {
+          "cannot_connect": "无法连接逆变器。请确认其已开机，且没有其他设备占用连接，然后重试。",
+          "timeout": "逆变器未在规定时间内应答。请重试。",
+          "read_rejected": "逆变器拒绝了一次必需的读取。请重试。",
+          "invalid_device_data": "逆变器返回的数据无法读取。请重试。",
+          "unsupported_device": "该地址上的设备不是已识别的型号，因此没有可采用的内容。请在“配置”中选择其型号。",
+          "already_configured": "另一个安装已使用此逆变器，因此无法在此处采用。",
+          "device_changed": "设备现在上报序列号 {serial} 的 {model}，与你之前看到的不同。请再次确认以采用当前显示的内容。"
+        },
+        "abort": {
+          "entry_removed": "此安装已不存在。",
+          "already_configured": "另一个安装已使用此逆变器，因此无法在此处采用。",
+          "prefix_unavailable": "此安装的实体 ID 前缀已不可用。"
+        }
+      }
+    },
+    "identity_mismatch": {
+      "title": "{installation} 现在连接到另一台逆变器",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "采用检测到的逆变器",
+            "description": "{installation} 设置时使用的是序列号为 {approved_serial} 的逆变器，但其地址上的设备序列号为 {serial}，并识别为 {model}。要采用这台新逆变器吗？你的实体、其 ID 和历史数据仍保留在此安装中，设备详情会更改。“允许控制”和所有其他设置保持不变。如要继续使用原来的逆变器，请在“配置”中检查地址。"
+          }
+        },
+        "error": {
+          "cannot_connect": "无法连接此地址上的逆变器，因此无法核对其序列号。请确认其已通电且没有被其他 Modbus 客户端占用，然后再次确认。",
+          "timeout": "逆变器花了太长时间才给出序列号。请稍后再次确认。",
+          "read_rejected": "逆变器拒绝了核对序列号所需的一次读取。请稍后再次确认。",
+          "invalid_device_data": "逆变器给出的序列号无法读取。请稍后再次确认。",
+          "unsupported_device": "该地址上现在的设备不是已识别的型号，因此无法采用其序列号。请在“配置”中选择其型号。",
+          "already_configured": "该地址上现在的逆变器已属于另一个安装，因此无法在此处采用。",
+          "device_changed": "该地址上的逆变器现在序列号为 {serial}，上报为 {model}，与你之前看到的不同。请再次确认以采用当前列出的内容。"
+        },
+        "abort": {
+          "entry_removed": "此安装已被移除，因此没有可采用逆变器的安装。",
+          "already_configured": "该地址上现在的逆变器已属于另一个安装，因此无法在此处采用。",
+          "prefix_unavailable": "此安装的实体 ID 前缀已无法使用，因此未采用该逆变器。"
+        }
+      }
+    },
+    "unsupported_device": {
+      "title": "{installation} 连接到未识别的设备",
+      "description": "{installation} 地址上的设备上报类型为 {device_type}，不是已识别的型号，因此未加载。可以在“配置”中选择型号，此时该型号将作为未验证使用。"
+    },
+    "registers_refused": {
+      "title": "{installation} 有逆变器拒绝的读数",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "禁用被拒绝的实体",
+            "description": "逆变器持续拒绝 {installation} 的这些读数，因此不再读取：{entities}。它们会每天以及每次加载集成时重试一次，当它们再次应答时，此修复问题会自行消失。要禁用它们，使其不再被读取吗？你可以在实体设置中重新启用它们。"
+          }
+        }
+      }
+    },
+    "endpoint_unreachable": {
+      "title": "{installation} 已停止应答",
+      "description": "{installation} 已有 15 分钟未在 {host}:{port} 应答。请检查逆变器及其通信模块是否有电，Home Assistant 与逆变器之间的网络是否正常，以及是否有其他 Modbus 客户端占用连接。第一次成功读取后，此修复问题会自行消失。"
+    }
+  },
+  "exceptions": {
+    "unsupported_device": {
+      "message": "所连接的设备上报类型为 {device_type}，无法识别。请在“配置”中选择其型号。"
+    },
+    "invalid_device_data": {
+      "message": "逆变器返回了无效的标识或遥测数据。"
+    },
+    "cannot_connect": {
+      "message": "与逆变器的通信失败。请检查端点、单元 ID 和连接。"
+    },
+    "timeout": {
+      "message": "逆变器未在请求超时前响应。请检查其电源、网络和单元 ID。"
+    },
+    "read_rejected": {
+      "message": "逆变器拒绝了一次必需的寄存器读取。请检查所选的设备类型和寄存器访问权限。"
+    },
+    "identity_mismatch": {
+      "message": "该端点现在对应另一台逆变器。请检查所配置的端点。"
+    },
+    "model_mismatch": {
+      "message": "所连接的设备识别为 {detected_model}，而不是 {selected_model}。请在“配置”中选择 {detected_model} 或“自动”。"
+    },
+    "unknown_model": {
+      "message": "已保存的型号 {selection} 不是已知型号。请在“配置”中选择“自动”或列出的型号。"
+    },
+    "backing_off": {
+      "message": "逆变器端点在多次失败后正在退避，因此未尝试连接。Home Assistant 将自动重试。"
+    },
+    "control_not_enabled": {
+      "message": "此安装未启用控制，因此未更改逆变器。如要允许更改，请打开“设置”“设备与服务”“SAJ Local”“配置”，并开启“允许控制”。"
+    },
+    "model_unverified": {
+      "message": "无法验证此逆变器的型号，因此无法更改其设置。未更改逆变器。"
+    },
+    "protected_setting": {
+      "message": "{setting} 是调试设置，无法从 Home Assistant 更改。未更改逆变器。"
+    },
+    "unknown_setting": {
+      "message": "无法在此逆变器上写入 {setting}。未更改逆变器。"
+    },
+    "separate_registers": {
+      "message": "这些更改没有一起存放在同一个寄存器中，无法一步完成。未更改逆变器。"
+    },
+    "invalid_value_not_a_number": {
+      "message": "该值不是数字。未更改逆变器。"
+    },
+    "invalid_value_out_of_range": {
+      "message": "该值超出此设置允许的范围。未更改逆变器。"
+    },
+    "invalid_value_not_an_option": {
+      "message": "该值不是此设置提供的选项之一。未更改逆变器。"
+    },
+    "invalid_value_not_a_time": {
+      "message": "该值不是有效的时刻。未更改逆变器。"
+    },
+    "invalid_value_not_a_clock": {
+      "message": "该值不是有效的日期和时间。未更改逆变器。"
+    },
+    "invalid_value_does_not_fit": {
+      "message": "该值与其所存放的寄存器不匹配。未更改逆变器。"
+    },
+    "invalid_value_unsupported_encoding": {
+      "message": "无法从 Home Assistant 写入此设置。未更改逆变器。"
+    },
+    "link_unavailable": {
+      "message": "目前无法连接逆变器，因此没有发送任何内容，也未更改逆变器。Home Assistant 会自行重新连接。"
+    },
+    "write_allowance": {
+      "message": "更改过多：为保护逆变器，{window} 秒内最多允许 {limit} 次写入。没有发送任何内容，也未更改逆变器。请稍后再试。"
+    },
+    "ems_timeout_too_short": {
+      "message": "逆变器的 EMS 超时为 {timeout} 秒，不长于 {interval} 秒的 EMS 心跳，因此 EMS 会在两次心跳之间中断。未更改逆变器。请把超时调到高于心跳，或在“配置”中更改心跳。"
+    },
+    "write_rejected": {
+      "message": "逆变器以异常码 {exception_code} 拒绝了此更改。未更改逆变器。"
+    },
+    "write_unconfirmed": {
+      "message": "逆变器没有确认此更改。更改可能已生效也可能未生效，因此逆变器处于未知状态。此更改没有再次发送。Home Assistant 正在重新连接，并将再次读取逆变器。"
+    },
+    "write_mismatch": {
+      "message": "逆变器接受了此更改，但现在保存的是另一个值，该值已显示。逆变器已被更改，但不是更改为你要求的值。"
+    },
+    "no_power_target": {
+      "message": "尚未为{function}功能设置功率。请先设置其功率目标。未更改逆变器。"
+    },
+    "another_function_running": {
+      "message": "{running}功能正在运行，同一时间只能运行一个功率控制功能。请先将其关闭。未更改逆变器。"
+    },
+    "unusable_power": {
+      "message": "功率必须是 {minimum} 到 {maximum} 瓦之间的整数。未更改逆变器。"
+    }
+  },
+  "selector": {
+    "model": {
+      "options": {
+        "automatic": "自动",
+        "hs3": "HS3",
+        "h2": "H2"
+      }
+    },
+    "block": {
+      "options": {
+        "network": "网络",
+        "ev_data": "充电桩数据",
+        "settings": "设置",
+        "realtime": "实时",
+        "energy": "电量",
+        "parallel": "并机",
+        "ev_settings": "充电桩设置",
+        "averages": "五分钟平均值",
+        "ems": "EMS",
+        "identity": "版本",
+        "battery": "电池",
+        "meters": "电表",
+        "battery_identity": "电池标识"
+      }
+    },
+    "entity_state": {
+      "options": {
+        "disabled": "{entity}（已禁用）"
+      }
+    },
+    "equipment": {
+      "options": {
+        "battery": "电池",
+        "meter_a": "电表 A",
+        "meter_b": "电表 B",
+        "ev_charger": "充电桩",
+        "parallel": "并机系统",
+        "none": "无可选设备"
+      }
+    },
+    "equipment_setting": {
+      "options": {
+        "automatic": "自动",
+        "fitted": "已安装",
+        "not_fitted": "未安装"
+      }
+    },
+    "power_function": {
+      "options": {
+        "battery": "电池",
+        "grid": "电网",
+        "inverter": "逆变器"
+      }
+    }
+  }
+}

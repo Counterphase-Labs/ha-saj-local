@@ -203,6 +203,20 @@ Requirements: [Diagnostics and debug logging](requirements.md#diagnostics-and-de
 - Diagnostics and logs never contain the host, port, unit ID, full serial, MAC address, network addresses, EV charger serial, prefix or polling group names.
 - Every error the integration raises says what went wrong and whether the inverter was changed.
 
+## Languages
+
+Every text the integration shows to users exists in English and in every target language, so a Home Assistant user sees SAJ Local in the language of the user's profile.
+
+Files: [en.json](../translations/en.json), [de.json](../translations/de.json), [nl.json](../translations/nl.json), [fr.json](../translations/fr.json), [zh-Hans.json](../translations/zh-Hans.json), [es.json](../translations/es.json), [it.json](../translations/it.json), [pl.json](../translations/pl.json), [sv.json](../translations/sv.json)
+
+Requirements: [Languages](requirements.md#languages)
+
+- English (`en.json`), German (`de.json`), Dutch (`nl.json`), French (`fr.json`), Simplified Chinese (`zh-Hans.json`), Spanish (`es.json`), Italian (`it.json`), Polish (`pl.json`) and Swedish (`sv.json`).
+- Setup and options forms, entity names and states, repair issues and error messages are translated.
+- Every language has the same keys and placeholders as English.
+- Log messages stay in English.
+- Entity IDs are the same in every language.
+
 ## Cards
 
 The integration serves its own dashboard cards. The cards are listed in [the cards' feature list](../../../frontend/docs/features.md).

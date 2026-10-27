@@ -124,4 +124,4 @@ Files: [styles.ts](../src/ui/styles.ts), [localize.ts](../src/i18n/localize.ts),
 
 - The elements follow the Home Assistant theme.
 - Entity names, values and states use Home Assistant's own formatting and language.
-- The cards' own texts exist in English only, and a dashboard in another language shows them in English.
+- The cards' own texts exist in English, German, Dutch, French, Simplified Chinese, Spanish, Italian, Polish and Swedish, and a dashboard in any other language shows them in English.

@@ -28,7 +28,33 @@ export PLAYWRIGHT_RESULT_UID="$(id -u)"
 export PLAYWRIGHT_RESULT_GID="$(id -g)"
 docker compose --project-name "$docs_project_name" \
     --file "$docs_compose_file" build homeassistant playwright-docs
-docker compose --project-name "$docs_project_name" \
-    --file "$docs_compose_file" up --detach --wait homeassistant mock-docs mock-h2
-docker compose --project-name "$docs_project_name" \
-    --file "$docs_compose_file" run --rm playwright-docs
+
+# One language code from the arguments selects that language; options are not
+# used by the run. Without a code every language runs, English first.
+docs_languages="en-GB de nl fr zh-Hans es it pl sv"
+docs_selected=""
+for docs_argument in "$@"; do
+    case "$docs_argument" in
+        -*) ;;
+        *) docs_selected="$docs_argument" ;;
+    esac
+done
+if [ -n "$docs_selected" ]; then
+    case " $docs_languages " in
+        *" $docs_selected "*) docs_languages="$docs_selected" ;;
+        *)
+            echo "unknown language code: $docs_selected (use one of: $docs_languages)" >&2
+            exit 2
+            ;;
+    esac
+fi
+
+for docs_language in $docs_languages; do
+    # Fresh containers for each language, so no state carries over.
+    docker compose --project-name "$docs_project_name" \
+        --file "$docs_compose_file" down --volumes --remove-orphans || true
+    docker compose --project-name "$docs_project_name" \
+        --file "$docs_compose_file" up --detach --wait homeassistant mock-docs mock-h2
+    DOCS_LOCALE="$docs_language" docker compose --project-name "$docs_project_name" \
+        --file "$docs_compose_file" run --rm playwright-docs
+done

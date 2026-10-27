@@ -1,3 +1,5 @@
+en | [de](../../de/user/polling.md) | [nl](../../nl/user/polling.md) | [fr](../../fr/user/polling.md) | [zh](../../zh-hans/user/polling.md) | [es](../../es/user/polling.md) | [it](../../it/user/polling.md) | [pl](../../pl/user/polling.md) | [sv](../../sv/user/polling.md)
+
 # Polling
 
 The Polling page explains how often SAJ Local reads the inverter and how to read some entities faster or slower. The full list is in the [Polling](../../../custom_components/saj_local/docs/features.md#polling) section of the integration feature list. The limits that apply to every request are on [protecting the inverter](protecting-the-inverter.md).

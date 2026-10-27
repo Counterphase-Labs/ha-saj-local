@@ -1,3 +1,5 @@
+en | [de](../../de/user/faults-and-repairs.md) | [nl](../../nl/user/faults-and-repairs.md) | [fr](../../fr/user/faults-and-repairs.md) | [zh](../../zh-hans/user/faults-and-repairs.md) | [es](../../es/user/faults-and-repairs.md) | [it](../../it/user/faults-and-repairs.md) | [pl](../../pl/user/faults-and-repairs.md) | [sv](../../sv/user/faults-and-repairs.md)
+
 # Device faults and repairs
 
 The Device faults and repairs page explains how SAJ Local shows the faults that the inverter, the battery and the EV charger report, and which repair issues SAJ Local raises in Home Assistant. The full list of fault behaviour is in the [Device faults and repairs](../../../custom_components/saj_local/docs/features.md#device-faults-and-repairs) section of the integration feature list. Every fault entity is in the [Faults entities](entities/faults.md) of the entity reference.

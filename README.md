@@ -1,3 +1,5 @@
+en | [de](docs/de/README.md) | [nl](docs/nl/README.md) | [fr](docs/fr/README.md) | [zh](docs/zh-hans/README.md) | [es](docs/es/README.md) | [it](docs/it/README.md) | [pl](docs/pl/README.md) | [sv](docs/sv/README.md)
+
 # SAJ Local Home Assistant Integration
 
 ![SAJ Local](images/header.png)

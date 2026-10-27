@@ -1,0 +1,3313 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mit einem SAJ-Wechselrichter verbinden",
+        "description": "Gib den lokalen Modbus-TCP-Endpunkt, das Abfrageintervall und das Modell ein. Lass das Modell auf Automatisch, solange der Wechselrichter erkannt wird.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "unit_id": "Unit-ID",
+          "scan_interval": "Sekunden zwischen Aktualisierungen",
+          "model": "Modell",
+          "prefix": "Präfix",
+          "allow_control": "Steuerung zulassen"
+        },
+        "data_description": {
+          "prefix": "Optional. Fügt den Entitäts-IDs dieser Installation ein Präfix hinzu, zum Beispiel sensor.saj_house_pv_power statt sensor.saj_pv_power. Verwende es, wenn du mehr als ein SAJ-System hast. Nur Kleinbuchstaben und Ziffern, keine Unterstriche, bis zu 32 Zeichen, und keine zwei Installationen können dasselbe Präfix haben.",
+          "allow_control": "Standardmäßig aus. Wenn aktiviert, können Entitätsänderungen, Schaltflächen und Automatisierungen die Einstellungen des Wechselrichters ändern. Einstellungen, die den Wechselrichter in Betrieb nehmen (Zähler, RS485, Batterieprotokoll, Netzwerk, Wallbox-Anbindung), bleiben schreibgeschützt. Beim Einschalten wirst du um eine Bestätigung gebeten."
+        }
+      },
+      "confirm_model": {
+        "title": "Modell bestätigen",
+        "description": "Das Gerät meldet den Typ {device_type}, der nicht als {model} erkannt wird, daher konnte es nicht als dieses Modell geprüft werden. Die benötigten Register haben geantwortet, aber die Messwerte können falsch sein, wenn es ein anderes Modell ist. {model} trotzdem verwenden?"
+      },
+      "confirm_control": {
+        "title": "Bestätigen, dass die Steuerung zugelassen ist",
+        "description": "Bei zugelassener Steuerung ändern Entitätsänderungen und Automatisierungen die Einstellungen deines Wechselrichters. Eine falsche Einstellung kann den Wechselrichter anhalten, ändern, wie er Batterie oder Netz nutzt, oder dich Geld kosten.\n\nDas Aktivieren von EMS-Funktionen schaltet den Rückstromschutz des Wechselrichters ab.\n\nWenn Home Assistant anhält oder diese Installation neu geladen wird, versucht Home Assistant, die Funktionen auszuschalten, die du von Home Assistant aus eingeschaltet hast. Das geschieht nach bestem Bemühen, ohne Garantie. Wenn der Wechselrichter nicht erreichbar ist oder Home Assistant abrupt anhält, können die Funktionen eingeschaltet bleiben. Der eigene EMS-Timeout des Wechselrichters kann sie dann beenden, hat sich aber nicht als zuverlässig erwiesen.\n\nDas Zulassen der Steuerung aktiviert außerdem bis zu {count} Steuerungsentitäten dieses Systems, etwa Zeitfenster und Batteriegrenzwerte, damit sie auf Dashboards angezeigt und geändert werden können. Das Lesen dieser Entitäten erhöht die Last von {before} auf bis zu {after} von {budget} Anfragen pro Minute. Die Entitäten erscheinen etwa 30 Sekunden nach dem Speichern. Warte, bis sie erscheinen, bevor du etwas änderst: Das System wird beim Erscheinen noch einmal neu geladen, und das Neuladen schaltet jede Funktion der Leistungssteuerung aus, die vorher eingeschaltet wurde.\n\nSteuerung zulassen?",
+        "data": {
+          "ems_heartbeat": "EMS-Heartbeat (Sekunden)"
+        },
+        "data_description": {
+          "ems_heartbeat": "Wie oft die Ziele der EMS-Funktionen, die du von Home Assistant aus einschaltest, und die EMS-Grenzwerte gelesen werden, um sie aktiv zu halten, von 30 bis 3600 Sekunden. Der EMS-Timeout des Wechselrichters muss länger sein. Wird nur für Modelle mit EMS angezeigt."
+        }
+      }
+    },
+    "error": {
+      "already_configured": "Dieser Endpunkt ist bereits konfiguriert.",
+      "invalid_host": "Gib einen Hostnamen oder eine IP-Adresse ein.",
+      "invalid_unit_id": "Gib eine ganzzahlige Unit-ID von 1 bis 247 ein.",
+      "cannot_connect": "Der Wechselrichter konnte nicht verbunden oder gelesen werden. Prüfe den Endpunkt und versuche es erneut.",
+      "unsupported_device": "Das Gerät meldet den Typ {device_type}, der nicht automatisch erkannt wird. Wähle das Modell manuell.",
+      "invalid_device_data": "Der Wechselrichter hat ungültige Identitäts- oder Messdaten geliefert.",
+      "timeout": "Der Wechselrichter hat nicht rechtzeitig geantwortet. Prüfe den Endpunkt und versuche es erneut.",
+      "read_rejected": "Der Wechselrichter hat das Lesen eines benötigten Registers abgelehnt. Prüfe, ob dies ein unterstütztes SAJ-Gerät und Modell ist.",
+      "invalid_port": "Gib einen ganzzahligen Port von 1 bis 65535 ein.",
+      "invalid_endpoint": "Gib einen gültigen Port und eine gültige Unit-ID ein.",
+      "invalid_scan_interval": "Gib ein ganzzahliges Abfrageintervall von mindestens 10 Sekunden ein.",
+      "model_mismatch": "Dieses Gerät meldet sich als {detected_model}, nicht als {selected_model}. Wähle {detected_model} oder Automatisch.",
+      "unknown_model": "Das Modell {selection} ist kein bekanntes Modell. Wähle Automatisch oder eines der aufgeführten Modelle.",
+      "invalid_prefix": "Verwende nur Kleinbuchstaben und Ziffern, ohne Unterstriche, bis zu 32 Zeichen.",
+      "prefix_in_use": "Eine andere SAJ-Local-Installation verwendet dieses Präfix bereits. Auch ein leeres Präfix zählt, daher kann nur eine Installation kein Präfix haben.",
+      "entity_id_taken": "Die Entitäts-ID {entity_id} ist in Home Assistant bereits vergeben. Wähle ein anderes Präfix.",
+      "prefix_shadows_entity": "Dieses Präfix würde Entitäts-IDs erzeugen, die mit dem Namen einer Entität kollidieren. Wähle ein anderes Präfix.",
+      "invalid_ems_heartbeat": "Gib einen ganzzahligen Heartbeat von 30 bis 3600 Sekunden ein."
+    },
+    "abort": {
+      "already_configured": "Dieser Wechselrichter ist bereits konfiguriert.",
+      "confirmation_not_pending": "Keine geprüfte Änderung wartet auf Bestätigung."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Verbindung und Abfrage",
+        "description": "Gib den lokalen Modbus-TCP-Endpunkt, das Abfrageintervall und das Modell ein. Die Einstellungen werden gespeichert, nachdem der Endpunkt geprüft wurde. Die Integration sendet dem Wechselrichter höchstens {budget} Anfragen pro Minute, damit sein Kommunikationsmodul nicht überlastet wird. Diese Installation verwendet derzeit {load} davon.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "unit_id": "Unit-ID",
+          "scan_interval": "Sekunden zwischen Aktualisierungen",
+          "model": "Modell",
+          "prefix": "Präfix",
+          "allow_control": "Steuerung zulassen",
+          "ems_heartbeat": "EMS-Heartbeat (Sekunden)"
+        },
+        "data_description": {
+          "prefix": "Optional. Fügt den Entitäts-IDs dieser Installation ein Präfix hinzu, zum Beispiel sensor.saj_house_pv_power statt sensor.saj_pv_power. Verwende es, wenn du mehr als ein SAJ-System hast. Nur Kleinbuchstaben und Ziffern, keine Unterstriche, bis zu 32 Zeichen, und keine zwei Installationen können dasselbe Präfix haben. Eine Änderung benennt die Entitäten dieser Installation nach deiner Bestätigung um.",
+          "allow_control": "Standardmäßig aus. Wenn aktiviert, können Entitätsänderungen, Schaltflächen und Automatisierungen die Einstellungen des Wechselrichters ändern. Einstellungen, die den Wechselrichter in Betrieb nehmen (Zähler, RS485, Batterieprotokoll, Netzwerk, Wallbox-Anbindung), bleiben schreibgeschützt. Beim Einschalten wirst du um eine Bestätigung gebeten.",
+          "ems_heartbeat": "Wie oft die Ziele der EMS-Funktionen, die du von Home Assistant aus einschaltest, und die EMS-Grenzwerte gelesen werden, um sie aktiv zu halten, von 30 bis 3600 Sekunden. Der EMS-Timeout des Wechselrichters muss länger sein. Wird nur für Modelle mit EMS angezeigt."
+        },
+        "sections": {
+          "equipment": {
+            "name": "Ausstattung",
+            "description": "Derzeit als vorhanden behandelt: {equipment_fitted}. Automatisch erkennt jedes Teil bei jedem Start und jedem Neuladen und behält, was erkannt wurde, bis du Nicht vorhanden wählst. Vorhanden erstellt die Entitäten ohne Erkennung. Nicht vorhanden entfernt die Entitäten aus Home Assistant, einschließlich deiner Anpassungen daran, und vergisst, was erkannt wurde. Die Entitäts-IDs bleiben gleich, wenn das Teil wieder vorhanden ist, daher setzt sich der Verlauf fort.",
+            "data": {
+              "battery": "Batterie",
+              "meter_a": "Zähler A",
+              "meter_b": "Zähler B",
+              "ev_charger": "Wallbox",
+              "parallel": "Parallelsystem"
+            },
+            "data_description": {
+              "battery": "Batterieentitäten. Wenn der Wechselrichter die Erkennung nicht beantwortet, wird eine Batterie angenommen.",
+              "meter_a": "Entitäten des ersten Zählers. Wenn der Wechselrichter die Erkennung nicht beantwortet, wird der Zähler angenommen.",
+              "meter_b": "Entitäten des zweiten Zählers, erkannt am Status von Zähler B des Wechselrichters.",
+              "ev_charger": "Entitäten der SAJ-Wallbox, erkannt an der Wallbox-Freigabe-Einstellung des Wechselrichters.",
+              "parallel": "Entitäten eines Parallelsystems, erkannt am Parallelmodus des Wechselrichters und an der Anzahl der Geräte, die online sind."
+            }
+          }
+        }
+      },
+      "confirm_replacement": {
+        "title": "Austausch des Wechselrichters bestätigen",
+        "description": "Die Hardware dieser bestehenden Installation durch das Modell {model} mit der Seriennummer {serial} ersetzen? Deine Entitäten und ihre historischen Daten bleiben bei dieser Installation."
+      },
+      "confirm_model": {
+        "title": "Modell bestätigen",
+        "description": "Das Gerät meldet den Typ {device_type}, der nicht als {model} erkannt wird, daher konnte es nicht als dieses Modell geprüft werden. Die benötigten Register haben geantwortet, aber die Messwerte können falsch sein, wenn es ein anderes Modell ist. {model} trotzdem verwenden?"
+      },
+      "confirm_prefix": {
+        "title": "Änderung der Entitäts-IDs bestätigen",
+        "description": "Die Entitäts-IDs ändern sich von `{old_pattern}` zu `{new_pattern}`, für jeden Entitätstyp.\n\nVerlauf und Langzeitstatistiken wechseln zu den neuen Entitäts-IDs.\n\nAutomatisierungen, Skripte, Dashboards, Templates und Energie-Einstellungen, die die alten Entitäts-IDs verwenden, funktionieren nicht mehr, bis du sie aktualisierst.\n\nEntitäten, die du selbst umbenannt hast, bleiben unberührt. Die Entitäts-IDs ändern?"
+      },
+      "confirm_load": {
+        "title": "Langsamere Abfrage bestätigen",
+        "description": "Mit diesem Standardintervall bräuchte die Installation {after} Anfragen pro Minute, statt bisher {before}. Die Integration sendet dem Wechselrichter höchstens {budget} Anfragen pro Minute, damit sein Kommunikationsmodul nicht überlastet wird. Da dies über dem Limit liegt, werden Entitäten langsamer gelesen als konfiguriert. Das Intervall trotzdem speichern?"
+      },
+      "confirm_control": {
+        "title": "Bestätigen, dass die Steuerung zugelassen ist",
+        "description": "Bei zugelassener Steuerung ändern Entitätsänderungen und Automatisierungen die Einstellungen deines Wechselrichters. Eine falsche Einstellung kann den Wechselrichter anhalten, ändern, wie er Batterie oder Netz nutzt, oder dich Geld kosten.\n\nDas Aktivieren von EMS-Funktionen schaltet den Rückstromschutz des Wechselrichters ab.\n\nWenn Home Assistant anhält oder diese Installation neu geladen wird, versucht Home Assistant, die Funktionen auszuschalten, die du von Home Assistant aus eingeschaltet hast. Das geschieht nach bestem Bemühen, ohne Garantie. Wenn der Wechselrichter nicht erreichbar ist oder Home Assistant abrupt anhält, können die Funktionen eingeschaltet bleiben. Der eigene EMS-Timeout des Wechselrichters kann sie dann beenden, hat sich aber nicht als zuverlässig erwiesen.\n\nDas Zulassen der Steuerung aktiviert außerdem {count} Steuerungsentitäten dieses Systems, etwa Zeitfenster und Batteriegrenzwerte, damit sie auf Dashboards angezeigt und geändert werden können. Das Lesen dieser Entitäten erhöht die Last von {before} auf {after} von {budget} Anfragen pro Minute. Die Entitäten erscheinen etwa 30 Sekunden nach dem Speichern. Warte, bis sie erscheinen, bevor du etwas änderst: Das System wird beim Erscheinen noch einmal neu geladen, und das Neuladen schaltet jede Funktion der Leistungssteuerung aus, die vorher eingeschaltet wurde.\n\nSteuerung zulassen?"
+      }
+    },
+    "error": {
+      "already_configured": "Ein anderer SAJ-Local-Eintrag besitzt diesen Endpunkt oder diese Wechselrichter-Seriennummer bereits.",
+      "invalid_host": "Gib einen Hostnamen oder eine IP-Adresse ein.",
+      "invalid_port": "Gib einen ganzzahligen Port von 1 bis 65535 ein.",
+      "invalid_unit_id": "Gib eine ganzzahlige Unit-ID von 1 bis 247 ein.",
+      "invalid_endpoint": "Gib einen gültigen Port und eine gültige Unit-ID ein.",
+      "invalid_scan_interval": "Gib ein ganzzahliges Abfrageintervall von mindestens 10 Sekunden ein.",
+      "cannot_connect": "Der Wechselrichter konnte nicht verbunden oder gelesen werden. Prüfe den Endpunkt und versuche es erneut.",
+      "unsupported_device": "Das Gerät meldet den Typ {device_type}, der nicht automatisch erkannt wird. Wähle das Modell manuell.",
+      "invalid_device_data": "Der Wechselrichter hat ungültige Identitäts- oder Messdaten geliefert.",
+      "timeout": "Der Wechselrichter hat nicht rechtzeitig geantwortet. Prüfe den Endpunkt und versuche es erneut.",
+      "read_rejected": "Der Wechselrichter hat das Lesen eines benötigten Registers abgelehnt. Prüfe, ob dies ein unterstütztes SAJ-Gerät und Modell ist.",
+      "model_mismatch": "Dieses Gerät meldet sich als {detected_model}, nicht als {selected_model}. Wähle {detected_model} oder Automatisch.",
+      "unknown_model": "Das Modell {selection} ist kein bekanntes Modell. Wähle Automatisch oder eines der aufgeführten Modelle.",
+      "invalid_prefix": "Verwende nur Kleinbuchstaben und Ziffern, ohne Unterstriche, bis zu 32 Zeichen.",
+      "prefix_in_use": "Eine andere SAJ-Local-Installation verwendet dieses Präfix bereits. Auch ein leeres Präfix zählt, daher kann nur eine Installation kein Präfix haben.",
+      "entity_id_taken": "Die Entitäts-ID {entity_id} ist in Home Assistant bereits vergeben. Wähle ein anderes Präfix.",
+      "statistics_exist": "Home Assistant enthält bereits Langzeitstatistiken unter {entity_id}, daher konnte der Verlauf dieser Installation nicht dorthin verschoben werden. Wähle ein anderes Präfix.",
+      "prefix_shadows_entity": "Dieses Präfix würde Entitäts-IDs erzeugen, die mit dem Namen einer Entität kollidieren. Wähle ein anderes Präfix.",
+      "invalid_ems_heartbeat": "Gib einen ganzzahligen Heartbeat von 30 bis 3600 Sekunden ein.",
+      "invalid_equipment": "Wähle für jedes Ausstattungsteil Automatisch, Vorhanden oder Nicht vorhanden."
+    },
+    "abort": {
+      "changes_saved": "Die SAJ-Local-Einstellungen wurden gespeichert.",
+      "already_configured": "Ein anderer SAJ-Local-Eintrag besitzt diesen Endpunkt oder diese Wechselrichter-Seriennummer jetzt.",
+      "confirmation_not_pending": "Keine geprüfte Änderung wartet auf Bestätigung.",
+      "prefix_unavailable": "Das Präfix oder eine seiner Entitäts-IDs wurde während deiner Bestätigung vergeben. Es wurde nichts geändert."
+    }
+  },
+  "config_subentries": {
+    "polling_group": {
+      "entry_type": "Abfragegruppe",
+      "initiate_flow": {
+        "user": "Abfragegruppe hinzufügen"
+      },
+      "step": {
+        "user": {
+          "title": "Abfragegruppe hinzufügen",
+          "description": "Entitäten in einer Abfragegruppe werden im eigenen Intervall der Gruppe gelesen. Alle anderen Entitäten werden im Standardintervall gelesen. Die Integration sendet dem Wechselrichter höchstens {budget} Anfragen pro Minute, damit sein Kommunikationsmodul nicht überlastet wird. Diese Installation verwendet derzeit {load} davon. Deaktivierte Entitäten können jetzt gruppiert werden und kosten nichts, bis sie aktiviert werden.",
+          "data": {
+            "name": "Name",
+            "scan_interval": "Sekunden zwischen Aktualisierungen",
+            "keys": "Entitäten"
+          },
+          "data_description": {
+            "keys": "In Registerreihenfolge aufgeführt, jeweils mit dem Block von Registern, aus dem sie gelesen werden. Entitäten im selben Block können sich eine Anfrage teilen."
+          }
+        },
+        "reconfigure": {
+          "title": "Abfragegruppe bearbeiten",
+          "description": "Entitäten in einer Abfragegruppe werden im eigenen Intervall der Gruppe gelesen. Eine Entität kann nur zu einer Gruppe gehören. Die Integration sendet dem Wechselrichter höchstens {budget} Anfragen pro Minute, damit sein Kommunikationsmodul nicht überlastet wird. Diese Installation verwendet derzeit {load} davon. Deaktivierte Entitäten können jetzt gruppiert werden und kosten nichts, bis sie aktiviert werden.",
+          "data": {
+            "name": "Name",
+            "scan_interval": "Sekunden zwischen Aktualisierungen",
+            "keys": "Entitäten"
+          },
+          "data_description": {
+            "keys": "In Registerreihenfolge aufgeführt, jeweils mit dem Block von Registern, aus dem sie gelesen werden. Entitäten im selben Block können sich eine Anfrage teilen."
+          }
+        },
+        "review_group": {
+          "title": "Anfragelast prüfen",
+          "description": "Anfragen, die nötig sind, um diese Gruppe einmal zu lesen: {requests}.\n\nDie Integration sendet dem Wechselrichter höchstens {budget} Anfragen pro Minute, damit sein Kommunikationsmodul nicht überlastet wird. Diese Installation verwendet davon jetzt {before} und wird mit dieser gespeicherten Gruppe {after} verwenden.",
+          "menu_options": {
+            "save_group": "Gruppe speichern",
+            "change_selection": "Auswahl ändern"
+          }
+        },
+        "review_group_over_budget": {
+          "title": "Anfragelast prüfen",
+          "description": "Anfragen, die nötig sind, um diese Gruppe einmal zu lesen: {requests}.\n\nDie Integration sendet dem Wechselrichter höchstens {budget} Anfragen pro Minute, damit sein Kommunikationsmodul nicht überlastet wird. Diese Installation verwendet davon jetzt {before} und bräuchte mit dieser gespeicherten Gruppe {after}. Da dies über dem Limit liegt, werden Entitäten langsamer gelesen als konfiguriert. Du kannst die Gruppe trotzdem speichern.",
+          "menu_options": {
+            "save_group": "Gruppe speichern",
+            "change_selection": "Auswahl ändern"
+          }
+        }
+      },
+      "error": {
+        "invalid_scan_interval": "Gib ein ganzzahliges Abfrageintervall von mindestens 10 Sekunden ein.",
+        "no_sensors_selected": "Wähle mindestens eine Entität aus.",
+        "sensor_in_other_group": "Eine ausgewählte Entität gehört bereits zu einer anderen Abfragegruppe."
+      },
+      "abort": {
+        "no_sensors": "Diese Installation hat noch keine Entitäten, daher kann keine Abfragegruppe erstellt werden.",
+        "all_sensors_assigned": "Jede Entität gehört bereits zu einer Abfragegruppe, daher ist keine mehr zum Hinzufügen übrig.",
+        "reconfigure_successful": "Die Abfragegruppe wurde gespeichert.",
+        "confirmation_not_pending": "Keine geprüfte Abfragegruppe wartet auf eine Entscheidung."
+      }
+    },
+    "power_schedule": {
+      "entry_type": "Zeitplan der Leistungssteuerung",
+      "initiate_flow": {
+        "user": "Zeitplan der Leistungssteuerung hinzufügen"
+      },
+      "step": {
+        "user": {
+          "title": "Zeitplan der Leistungssteuerung hinzufügen",
+          "description": "Wähle die Funktion, die auf einer festen Leistung gehalten werden soll, und den Zeitplan-Helfer von Home Assistant, der sagt, wann. Die Integration schaltet die Funktion ein, wenn der Zeitplan eingeschaltet wird, und aus, wenn er ausgeschaltet wird. Ein Zeitplanblock kann die zusätzlichen Daten power in ganzen Watt tragen, mit einer negativen Zahl zum Laden oder Beziehen und einer positiven zum Entladen oder Einspeisen; ohne diese Angabe gilt das Leistungsziel der Funktion. Steuerung zulassen muss eingeschaltet sein.",
+          "data": {
+            "function": "Funktion",
+            "schedule": "Zeitplan"
+          },
+          "data_description": {
+            "function": "Jede Funktion kann einem Zeitplan folgen.",
+            "schedule": "Ein Zeitplan-Helfer kann von einer Funktion dieses Systems verwendet werden."
+          }
+        },
+        "reconfigure": {
+          "title": "Zeitplan der Leistungssteuerung bearbeiten",
+          "description": "Wähle die Funktion, die auf einer festen Leistung gehalten werden soll, und den Zeitplan-Helfer von Home Assistant, der sagt, wann. Die Integration schaltet die Funktion ein, wenn der Zeitplan eingeschaltet wird, und aus, wenn er ausgeschaltet wird. Ein Zeitplanblock kann die zusätzlichen Daten power in ganzen Watt tragen, mit einer negativen Zahl zum Laden oder Beziehen und einer positiven zum Entladen oder Einspeisen; ohne diese Angabe gilt das Leistungsziel der Funktion. Steuerung zulassen muss eingeschaltet sein.",
+          "data": {
+            "function": "Funktion",
+            "schedule": "Zeitplan"
+          },
+          "data_description": {
+            "function": "Jede Funktion kann einem Zeitplan folgen.",
+            "schedule": "Ein Zeitplan-Helfer kann von einer Funktion dieses Systems verwendet werden."
+          }
+        }
+      },
+      "error": {
+        "control_not_allowed": "Steuerung zulassen ist aus, daher könnte ein Zeitplan nichts bewirken. Schalte zuerst Steuerung zulassen in Konfigurieren ein.",
+        "function_already_scheduled": "Diese Funktion folgt in diesem System bereits einem Zeitplan.",
+        "schedule_in_use": "Dieser Zeitplan-Helfer wird bereits von einem anderen Zeitplan der Leistungssteuerung dieses Systems verwendet.",
+        "schedule_not_registered": "Dieser Zeitplan-Helfer hat keinen Eintrag in der Entitätsregistrierung, daher könnte der Zeitplan der Leistungssteuerung einer Umbenennung des Helfers nicht folgen. Wähle einen Zeitplan-Helfer, der in der Oberfläche erstellt wurde."
+      },
+      "abort": {
+        "reconfigure_successful": "Der Zeitplan der Leistungssteuerung wurde gespeichert."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "ethernet_protocol_version": {
+        "name": "Ethernet-Protokollversion"
+      },
+      "ethernet_mac_address": {
+        "name": "Ethernet-MAC-Adresse"
+      },
+      "ev_serial_number": {
+        "name": "Wallbox-Seriennummer"
+      },
+      "ev_model": {
+        "name": "Wallbox-Modell"
+      },
+      "ev_software_version": {
+        "name": "Wallbox-Softwareversion"
+      },
+      "ev_hardware_version": {
+        "name": "Wallbox-Hardwareversion"
+      },
+      "ev_phase_count": {
+        "name": "Wallbox-Phasenanzahl"
+      },
+      "ev_minimum_power": {
+        "name": "Wallbox-Mindestleistung"
+      },
+      "ev_maximum_power": {
+        "name": "Wallbox-Höchstleistung"
+      },
+      "ev_work_mode": {
+        "name": "Wallbox-Betriebsmodus",
+        "state": {
+          "disabled": "Deaktiviert",
+          "standard": "Standard",
+          "time_based": "Zeitbasiert",
+          "pv_surplus": "PV-Überschuss",
+          "ems": "EMS"
+        }
+      },
+      "ev_status": {
+        "name": "Wallbox-Status",
+        "state": {
+          "idle": "Inaktiv",
+          "ready": "Bereit",
+          "charging": "Lädt",
+          "charger_suspended": "Wallbox pausiert",
+          "vehicle_suspended": "Fahrzeug pausiert",
+          "complete": "Abgeschlossen"
+        }
+      },
+      "ev_l1_voltage": {
+        "name": "Wallbox-Spannung L1"
+      },
+      "ev_l1_current": {
+        "name": "Wallbox-Strom L1"
+      },
+      "ev_l2_voltage": {
+        "name": "Wallbox-Spannung L2"
+      },
+      "ev_l2_current": {
+        "name": "Wallbox-Strom L2"
+      },
+      "ev_l3_voltage": {
+        "name": "Wallbox-Spannung L3"
+      },
+      "ev_l3_current": {
+        "name": "Wallbox-Strom L3"
+      },
+      "ev_power": {
+        "name": "Wallbox-Leistung"
+      },
+      "ev_charge_duration": {
+        "name": "Wallbox-Ladedauer"
+      },
+      "ev_session_energy": {
+        "name": "Wallbox-Ladesitzungsenergie"
+      },
+      "ev_total_energy": {
+        "name": "Wallbox-Gesamtenergie"
+      },
+      "ev_control_pilot_voltage": {
+        "name": "Wallbox-Control-Pilot-Spannung"
+      },
+      "ev_duty_cycle": {
+        "name": "Wallbox-Tastgrad"
+      },
+      "ev_remote_control": {
+        "name": "Wallbox-Fernsteuerung",
+        "state": {
+          "off": "Aus",
+          "on": "Ein"
+        }
+      },
+      "ev_current_setpoint": {
+        "name": "Wallbox-Stromsollwert"
+      },
+      "ev_session_start": {
+        "name": "Wallbox-Ladesitzungsbeginn"
+      },
+      "ev_session_end": {
+        "name": "Wallbox-Ladesitzungsende"
+      },
+      "settings_protocol_version": {
+        "name": "Einstellungsprotokollversion"
+      },
+      "inverter_clock": {
+        "name": "Uhr des Wechselrichters"
+      },
+      "operating_mode": {
+        "name": "Betriebsmodus",
+        "state": {
+          "initialisation": "Initialisierung",
+          "standby": "Standby",
+          "operating": "Betrieb",
+          "off_grid": "Netzunabhängig",
+          "grid_connected_load_bypass": "Netzgekoppelte Last / Bypass",
+          "fault": "Fehler",
+          "upgrade": "Update",
+          "debugging": "Debugging",
+          "self_check": "Selbsttest",
+          "reset": "Zurücksetzen"
+        }
+      },
+      "inverter_temperature": {
+        "name": "Temperatur des Wechselrichters"
+      },
+      "ambient_temperature": {
+        "name": "Umgebungstemperatur"
+      },
+      "leakage_current": {
+        "name": "Ableitstrom"
+      },
+      "pv1_insulation_resistance": {
+        "name": "PV1-Isolationswiderstand"
+      },
+      "pv2_insulation_resistance": {
+        "name": "PV2-Isolationswiderstand"
+      },
+      "grid_connection_countdown": {
+        "name": "Countdown der Netzzuschaltung"
+      },
+      "inverter_discharge_power_setpoint": {
+        "name": "Wechselrichter-Entladeleistungssollwert"
+      },
+      "inverter_charge_power_setpoint": {
+        "name": "Wechselrichter-Ladeleistungssollwert"
+      },
+      "battery_discharge_current_setpoint": {
+        "name": "Batterie-Entladestromsollwert"
+      },
+      "battery_charge_current_setpoint": {
+        "name": "Batterie-Ladestromsollwert"
+      },
+      "battery_status_code": {
+        "name": "Batterie-Statuscode"
+      },
+      "battery_protocol_active": {
+        "name": "Batterieprotokoll (wirksam)"
+      },
+      "battery_charge_limit_active": {
+        "name": "Batterie-Ladegrenze (wirksam)"
+      },
+      "battery_discharge_limit_active": {
+        "name": "Batterie-Entladegrenze (wirksam)"
+      },
+      "battery_depth_of_discharge_active": {
+        "name": "Batterie-Entladetiefe (wirksam)"
+      },
+      "backup_reserve_soc_active": {
+        "name": "Notstrom-Reserve-Ladezustand (wirksam)"
+      },
+      "meter_configuration_active": {
+        "name": "Zählerkonfiguration (wirksam)"
+      },
+      "grid_l1_voltage": {
+        "name": "Netzspannung L1"
+      },
+      "grid_l1_current": {
+        "name": "Netzstrom L1"
+      },
+      "grid_l1_frequency": {
+        "name": "Netzfrequenz L1"
+      },
+      "grid_l1_dc_current": {
+        "name": "Netzgleichstrom L1"
+      },
+      "grid_l1_power": {
+        "name": "Netzleistung L1"
+      },
+      "grid_l1_apparent_power": {
+        "name": "Netzscheinleistung L1"
+      },
+      "grid_l1_power_factor": {
+        "name": "Netzleistungsfaktor L1"
+      },
+      "grid_l2_voltage": {
+        "name": "Netzspannung L2"
+      },
+      "grid_l2_current": {
+        "name": "Netzstrom L2"
+      },
+      "grid_l2_frequency": {
+        "name": "Netzfrequenz L2"
+      },
+      "grid_l2_dc_current": {
+        "name": "Netzgleichstrom L2"
+      },
+      "grid_l2_power": {
+        "name": "Netzleistung L2"
+      },
+      "grid_l2_apparent_power": {
+        "name": "Netzscheinleistung L2"
+      },
+      "grid_l2_power_factor": {
+        "name": "Netzleistungsfaktor L2"
+      },
+      "grid_l3_voltage": {
+        "name": "Netzspannung L3"
+      },
+      "grid_l3_current": {
+        "name": "Netzstrom L3"
+      },
+      "grid_l3_frequency": {
+        "name": "Netzfrequenz L3"
+      },
+      "grid_l3_dc_current": {
+        "name": "Netzgleichstrom L3"
+      },
+      "grid_l3_power": {
+        "name": "Netzleistung L3"
+      },
+      "grid_l3_apparent_power": {
+        "name": "Netzscheinleistung L3"
+      },
+      "grid_l3_power_factor": {
+        "name": "Netzleistungsfaktor L3"
+      },
+      "inverter_l1_voltage": {
+        "name": "Wechselrichterspannung L1"
+      },
+      "inverter_l1_current": {
+        "name": "Wechselrichterstrom L1"
+      },
+      "inverter_l1_frequency": {
+        "name": "Wechselrichterfrequenz L1"
+      },
+      "inverter_l1_power": {
+        "name": "Wechselrichterleistung L1"
+      },
+      "inverter_l1_apparent_power": {
+        "name": "Wechselrichterscheinleistung L1"
+      },
+      "inverter_l2_voltage": {
+        "name": "Wechselrichterspannung L2"
+      },
+      "inverter_l2_current": {
+        "name": "Wechselrichterstrom L2"
+      },
+      "inverter_l2_frequency": {
+        "name": "Wechselrichterfrequenz L2"
+      },
+      "inverter_l2_power": {
+        "name": "Wechselrichterleistung L2"
+      },
+      "inverter_l2_apparent_power": {
+        "name": "Wechselrichterscheinleistung L2"
+      },
+      "inverter_l3_voltage": {
+        "name": "Wechselrichterspannung L3"
+      },
+      "inverter_l3_current": {
+        "name": "Wechselrichterstrom L3"
+      },
+      "inverter_l3_frequency": {
+        "name": "Wechselrichterfrequenz L3"
+      },
+      "inverter_l3_power": {
+        "name": "Wechselrichterleistung L3"
+      },
+      "inverter_l3_apparent_power": {
+        "name": "Wechselrichterscheinleistung L3"
+      },
+      "backup_l1_voltage": {
+        "name": "Notstromspannung L1"
+      },
+      "backup_l1_current": {
+        "name": "Notstrom-Strom L1"
+      },
+      "backup_l1_frequency": {
+        "name": "Notstromfrequenz L1"
+      },
+      "backup_l1_dc_voltage": {
+        "name": "Notstromgleichspannung L1"
+      },
+      "backup_l1_power": {
+        "name": "Notstromleistung L1"
+      },
+      "backup_l1_apparent_power": {
+        "name": "Notstromscheinleistung L1"
+      },
+      "backup_l2_voltage": {
+        "name": "Notstromspannung L2"
+      },
+      "backup_l2_current": {
+        "name": "Notstrom-Strom L2"
+      },
+      "backup_l2_frequency": {
+        "name": "Notstromfrequenz L2"
+      },
+      "backup_l2_dc_voltage": {
+        "name": "Notstromgleichspannung L2"
+      },
+      "backup_l2_power": {
+        "name": "Notstromleistung L2"
+      },
+      "backup_l2_apparent_power": {
+        "name": "Notstromscheinleistung L2"
+      },
+      "backup_l3_voltage": {
+        "name": "Notstromspannung L3"
+      },
+      "backup_l3_current": {
+        "name": "Notstrom-Strom L3"
+      },
+      "backup_l3_frequency": {
+        "name": "Notstromfrequenz L3"
+      },
+      "backup_l3_dc_voltage": {
+        "name": "Notstromgleichspannung L3"
+      },
+      "backup_l3_power": {
+        "name": "Notstromleistung L3"
+      },
+      "backup_l3_apparent_power": {
+        "name": "Notstromscheinleistung L3"
+      },
+      "dc_bus_voltage": {
+        "name": "Zwischenkreisspannung"
+      },
+      "dc_bus_slave_voltage": {
+        "name": "Zwischenkreisspannung (Slave)"
+      },
+      "battery_voltage": {
+        "name": "Batteriespannung"
+      },
+      "battery_current": {
+        "name": "Batteriestrom"
+      },
+      "battery_port_power": {
+        "name": "Batterieanschlussleistung"
+      },
+      "battery_temperature": {
+        "name": "Batterietemperatur"
+      },
+      "battery_soc": {
+        "name": "Batterie-Ladezustand"
+      },
+      "pv1_voltage": {
+        "name": "PV1-Spannung"
+      },
+      "pv1_current": {
+        "name": "PV1-Strom"
+      },
+      "pv1_power": {
+        "name": "PV1-Leistung"
+      },
+      "pv2_voltage": {
+        "name": "PV2-Spannung"
+      },
+      "pv2_current": {
+        "name": "PV2-Strom"
+      },
+      "pv2_power": {
+        "name": "PV2-Leistung"
+      },
+      "grid_output_l1_voltage": {
+        "name": "Netzausgangsspannung L1"
+      },
+      "grid_output_l1_current": {
+        "name": "Netzausgangsstrom L1"
+      },
+      "grid_output_l1_frequency": {
+        "name": "Netzausgangsfrequenz L1"
+      },
+      "grid_output_l1_power": {
+        "name": "Netzausgangsleistung L1"
+      },
+      "grid_output_l2_voltage": {
+        "name": "Netzausgangsspannung L2"
+      },
+      "grid_output_l2_power": {
+        "name": "Netzausgangsleistung L2"
+      },
+      "grid_output_l3_voltage": {
+        "name": "Netzausgangsspannung L3"
+      },
+      "grid_output_l3_power": {
+        "name": "Netzausgangsleistung L3"
+      },
+      "load_power": {
+        "name": "Hauslastleistung"
+      },
+      "pv_power": {
+        "name": "Solarleistung"
+      },
+      "battery_power": {
+        "name": "Batterieleistung"
+      },
+      "grid_power": {
+        "name": "Netzleistung"
+      },
+      "inverter_power": {
+        "name": "Wechselrichterleistung"
+      },
+      "grid_load_power": {
+        "name": "Netzlastleistung"
+      },
+      "pv_energy_today": {
+        "name": "Solarenergie heute"
+      },
+      "pv_energy_month": {
+        "name": "Solarenergie diesen Monat"
+      },
+      "pv_energy_year": {
+        "name": "Solarenergie dieses Jahr"
+      },
+      "pv_energy_total": {
+        "name": "Solarenergie gesamt"
+      },
+      "battery_charge_energy_today": {
+        "name": "Batterie-Ladeenergie heute"
+      },
+      "battery_charge_energy_month": {
+        "name": "Batterie-Ladeenergie diesen Monat"
+      },
+      "battery_charge_energy_year": {
+        "name": "Batterie-Ladeenergie dieses Jahr"
+      },
+      "battery_charge_energy_total": {
+        "name": "Batterie-Ladeenergie gesamt"
+      },
+      "battery_discharge_energy_today": {
+        "name": "Batterie-Entladeenergie heute"
+      },
+      "battery_discharge_energy_month": {
+        "name": "Batterie-Entladeenergie diesen Monat"
+      },
+      "battery_discharge_energy_year": {
+        "name": "Batterie-Entladeenergie dieses Jahr"
+      },
+      "battery_discharge_energy_total": {
+        "name": "Batterie-Entladeenergie gesamt"
+      },
+      "load_energy_today": {
+        "name": "Hauslastenergie heute"
+      },
+      "load_energy_month": {
+        "name": "Hauslastenergie diesen Monat"
+      },
+      "load_energy_year": {
+        "name": "Hauslastenergie dieses Jahr"
+      },
+      "load_energy_total": {
+        "name": "Hauslastenergie gesamt"
+      },
+      "backup_load_energy_today": {
+        "name": "Notstromlast-Energie heute"
+      },
+      "backup_load_energy_month": {
+        "name": "Notstromlast-Energie diesen Monat"
+      },
+      "backup_load_energy_year": {
+        "name": "Notstromlast-Energie dieses Jahr"
+      },
+      "backup_load_energy_total": {
+        "name": "Notstromlast-Energie gesamt"
+      },
+      "grid_l1_export_energy_today": {
+        "name": "Netzeinspeiseenergie L1 heute"
+      },
+      "grid_l1_export_energy_month": {
+        "name": "Netzeinspeiseenergie L1 diesen Monat"
+      },
+      "grid_l1_export_energy_year": {
+        "name": "Netzeinspeiseenergie L1 dieses Jahr"
+      },
+      "grid_l1_export_energy_total": {
+        "name": "Netzeinspeiseenergie L1 gesamt"
+      },
+      "grid_l1_import_energy_today": {
+        "name": "Netzbezugsenergie L1 heute"
+      },
+      "grid_l1_import_energy_month": {
+        "name": "Netzbezugsenergie L1 diesen Monat"
+      },
+      "grid_l1_import_energy_year": {
+        "name": "Netzbezugsenergie L1 dieses Jahr"
+      },
+      "grid_l1_import_energy_total": {
+        "name": "Netzbezugsenergie L1 gesamt"
+      },
+      "grid_l2_export_energy_today": {
+        "name": "Netzeinspeiseenergie L2 heute"
+      },
+      "grid_l2_export_energy_month": {
+        "name": "Netzeinspeiseenergie L2 diesen Monat"
+      },
+      "grid_l2_export_energy_year": {
+        "name": "Netzeinspeiseenergie L2 dieses Jahr"
+      },
+      "grid_l2_export_energy_total": {
+        "name": "Netzeinspeiseenergie L2 gesamt"
+      },
+      "grid_l3_export_energy_today": {
+        "name": "Netzeinspeiseenergie L3 heute"
+      },
+      "grid_l3_export_energy_month": {
+        "name": "Netzeinspeiseenergie L3 diesen Monat"
+      },
+      "grid_l3_export_energy_year": {
+        "name": "Netzeinspeiseenergie L3 dieses Jahr"
+      },
+      "grid_l3_export_energy_total": {
+        "name": "Netzeinspeiseenergie L3 gesamt"
+      },
+      "grid_l2_import_energy_today": {
+        "name": "Netzbezugsenergie L2 heute"
+      },
+      "grid_l2_import_energy_month": {
+        "name": "Netzbezugsenergie L2 diesen Monat"
+      },
+      "grid_l2_import_energy_year": {
+        "name": "Netzbezugsenergie L2 dieses Jahr"
+      },
+      "grid_l2_import_energy_total": {
+        "name": "Netzbezugsenergie L2 gesamt"
+      },
+      "grid_l3_import_energy_today": {
+        "name": "Netzbezugsenergie L3 heute"
+      },
+      "grid_l3_import_energy_month": {
+        "name": "Netzbezugsenergie L3 diesen Monat"
+      },
+      "grid_l3_import_energy_year": {
+        "name": "Netzbezugsenergie L3 dieses Jahr"
+      },
+      "grid_l3_import_energy_total": {
+        "name": "Netzbezugsenergie L3 gesamt"
+      },
+      "grid_import_energy_today": {
+        "name": "Netzbezugsenergie heute"
+      },
+      "grid_import_energy_month": {
+        "name": "Netzbezugsenergie diesen Monat"
+      },
+      "grid_import_energy_year": {
+        "name": "Netzbezugsenergie dieses Jahr"
+      },
+      "grid_import_energy_total": {
+        "name": "Netzbezugsenergie gesamt"
+      },
+      "grid_export_energy_today": {
+        "name": "Netzeinspeiseenergie heute"
+      },
+      "grid_export_energy_month": {
+        "name": "Netzeinspeiseenergie diesen Monat"
+      },
+      "grid_export_energy_year": {
+        "name": "Netzeinspeiseenergie dieses Jahr"
+      },
+      "grid_export_energy_total": {
+        "name": "Netzeinspeiseenergie gesamt"
+      },
+      "parallel_mode": {
+        "name": "Parallelmodus"
+      },
+      "parallel_id": {
+        "name": "Parallelgerät-ID"
+      },
+      "parallel_count": {
+        "name": "Anzahl der Parallelgeräte"
+      },
+      "parallel_online_count": {
+        "name": "Parallelgeräte online"
+      },
+      "parallel_battery_soc": {
+        "name": "Parallelsystem Batterie-Ladezustand"
+      },
+      "parallel_battery_capacity": {
+        "name": "Parallelsystem Batteriekapazität"
+      },
+      "parallel_meter_b_power": {
+        "name": "Parallelsystem Zähler B Leistung"
+      },
+      "parallel_pv_energy_today": {
+        "name": "Parallelsystem Solarenergie heute"
+      },
+      "parallel_pv_energy_month": {
+        "name": "Parallelsystem Solarenergie diesen Monat"
+      },
+      "parallel_pv_energy_year": {
+        "name": "Parallelsystem Solarenergie dieses Jahr"
+      },
+      "parallel_pv_energy_total": {
+        "name": "Parallelsystem Solarenergie gesamt"
+      },
+      "parallel_battery_charge_energy_today": {
+        "name": "Parallelsystem Batterie-Ladeenergie heute"
+      },
+      "parallel_battery_charge_energy_month": {
+        "name": "Parallelsystem Batterie-Ladeenergie diesen Monat"
+      },
+      "parallel_battery_charge_energy_year": {
+        "name": "Parallelsystem Batterie-Ladeenergie dieses Jahr"
+      },
+      "parallel_battery_charge_energy_total": {
+        "name": "Parallelsystem Batterie-Ladeenergie gesamt"
+      },
+      "parallel_battery_discharge_energy_today": {
+        "name": "Parallelsystem Batterie-Entladeenergie heute"
+      },
+      "parallel_battery_discharge_energy_month": {
+        "name": "Parallelsystem Batterie-Entladeenergie diesen Monat"
+      },
+      "parallel_battery_discharge_energy_year": {
+        "name": "Parallelsystem Batterie-Entladeenergie dieses Jahr"
+      },
+      "parallel_battery_discharge_energy_total": {
+        "name": "Parallelsystem Batterie-Entladeenergie gesamt"
+      },
+      "parallel_grid_l1_export_energy_today": {
+        "name": "Parallelsystem Netzeinspeiseenergie L1 heute"
+      },
+      "parallel_grid_l1_export_energy_month": {
+        "name": "Parallelsystem Netzeinspeiseenergie L1 diesen Monat"
+      },
+      "parallel_grid_l1_export_energy_year": {
+        "name": "Parallelsystem Netzeinspeiseenergie L1 dieses Jahr"
+      },
+      "parallel_grid_l1_export_energy_total": {
+        "name": "Parallelsystem Netzeinspeiseenergie L1 gesamt"
+      },
+      "parallel_grid_l2_export_energy_today": {
+        "name": "Parallelsystem Netzeinspeiseenergie L2 heute"
+      },
+      "parallel_grid_l2_export_energy_month": {
+        "name": "Parallelsystem Netzeinspeiseenergie L2 diesen Monat"
+      },
+      "parallel_grid_l2_export_energy_year": {
+        "name": "Parallelsystem Netzeinspeiseenergie L2 dieses Jahr"
+      },
+      "parallel_grid_l2_export_energy_total": {
+        "name": "Parallelsystem Netzeinspeiseenergie L2 gesamt"
+      },
+      "parallel_grid_l3_export_energy_today": {
+        "name": "Parallelsystem Netzeinspeiseenergie L3 heute"
+      },
+      "parallel_grid_l3_export_energy_month": {
+        "name": "Parallelsystem Netzeinspeiseenergie L3 diesen Monat"
+      },
+      "parallel_grid_l3_export_energy_year": {
+        "name": "Parallelsystem Netzeinspeiseenergie L3 dieses Jahr"
+      },
+      "parallel_grid_l3_export_energy_total": {
+        "name": "Parallelsystem Netzeinspeiseenergie L3 gesamt"
+      },
+      "parallel_grid_l1_import_energy_today": {
+        "name": "Parallelsystem Netzbezugsenergie L1 heute"
+      },
+      "parallel_grid_l1_import_energy_month": {
+        "name": "Parallelsystem Netzbezugsenergie L1 diesen Monat"
+      },
+      "parallel_grid_l1_import_energy_year": {
+        "name": "Parallelsystem Netzbezugsenergie L1 dieses Jahr"
+      },
+      "parallel_grid_l1_import_energy_total": {
+        "name": "Parallelsystem Netzbezugsenergie L1 gesamt"
+      },
+      "parallel_grid_l2_import_energy_today": {
+        "name": "Parallelsystem Netzbezugsenergie L2 heute"
+      },
+      "parallel_grid_l2_import_energy_month": {
+        "name": "Parallelsystem Netzbezugsenergie L2 diesen Monat"
+      },
+      "parallel_grid_l2_import_energy_year": {
+        "name": "Parallelsystem Netzbezugsenergie L2 dieses Jahr"
+      },
+      "parallel_grid_l2_import_energy_total": {
+        "name": "Parallelsystem Netzbezugsenergie L2 gesamt"
+      },
+      "parallel_grid_l3_import_energy_today": {
+        "name": "Parallelsystem Netzbezugsenergie L3 heute"
+      },
+      "parallel_grid_l3_import_energy_month": {
+        "name": "Parallelsystem Netzbezugsenergie L3 diesen Monat"
+      },
+      "parallel_grid_l3_import_energy_year": {
+        "name": "Parallelsystem Netzbezugsenergie L3 dieses Jahr"
+      },
+      "parallel_grid_l3_import_energy_total": {
+        "name": "Parallelsystem Netzbezugsenergie L3 gesamt"
+      },
+      "parallel_load_energy_today": {
+        "name": "Parallelsystem Hauslastenergie heute"
+      },
+      "parallel_load_energy_month": {
+        "name": "Parallelsystem Hauslastenergie diesen Monat"
+      },
+      "parallel_load_energy_year": {
+        "name": "Parallelsystem Hauslastenergie dieses Jahr"
+      },
+      "parallel_load_energy_total": {
+        "name": "Parallelsystem Hauslastenergie gesamt"
+      },
+      "parallel_grid_import_energy_today": {
+        "name": "Parallelsystem Netzbezugsenergie heute"
+      },
+      "parallel_grid_import_energy_month": {
+        "name": "Parallelsystem Netzbezugsenergie diesen Monat"
+      },
+      "parallel_grid_import_energy_year": {
+        "name": "Parallelsystem Netzbezugsenergie dieses Jahr"
+      },
+      "parallel_grid_import_energy_total": {
+        "name": "Parallelsystem Netzbezugsenergie gesamt"
+      },
+      "parallel_grid_export_energy_today": {
+        "name": "Parallelsystem Netzeinspeiseenergie heute"
+      },
+      "parallel_grid_export_energy_month": {
+        "name": "Parallelsystem Netzeinspeiseenergie diesen Monat"
+      },
+      "parallel_grid_export_energy_year": {
+        "name": "Parallelsystem Netzeinspeiseenergie dieses Jahr"
+      },
+      "parallel_grid_export_energy_total": {
+        "name": "Parallelsystem Netzeinspeiseenergie gesamt"
+      },
+      "parallel_pv_meter_energy_today": {
+        "name": "Parallelsystem Solarzählerenergie heute"
+      },
+      "parallel_pv_meter_energy_month": {
+        "name": "Parallelsystem Solarzählerenergie diesen Monat"
+      },
+      "parallel_pv_meter_energy_year": {
+        "name": "Parallelsystem Solarzählerenergie dieses Jahr"
+      },
+      "parallel_pv_meter_energy_total": {
+        "name": "Parallelsystem Solarzählerenergie gesamt"
+      },
+      "ev_settings_protocol_version": {
+        "name": "Wallbox-Einstellungsprotokollversion"
+      },
+      "five_minute_average_grid_power": {
+        "name": "Netzleistung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_l1_power": {
+        "name": "Netzleistung L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_l1_voltage": {
+        "name": "Netzspannung L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_l1_current": {
+        "name": "Netzstrom L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_l1_frequency": {
+        "name": "Netzfrequenz L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_l2_power": {
+        "name": "Netzleistung L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_l2_voltage": {
+        "name": "Netzspannung L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_l2_current": {
+        "name": "Netzstrom L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_l2_frequency": {
+        "name": "Netzfrequenz L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_l3_power": {
+        "name": "Netzleistung L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_l3_voltage": {
+        "name": "Netzspannung L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_l3_current": {
+        "name": "Netzstrom L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_l3_frequency": {
+        "name": "Netzfrequenz L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_power": {
+        "name": "Wechselrichterleistung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_l1_power": {
+        "name": "Wechselrichterleistung L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_l1_voltage": {
+        "name": "Wechselrichterspannung L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_l1_current": {
+        "name": "Wechselrichterstrom L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_l1_frequency": {
+        "name": "Wechselrichterfrequenz L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_l2_power": {
+        "name": "Wechselrichterleistung L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_l2_voltage": {
+        "name": "Wechselrichterspannung L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_l2_current": {
+        "name": "Wechselrichterstrom L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_l2_frequency": {
+        "name": "Wechselrichterfrequenz L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_l3_power": {
+        "name": "Wechselrichterleistung L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_l3_voltage": {
+        "name": "Wechselrichterspannung L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_l3_current": {
+        "name": "Wechselrichterstrom L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_inverter_l3_frequency": {
+        "name": "Wechselrichterfrequenz L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_power": {
+        "name": "Hauslastleistung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_l1_power": {
+        "name": "Hauslastleistung L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_l1_voltage": {
+        "name": "Hauslastspannung L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_l1_current": {
+        "name": "Hauslaststrom L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_l1_frequency": {
+        "name": "Hauslastfrequenz L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_l2_power": {
+        "name": "Hauslastleistung L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_l2_voltage": {
+        "name": "Hauslastspannung L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_l2_current": {
+        "name": "Hauslaststrom L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_l2_frequency": {
+        "name": "Hauslastfrequenz L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_l3_power": {
+        "name": "Hauslastleistung L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_l3_voltage": {
+        "name": "Hauslastspannung L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_l3_current": {
+        "name": "Hauslaststrom L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_load_l3_frequency": {
+        "name": "Hauslastfrequenz L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_power": {
+        "name": "Netzlastleistung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_l1_power": {
+        "name": "Netzlastleistung L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_l1_voltage": {
+        "name": "Netzlastspannung L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_l1_current": {
+        "name": "Netzlaststrom L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_l1_frequency": {
+        "name": "Netzlastfrequenz L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_l2_power": {
+        "name": "Netzlastleistung L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_l2_voltage": {
+        "name": "Netzlastspannung L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_l2_current": {
+        "name": "Netzlaststrom L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_l2_frequency": {
+        "name": "Netzlastfrequenz L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_l3_power": {
+        "name": "Netzlastleistung L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_l3_voltage": {
+        "name": "Netzlastspannung L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_l3_current": {
+        "name": "Netzlaststrom L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_grid_load_l3_frequency": {
+        "name": "Netzlastfrequenz L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_power": {
+        "name": "Notstromleistung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_l1_power": {
+        "name": "Notstromleistung L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_l1_voltage": {
+        "name": "Notstromspannung L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_l1_current": {
+        "name": "Notstrom-Strom L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_l1_frequency": {
+        "name": "Notstromfrequenz L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_l2_power": {
+        "name": "Notstromleistung L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_l2_voltage": {
+        "name": "Notstromspannung L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_l2_current": {
+        "name": "Notstrom-Strom L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_l2_frequency": {
+        "name": "Notstromfrequenz L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_l3_power": {
+        "name": "Notstromleistung L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_l3_voltage": {
+        "name": "Notstromspannung L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_l3_current": {
+        "name": "Notstrom-Strom L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_backup_l3_frequency": {
+        "name": "Notstromfrequenz L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_pv_power": {
+        "name": "Solarleistung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_pv1_voltage": {
+        "name": "PV1-Spannung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_pv1_current": {
+        "name": "PV1-Strom (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_pv1_power": {
+        "name": "PV1-Leistung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_pv2_voltage": {
+        "name": "PV2-Spannung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_pv2_current": {
+        "name": "PV2-Strom (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_pv2_power": {
+        "name": "PV2-Leistung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_power": {
+        "name": "Generatorleistung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_l1_power": {
+        "name": "Generatorleistung L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_l1_voltage": {
+        "name": "Generatorspannung L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_l1_current": {
+        "name": "Generatorstrom L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_l1_frequency": {
+        "name": "Generatorfrequenz L1 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_l2_power": {
+        "name": "Generatorleistung L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_l2_voltage": {
+        "name": "Generatorspannung L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_l2_current": {
+        "name": "Generatorstrom L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_l2_frequency": {
+        "name": "Generatorfrequenz L2 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_l3_power": {
+        "name": "Generatorleistung L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_l3_voltage": {
+        "name": "Generatorspannung L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_l3_current": {
+        "name": "Generatorstrom L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_generator_l3_frequency": {
+        "name": "Generatorfrequenz L3 (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_battery_power": {
+        "name": "Batterieleistung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_battery_soc": {
+        "name": "Batterie-Ladezustand (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_battery_pack1_power": {
+        "name": "Batteriepack 1 Leistung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_battery_pack1_voltage": {
+        "name": "Batteriepack 1 Spannung (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_battery_pack1_current": {
+        "name": "Batteriepack 1 Strom (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_battery_pack1_soc": {
+        "name": "Batteriepack 1 Ladezustand (5-Minuten-Mittelwert)"
+      },
+      "five_minute_average_battery_pack1_temperature": {
+        "name": "Batteriepack 1 Temperatur (5-Minuten-Mittelwert)"
+      },
+      "product_code": {
+        "name": "Produktcode"
+      },
+      "display_software_version": {
+        "name": "Display-Softwareversion"
+      },
+      "master_software_version": {
+        "name": "Master-Softwareversion"
+      },
+      "slave_software_version": {
+        "name": "Slave-Softwareversion"
+      },
+      "display_hardware_version": {
+        "name": "Display-Hardwareversion"
+      },
+      "control_hardware_version": {
+        "name": "Steuerungs-Hardwareversion"
+      },
+      "power_hardware_version": {
+        "name": "Leistungsteil-Hardwareversion"
+      },
+      "battery_pack_count": {
+        "name": "Anzahl der Batteriepacks"
+      },
+      "battery_capacity": {
+        "name": "Batteriekapazität"
+      },
+      "battery_usable_capacity": {
+        "name": "Nutzbare Batteriekapazität"
+      },
+      "battery_online_code": {
+        "name": "Batterie-Online-Code"
+      },
+      "battery_pack1_soc": {
+        "name": "Batteriepack 1 Ladezustand"
+      },
+      "battery_pack1_soh": {
+        "name": "Batteriepack 1 Gesundheitszustand"
+      },
+      "battery_pack1_voltage": {
+        "name": "Batteriepack 1 Spannung"
+      },
+      "battery_pack1_current": {
+        "name": "Batteriepack 1 Strom"
+      },
+      "battery_pack1_temperature": {
+        "name": "Batteriepack 1 Temperatur"
+      },
+      "battery_pack1_cycles": {
+        "name": "Batteriepack 1 Zyklen"
+      },
+      "battery_pack1_discharged_energy": {
+        "name": "Batteriepack 1 entladene Energie"
+      },
+      "battery_discharge_current_limit": {
+        "name": "Batterie-Entladestromgrenze"
+      },
+      "battery_charge_current_limit": {
+        "name": "Batterie-Ladestromgrenze"
+      },
+      "meter_a_status": {
+        "name": "Zähler A Status",
+        "state": {
+          "offline": "Offline",
+          "online": "Online"
+        }
+      },
+      "meter_a_l1_voltage": {
+        "name": "Zähler A L1 Spannung"
+      },
+      "meter_a_l1_current": {
+        "name": "Zähler A L1 Strom"
+      },
+      "meter_a_l1_power": {
+        "name": "Zähler A L1 Leistung"
+      },
+      "meter_a_l1_apparent_power": {
+        "name": "Zähler A L1 Scheinleistung"
+      },
+      "meter_a_l1_power_factor": {
+        "name": "Zähler A L1 Leistungsfaktor"
+      },
+      "meter_a_l1_frequency": {
+        "name": "Zähler A L1 Frequenz"
+      },
+      "meter_a_l2_voltage": {
+        "name": "Zähler A L2 Spannung"
+      },
+      "meter_a_l2_current": {
+        "name": "Zähler A L2 Strom"
+      },
+      "meter_a_l2_power": {
+        "name": "Zähler A L2 Leistung"
+      },
+      "meter_a_l2_apparent_power": {
+        "name": "Zähler A L2 Scheinleistung"
+      },
+      "meter_a_l2_power_factor": {
+        "name": "Zähler A L2 Leistungsfaktor"
+      },
+      "meter_a_l2_frequency": {
+        "name": "Zähler A L2 Frequenz"
+      },
+      "meter_a_l3_voltage": {
+        "name": "Zähler A L3 Spannung"
+      },
+      "meter_a_l3_current": {
+        "name": "Zähler A L3 Strom"
+      },
+      "meter_a_l3_power": {
+        "name": "Zähler A L3 Leistung"
+      },
+      "meter_a_l3_apparent_power": {
+        "name": "Zähler A L3 Scheinleistung"
+      },
+      "meter_a_l3_power_factor": {
+        "name": "Zähler A L3 Leistungsfaktor"
+      },
+      "meter_a_l3_frequency": {
+        "name": "Zähler A L3 Frequenz"
+      },
+      "meter_b_status": {
+        "name": "Zähler B Status",
+        "state": {
+          "offline": "Offline",
+          "online": "Online"
+        }
+      },
+      "meter_b_l1_voltage": {
+        "name": "Zähler B L1 Spannung"
+      },
+      "meter_b_l1_current": {
+        "name": "Zähler B L1 Strom"
+      },
+      "meter_b_l1_power": {
+        "name": "Zähler B L1 Leistung"
+      },
+      "meter_b_l1_apparent_power": {
+        "name": "Zähler B L1 Scheinleistung"
+      },
+      "meter_b_l1_power_factor": {
+        "name": "Zähler B L1 Leistungsfaktor"
+      },
+      "meter_b_l1_frequency": {
+        "name": "Zähler B L1 Frequenz"
+      },
+      "meter_b_l2_voltage": {
+        "name": "Zähler B L2 Spannung"
+      },
+      "meter_b_l2_current": {
+        "name": "Zähler B L2 Strom"
+      },
+      "meter_b_l2_power": {
+        "name": "Zähler B L2 Leistung"
+      },
+      "meter_b_l2_apparent_power": {
+        "name": "Zähler B L2 Scheinleistung"
+      },
+      "meter_b_l2_power_factor": {
+        "name": "Zähler B L2 Leistungsfaktor"
+      },
+      "meter_b_l2_frequency": {
+        "name": "Zähler B L2 Frequenz"
+      },
+      "meter_b_l3_voltage": {
+        "name": "Zähler B L3 Spannung"
+      },
+      "meter_b_l3_current": {
+        "name": "Zähler B L3 Strom"
+      },
+      "meter_b_l3_power": {
+        "name": "Zähler B L3 Leistung"
+      },
+      "meter_b_l3_apparent_power": {
+        "name": "Zähler B L3 Scheinleistung"
+      },
+      "meter_b_l3_power_factor": {
+        "name": "Zähler B L3 Leistungsfaktor"
+      },
+      "meter_b_l3_frequency": {
+        "name": "Zähler B L3 Frequenz"
+      },
+      "meter_a_l1_reactive_power": {
+        "name": "Zähler A L1 Blindleistung"
+      },
+      "meter_a_l2_reactive_power": {
+        "name": "Zähler A L2 Blindleistung"
+      },
+      "meter_a_l3_reactive_power": {
+        "name": "Zähler A L3 Blindleistung"
+      },
+      "meter_b_l1_reactive_power": {
+        "name": "Zähler B L1 Blindleistung"
+      },
+      "meter_b_l2_reactive_power": {
+        "name": "Zähler B L2 Blindleistung"
+      },
+      "meter_b_l3_reactive_power": {
+        "name": "Zähler B L3 Blindleistung"
+      },
+      "meter_a_power": {
+        "name": "Zähler A Leistung"
+      },
+      "meter_b_power": {
+        "name": "Zähler B Leistung"
+      },
+      "parallel_backup_load_power": {
+        "name": "Parallelsystem Notstromlastleistung"
+      },
+      "parallel_battery_power": {
+        "name": "Parallelsystem Batterieleistung"
+      },
+      "parallel_grid_load_power": {
+        "name": "Parallelsystem Netzlastleistung"
+      },
+      "parallel_grid_power": {
+        "name": "Parallelsystem Netzleistung"
+      },
+      "parallel_load_power": {
+        "name": "Parallelsystem Hauslastleistung"
+      },
+      "parallel_pv_power": {
+        "name": "Parallelsystem Solarleistung"
+      },
+      "pv3_insulation_resistance": {
+        "name": "PV3-Isolationswiderstand"
+      },
+      "pv4_insulation_resistance": {
+        "name": "PV4-Isolationswiderstand"
+      },
+      "pv3_voltage": {
+        "name": "PV3-Spannung"
+      },
+      "pv3_current": {
+        "name": "PV3-Strom"
+      },
+      "pv3_power": {
+        "name": "PV3-Leistung"
+      },
+      "pv4_voltage": {
+        "name": "PV4-Spannung"
+      },
+      "pv4_current": {
+        "name": "PV4-Strom"
+      },
+      "pv4_power": {
+        "name": "PV4-Leistung"
+      },
+      "ct_grid_power": {
+        "name": "CT-Netzleistung"
+      },
+      "ct_grid_apparent_power": {
+        "name": "CT-Netzscheinleistung"
+      },
+      "ct_pv_power": {
+        "name": "CT-Solarleistung"
+      },
+      "ct_pv_apparent_power": {
+        "name": "CT-Solarscheinleistung"
+      },
+      "grid_apparent_power": {
+        "name": "Netzscheinleistung"
+      },
+      "inverter_apparent_power": {
+        "name": "Wechselrichterscheinleistung"
+      },
+      "backup_load_power": {
+        "name": "Notstromlastleistung"
+      },
+      "backup_load_apparent_power": {
+        "name": "Notstromlast-Scheinleistung"
+      },
+      "inverter_energy_today": {
+        "name": "Wechselrichterenergie heute"
+      },
+      "inverter_energy_month": {
+        "name": "Wechselrichterenergie diesen Monat"
+      },
+      "inverter_energy_year": {
+        "name": "Wechselrichterenergie dieses Jahr"
+      },
+      "inverter_energy_total": {
+        "name": "Wechselrichterenergie gesamt"
+      },
+      "pv2_energy_today": {
+        "name": "PV2-Energie heute"
+      },
+      "pv2_energy_month": {
+        "name": "PV2-Energie diesen Monat"
+      },
+      "pv2_energy_year": {
+        "name": "PV2-Energie dieses Jahr"
+      },
+      "pv2_energy_total": {
+        "name": "PV2-Energie gesamt"
+      },
+      "pv3_energy_today": {
+        "name": "PV3-Energie heute"
+      },
+      "pv3_energy_month": {
+        "name": "PV3-Energie diesen Monat"
+      },
+      "pv3_energy_year": {
+        "name": "PV3-Energie dieses Jahr"
+      },
+      "pv3_energy_total": {
+        "name": "PV3-Energie gesamt"
+      },
+      "identity_protocol_version": {
+        "name": "Identitätsprotokollversion"
+      },
+      "battery_pack2_soc": {
+        "name": "Batteriepack 2 Ladezustand"
+      },
+      "battery_pack2_soh": {
+        "name": "Batteriepack 2 Gesundheitszustand"
+      },
+      "battery_pack2_voltage": {
+        "name": "Batteriepack 2 Spannung"
+      },
+      "battery_pack2_current": {
+        "name": "Batteriepack 2 Strom"
+      },
+      "battery_pack2_temperature": {
+        "name": "Batteriepack 2 Temperatur"
+      },
+      "battery_pack2_cycles": {
+        "name": "Batteriepack 2 Zyklen"
+      },
+      "battery_pack3_soc": {
+        "name": "Batteriepack 3 Ladezustand"
+      },
+      "battery_pack3_soh": {
+        "name": "Batteriepack 3 Gesundheitszustand"
+      },
+      "battery_pack3_voltage": {
+        "name": "Batteriepack 3 Spannung"
+      },
+      "battery_pack3_current": {
+        "name": "Batteriepack 3 Strom"
+      },
+      "battery_pack3_temperature": {
+        "name": "Batteriepack 3 Temperatur"
+      },
+      "battery_pack3_cycles": {
+        "name": "Batteriepack 3 Zyklen"
+      },
+      "battery_pack4_soc": {
+        "name": "Batteriepack 4 Ladezustand"
+      },
+      "battery_pack4_soh": {
+        "name": "Batteriepack 4 Gesundheitszustand"
+      },
+      "battery_pack4_voltage": {
+        "name": "Batteriepack 4 Spannung"
+      },
+      "battery_pack4_current": {
+        "name": "Batteriepack 4 Strom"
+      },
+      "battery_pack4_temperature": {
+        "name": "Batteriepack 4 Temperatur"
+      },
+      "battery_pack4_cycles": {
+        "name": "Batteriepack 4 Zyklen"
+      },
+      "battery_pack2_discharged_energy": {
+        "name": "Batteriepack 2 entladene Energie"
+      },
+      "battery_pack3_discharged_energy": {
+        "name": "Batteriepack 3 entladene Energie"
+      },
+      "battery_pack4_discharged_energy": {
+        "name": "Batteriepack 4 entladene Energie"
+      },
+      "battery_voltage_high_protection": {
+        "name": "Batterie-Überspannungsschutz"
+      },
+      "battery_charge_voltage": {
+        "name": "Batterie-Ladespannung"
+      },
+      "battery_discharge_cutoff_voltage": {
+        "name": "Batterie-Entladeabschaltspannung"
+      },
+      "off_grid_mode": {
+        "name": "Netzunabhängiger Modus",
+        "state": {
+          "off": "Aus",
+          "on": "Ein"
+        }
+      },
+      "inverter_stop": {
+        "name": "Wechselrichter-Stopp",
+        "state": {
+          "running": "Läuft",
+          "stopped": "Gestoppt"
+        }
+      },
+      "inverter_error_count": {
+        "name": "Fehleranzahl des Wechselrichters"
+      },
+      "drm_hardware_status": {
+        "name": "DRM-Hardwarestatus"
+      },
+      "drm_software_status": {
+        "name": "DRM-Softwarestatus"
+      },
+      "fault_record_sequence": {
+        "name": "Fehleraufzeichnungsfolge"
+      },
+      "application_mode_active": {
+        "name": "Anwendungsmodus (wirksam)",
+        "state": {
+          "self_use": "Eigenverbrauch",
+          "time_of_use": "Zeitsteuerung",
+          "backup": "Notstrom",
+          "passive": "Passiv",
+          "legacy": "Altmodus",
+          "ai_saving": "KI-Sparmodus",
+          "peak_shaving": "Spitzenlastkappung"
+        }
+      },
+      "battery_controller_1_current": {
+        "name": "Batteriecontroller 1 Strom"
+      },
+      "battery_controller_2_current": {
+        "name": "Batteriecontroller 2 Strom"
+      },
+      "pv_generation_time_today": {
+        "name": "Solar-Erzeugungszeit heute"
+      },
+      "pv_generation_time_total": {
+        "name": "Solar-Erzeugungszeit gesamt"
+      },
+      "battery_voltage_low_warning": {
+        "name": "Batterie-Unterspannungswarnung"
+      },
+      "battery_pack1_bms_type": {
+        "name": "Batteriepack 1 BMS-Typ"
+      },
+      "battery_pack1_bms_serial_number": {
+        "name": "Batteriepack 1 BMS-Seriennummer"
+      },
+      "battery_pack1_bms_software_version": {
+        "name": "Batteriepack 1 BMS-Softwareversion"
+      },
+      "battery_pack1_bms_hardware_version": {
+        "name": "Batteriepack 1 BMS-Hardwareversion"
+      },
+      "battery_pack1_type": {
+        "name": "Batteriepack 1 Typ",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack1_serial_number": {
+        "name": "Batteriepack 1 Seriennummer"
+      },
+      "battery_pack2_bms_type": {
+        "name": "Batteriepack 2 BMS-Typ"
+      },
+      "battery_pack2_bms_serial_number": {
+        "name": "Batteriepack 2 BMS-Seriennummer"
+      },
+      "battery_pack2_bms_software_version": {
+        "name": "Batteriepack 2 BMS-Softwareversion"
+      },
+      "battery_pack2_bms_hardware_version": {
+        "name": "Batteriepack 2 BMS-Hardwareversion"
+      },
+      "battery_pack2_type": {
+        "name": "Batteriepack 2 Typ",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack2_serial_number": {
+        "name": "Batteriepack 2 Seriennummer"
+      },
+      "battery_pack3_bms_type": {
+        "name": "Batteriepack 3 BMS-Typ"
+      },
+      "battery_pack3_bms_serial_number": {
+        "name": "Batteriepack 3 BMS-Seriennummer"
+      },
+      "battery_pack3_bms_software_version": {
+        "name": "Batteriepack 3 BMS-Softwareversion"
+      },
+      "battery_pack3_bms_hardware_version": {
+        "name": "Batteriepack 3 BMS-Hardwareversion"
+      },
+      "battery_pack3_type": {
+        "name": "Batteriepack 3 Typ",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack3_serial_number": {
+        "name": "Batteriepack 3 Seriennummer"
+      },
+      "battery_pack4_bms_type": {
+        "name": "Batteriepack 4 BMS-Typ"
+      },
+      "battery_pack4_bms_serial_number": {
+        "name": "Batteriepack 4 BMS-Seriennummer"
+      },
+      "battery_pack4_bms_software_version": {
+        "name": "Batteriepack 4 BMS-Softwareversion"
+      },
+      "battery_pack4_bms_hardware_version": {
+        "name": "Batteriepack 4 BMS-Hardwareversion"
+      },
+      "battery_pack4_type": {
+        "name": "Batteriepack 4 Typ",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack4_serial_number": {
+        "name": "Batteriepack 4 Seriennummer"
+      },
+      "battery_pack5_bms_type": {
+        "name": "Batteriepack 5 BMS-Typ"
+      },
+      "battery_pack5_bms_serial_number": {
+        "name": "Batteriepack 5 BMS-Seriennummer"
+      },
+      "battery_pack5_bms_software_version": {
+        "name": "Batteriepack 5 BMS-Softwareversion"
+      },
+      "battery_pack5_bms_hardware_version": {
+        "name": "Batteriepack 5 BMS-Hardwareversion"
+      },
+      "battery_pack5_type": {
+        "name": "Batteriepack 5 Typ",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack5_serial_number": {
+        "name": "Batteriepack 5 Seriennummer"
+      },
+      "battery_input_mode": {
+        "name": "Batterie-Eingangsmodus",
+        "state": {
+          "independent": "Unabhängig",
+          "parallel": "Parallel"
+        }
+      },
+      "battery_protocol": {
+        "name": "Batterieprotokoll",
+        "state": {
+          "not_in_use": "Nicht in Verwendung",
+          "saj_bu3": "SAJ BU3",
+          "lead_acid": "Blei-Säure",
+          "dyness_h": "Dyness DYNESS-H",
+          "pylon_sc0500": "Pylon SC0500",
+          "b2_can": "B2 CAN"
+        }
+      },
+      "bms_update_id": {
+        "name": "BMS-Update-ID"
+      },
+      "bms_update_mode": {
+        "name": "BMS-Update-Modus"
+      },
+      "ethernet_mode": {
+        "name": "Ethernet-Modus",
+        "state": {
+          "manual": "Manuell",
+          "automatic": "Automatisch"
+        }
+      },
+      "ev_address": {
+        "name": "Wallbox-Adresse"
+      },
+      "ev_baud_rate": {
+        "name": "Wallbox-Baudrate",
+        "state": {
+          "115200": "115200 Baud",
+          "57600": "57600 Baud",
+          "38400": "38400 Baud",
+          "19200": "19200 Baud",
+          "9600": "9600 Baud",
+          "4800": "4800 Baud",
+          "2400": "2400 Baud",
+          "1200": "1200 Baud"
+        }
+      },
+      "ev_charger_count": {
+        "name": "Anzahl der Wallboxen"
+      },
+      "ev_communication_timeout": {
+        "name": "Wallbox-Kommunikations-Timeout"
+      },
+      "ev_port_address": {
+        "name": "Wallbox-Portadresse"
+      },
+      "ev_port_mode": {
+        "name": "Wallbox-Portmodus",
+        "state": {
+          "invalid": "Ungültig",
+          "host": "Host",
+          "modbus_slave": "Modbus-Slave"
+        }
+      },
+      "fcas_frequency_hysteresis": {
+        "name": "FCAS-Frequenzhysterese"
+      },
+      "function_flags_1": {
+        "name": "Funktionsflags 1"
+      },
+      "function_flags_2": {
+        "name": "Funktionsflags 2"
+      },
+      "grid_type": {
+        "name": "Netztyp",
+        "state": {
+          "single_phase": "Einphasig",
+          "split_phase": "Split-Phase",
+          "three_phase_three_wire": "Dreiphasig, dreiadrig",
+          "three_phase_four_wire": "Dreiphasig, vieradrig"
+        }
+      },
+      "insulation_resistance_limit": {
+        "name": "Isolationswiderstandsgrenze"
+      },
+      "lead_acid_capacity": {
+        "name": "Blei-Säure-Kapazität"
+      },
+      "lead_acid_charge_current_limit": {
+        "name": "Blei-Säure-Ladestromgrenze"
+      },
+      "lead_acid_charge_cutoff_voltage": {
+        "name": "Blei-Säure-Ladeschlussspannung"
+      },
+      "lead_acid_discharge_current_limit": {
+        "name": "Blei-Säure-Entladestromgrenze"
+      },
+      "lead_acid_equalising_charge_voltage": {
+        "name": "Blei-Säure-Ausgleichsladespannung"
+      },
+      "lead_acid_float_charge_voltage": {
+        "name": "Blei-Säure-Erhaltungsladespannung"
+      },
+      "lead_acid_high_voltage_protection": {
+        "name": "Blei-Säure-Überspannungsschutz"
+      },
+      "lead_acid_low_voltage_warning": {
+        "name": "Blei-Säure-Unterspannungswarnung"
+      },
+      "lead_acid_off_grid_discharge_cutoff_voltage": {
+        "name": "Blei-Säure-Entlade-Abschaltspannung (netzunabhängig)"
+      },
+      "lead_acid_on_grid_discharge_cutoff_voltage": {
+        "name": "Blei-Säure-Entlade-Abschaltspannung (netzgekoppelt)"
+      },
+      "machine_model": {
+        "name": "Gerätemodell"
+      },
+      "max_dc_current_component": {
+        "name": "Maximale Gleichstromkomponente"
+      },
+      "max_dc_voltage_component": {
+        "name": "Maximale Gleichspannungskomponente"
+      },
+      "max_leakage_current": {
+        "name": "Maximaler Ableitstrom"
+      },
+      "meter_address": {
+        "name": "Zähleradresse"
+      },
+      "meter_configuration": {
+        "name": "Zählerkonfiguration",
+        "state": {
+          "no_meter_or_ct": "Kein Zähler oder CT",
+          "single_phase_meter": "Einphasiger Zähler",
+          "three_phase_three_wire_meter": "Dreiphasiger dreiadriger Zähler",
+          "three_phase_four_wire_meter_on_single_phase_machine": "Dreiphasiger vieradriger Zähler an einem einphasigen Gerät",
+          "three_phase_four_wire_meter_grid_and_pv": "Dreiphasiger vieradriger Zähler (Netz und PV)",
+          "two_three_phase_three_wire_meters": "Zwei dreiphasige dreiadrige Zähler",
+          "two_three_phase_four_wire_meters": "Zwei dreiphasige vieradrige Zähler",
+          "two_single_phase_meters": "Zwei einphasige Zähler",
+          "single_phase_meter_with_two_ct_channels": "Einphasiger Zähler mit zwei CT-Kanälen",
+          "one_grid_ct": "Ein Netz-CT",
+          "grid_and_pv_cts": "Netz- und PV-CTs",
+          "dual_circuit_three_phase_four_wire_meter_with_six_ct_channels": "Zweikreisiger dreiphasiger vieradriger Zähler mit sechs CT-Kanälen"
+        }
+      },
+      "motor_enable": {
+        "name": "Motorfreigabe"
+      },
+      "mppt_scan_time": {
+        "name": "MPPT-Suchzeit"
+      },
+      "mppt_voltage_high": {
+        "name": "MPPT-Spannung oben"
+      },
+      "mppt_voltage_low": {
+        "name": "MPPT-Spannung unten"
+      },
+      "off_grid_output_frequency": {
+        "name": "Ausgangsfrequenz (netzunabhängig)"
+      },
+      "off_grid_output_voltage": {
+        "name": "Ausgangsspannung (netzunabhängig)"
+      },
+      "parallel_configured_mode": {
+        "name": "Konfigurierter Parallelmodus",
+        "state": {
+          "not_parallel": "Nicht parallel",
+          "on_grid": "Netzgekoppelt",
+          "off_grid": "Netzunabhängig",
+          "on_and_off_grid": "Netzgekoppelt und netzunabhängig"
+        }
+      },
+      "parallel_number": {
+        "name": "Parallelnummer"
+      },
+      "parallel_role": {
+        "name": "Parallelrolle"
+      },
+      "pv_input_mode": {
+        "name": "PV-Eingangsmodus",
+        "state": {
+          "automatic": "Automatisch",
+          "independent": "Unabhängig",
+          "parallel": "Parallel"
+        }
+      },
+      "pv_shutdown_voltage": {
+        "name": "PV-Abschaltspannung"
+      },
+      "pv_start_voltage": {
+        "name": "PV-Startspannung"
+      },
+      "rated_power": {
+        "name": "Nennleistung"
+      },
+      "reverse_flow_mode": {
+        "name": "Rückstrommodus",
+        "state": {
+          "off": "Aus",
+          "master": "Master",
+          "slave": "Slave"
+        }
+      },
+      "rs485_address": {
+        "name": "RS485-Adresse"
+      },
+      "rs485_baud_rate": {
+        "name": "RS485-Baudrate",
+        "state": {
+          "115200": "115200 Baud",
+          "57600": "57600 Baud",
+          "38400": "38400 Baud",
+          "19200": "19200 Baud",
+          "9600": "9600 Baud",
+          "4800": "4800 Baud",
+          "2400": "2400 Baud",
+          "1200": "1200 Baud"
+        }
+      },
+      "rs485_slave_address": {
+        "name": "RS485-Slave-Adresse"
+      },
+      "rs485_slave_baud_rate": {
+        "name": "RS485-Slave-Baudrate",
+        "state": {
+          "115200": "115200 Baud",
+          "57600": "57600 Baud",
+          "38400": "38400 Baud",
+          "19200": "19200 Baud",
+          "9600": "9600 Baud",
+          "4800": "4800 Baud",
+          "2400": "2400 Baud",
+          "1200": "1200 Baud"
+        }
+      },
+      "settings_sequence": {
+        "name": "Einstellungsfolge"
+      },
+      "ethernet_ip_address": {
+        "name": "Ethernet-IP-Adresse"
+      },
+      "ethernet_subnet_mask": {
+        "name": "Ethernet-Subnetzmaske"
+      },
+      "ethernet_gateway": {
+        "name": "Ethernet-Gateway"
+      },
+      "ethernet_dns_primary": {
+        "name": "Ethernet-Primär-DNS"
+      },
+      "ethernet_dns_secondary": {
+        "name": "Ethernet-Sekundär-DNS"
+      }
+    },
+    "binary_sensor": {
+      "control_allowed": {
+        "name": "Steuerung zugelassen"
+      },
+      "inverter_fault": {
+        "name": "Wechselrichterfehler"
+      },
+      "inverter_fault_unrecognised": {
+        "name": "Nicht erkannter Wechselrichterfehler"
+      },
+      "inverter_fault_internal_communication": {
+        "name": "Interne Kommunikation verloren"
+      },
+      "inverter_fault_meter_communication": {
+        "name": "Zählerkommunikation verloren"
+      },
+      "inverter_fault_display_memory": {
+        "name": "Speicherfehler der Anzeigeplatine"
+      },
+      "inverter_fault_display_clock": {
+        "name": "Uhrfehler der Anzeigeplatine"
+      },
+      "inverter_fault_bms_device": {
+        "name": "BMS-Gerätefehler"
+      },
+      "inverter_fault_bms_communication": {
+        "name": "BMS-Kommunikation verloren"
+      },
+      "inverter_fault_ct_device": {
+        "name": "CT-Gerätefehler"
+      },
+      "inverter_fault_afci_communication": {
+        "name": "Kommunikation der Lichtbogenerkennungsplatine verloren"
+      },
+      "inverter_fault_slave_communication": {
+        "name": "Kommunikation des Slave-Controllers verloren"
+      },
+      "inverter_fault_pv_meter_communication": {
+        "name": "Kommunikation des Solarzählers verloren"
+      },
+      "inverter_fault_ev_charger_communication": {
+        "name": "Wallbox-Kommunikation verloren"
+      },
+      "inverter_fault_grid_phase_r_overvoltage": {
+        "name": "Netzphase R Überspannung"
+      },
+      "inverter_fault_grid_phase_r_undervoltage": {
+        "name": "Netzphase R Unterspannung"
+      },
+      "inverter_fault_grid_phase_s_overvoltage": {
+        "name": "Netzphase S Überspannung"
+      },
+      "inverter_fault_grid_phase_s_undervoltage": {
+        "name": "Netzphase S Unterspannung"
+      },
+      "inverter_fault_grid_phase_t_overvoltage": {
+        "name": "Netzphase T Überspannung"
+      },
+      "inverter_fault_grid_phase_t_undervoltage": {
+        "name": "Netzphase T Unterspannung"
+      },
+      "inverter_fault_grid_overfrequency": {
+        "name": "Netzüberfrequenz"
+      },
+      "inverter_fault_grid_underfrequency": {
+        "name": "Netzunterfrequenz"
+      },
+      "inverter_fault_dcdc_communication": {
+        "name": "Kommunikation der DC-DC-Einheit verloren"
+      },
+      "inverter_fault_dcdc_device": {
+        "name": "Fehler der DC-DC-Einheit"
+      },
+      "inverter_fault_parallel_communication": {
+        "name": "Kommunikation des Parallelsystems verloren"
+      },
+      "inverter_fault_grid_lost": {
+        "name": "Netzausfall"
+      },
+      "inverter_fault_pv_input_mode": {
+        "name": "Fehler des PV-Eingangsmodus"
+      },
+      "inverter_fault_pv_hardware_overcurrent": {
+        "name": "PV-Hardware-Überstrom"
+      },
+      "inverter_fault_pv_overvoltage": {
+        "name": "PV-Überspannung"
+      },
+      "inverter_fault_bus_hardware_overvoltage": {
+        "name": "Zwischenkreis-Hardware-Überspannung"
+      },
+      "inverter_fault_bus_overvoltage": {
+        "name": "Zwischenkreis-Überspannung"
+      },
+      "inverter_fault_bus_undervoltage": {
+        "name": "Zwischenkreis-Unterspannung"
+      },
+      "inverter_fault_grid_phase": {
+        "name": "Netzphasenfehler"
+      },
+      "inverter_fault_islanding": {
+        "name": "Inselbildung"
+      },
+      "inverter_fault_arc_device": {
+        "name": "Fehler der Lichtbogenerkennung"
+      },
+      "inverter_fault_pv_input": {
+        "name": "PV-Eingangsfehler"
+      },
+      "inverter_fault_hardware_overcurrent": {
+        "name": "Wechselrichter-Hardware-Überstrom"
+      },
+      "inverter_fault_neutral_earth_voltage": {
+        "name": "Spannungsfehler Neutralleiter-Erde"
+      },
+      "inverter_fault_drm0": {
+        "name": "DRM0-Fehler"
+      },
+      "inverter_fault_fan_1": {
+        "name": "Lüfter-1-Fehler"
+      },
+      "inverter_fault_fan_2": {
+        "name": "Lüfter-2-Fehler"
+      },
+      "inverter_fault_fan_3": {
+        "name": "Lüfter-3-Fehler"
+      },
+      "inverter_fault_fan_4": {
+        "name": "Lüfter-4-Fehler"
+      },
+      "inverter_fault_arc": {
+        "name": "Lichtbogenfehler"
+      },
+      "inverter_fault_pv_software_overcurrent": {
+        "name": "PV-Software-Überstrom"
+      },
+      "inverter_fault_battery_overvoltage": {
+        "name": "Batterieanschluss-Überspannung"
+      },
+      "inverter_fault_battery_overcurrent": {
+        "name": "Batterieanschluss-Überstrom"
+      },
+      "inverter_fault_battery_charge_overvoltage": {
+        "name": "Batterie-Ladespannung zu hoch"
+      },
+      "inverter_fault_battery_overload": {
+        "name": "Batterieanschluss-Überlast"
+      },
+      "inverter_fault_battery_soft_start": {
+        "name": "Zeitüberschreitung beim Batterie-Sanftanlauf"
+      },
+      "inverter_fault_output_overload": {
+        "name": "Ausgang Überlast"
+      },
+      "inverter_fault_battery_open_circuit": {
+        "name": "Batterie-Leerlauf"
+      },
+      "inverter_fault_battery_discharge_undervoltage": {
+        "name": "Batterie-Entladespannung zu niedrig"
+      },
+      "inverter_fault_authorisation_expired": {
+        "name": "Autorisierung abgelaufen"
+      },
+      "inverter_fault_display_communication": {
+        "name": "Kommunikation der Anzeigeplatine verloren"
+      },
+      "inverter_fault_relay": {
+        "name": "Relaisfehler"
+      },
+      "inverter_fault_controller_memory": {
+        "name": "Speicherfehler des Controllers"
+      },
+      "inverter_fault_over_temperature": {
+        "name": "Übertemperatur"
+      },
+      "inverter_fault_under_temperature": {
+        "name": "Untertemperatur"
+      },
+      "inverter_fault_leakage_current_device": {
+        "name": "Fehler des Ableitstromsensors"
+      },
+      "inverter_fault_dc_injection_device": {
+        "name": "Fehler des Gleichstromeinspeisungssensors"
+      },
+      "inverter_fault_current_sensor": {
+        "name": "Stromsensorfehler"
+      },
+      "inverter_fault_grid_average_overvoltage": {
+        "name": "Überspannung 10-Minuten-Mittelwert Netz"
+      },
+      "inverter_fault_off_grid_undervoltage": {
+        "name": "Ausgang (netzunabhängig) Unterspannung"
+      },
+      "inverter_fault_grid_phase_r_dc_voltage": {
+        "name": "Netzphase R Gleichspannung zu hoch"
+      },
+      "inverter_fault_grid_phase_s_dc_voltage": {
+        "name": "Netzphase S Gleichspannung zu hoch"
+      },
+      "inverter_fault_grid_phase_t_dc_voltage": {
+        "name": "Netzphase T Gleichspannung zu hoch"
+      },
+      "inverter_fault_leakage_current": {
+        "name": "Ableitstromfehler"
+      },
+      "inverter_fault_grid_phase_r_dc_injection": {
+        "name": "Netzphase R Gleichstromeinspeisung zu hoch"
+      },
+      "inverter_fault_grid_phase_s_dc_injection": {
+        "name": "Netzphase S Gleichstromeinspeisung zu hoch"
+      },
+      "inverter_fault_grid_phase_t_dc_injection": {
+        "name": "Netzphase T Gleichstromeinspeisung zu hoch"
+      },
+      "inverter_fault_insulation": {
+        "name": "Isolationsfehler"
+      },
+      "inverter_fault_bus_imbalance": {
+        "name": "Zwischenkreis-Spannungsungleichgewicht"
+      },
+      "battery_fault": {
+        "name": "Batteriefehler"
+      },
+      "battery_fault_unrecognised": {
+        "name": "Nicht erkannter Batteriefehler"
+      },
+      "battery_fault_internal_communication": {
+        "name": "Interne BMS-Kommunikation der Batterie verloren"
+      },
+      "battery_fault_pack_sequence": {
+        "name": "Adressierungsfehler der Batteriepacks"
+      },
+      "battery_fault_discharge_overcurrent": {
+        "name": "Batterie-Entladeüberstrom"
+      },
+      "battery_fault_charge_overcurrent": {
+        "name": "Batterie-Ladeüberstrom"
+      },
+      "battery_fault_total_undervoltage": {
+        "name": "Batterie-Gesamtspannung zu niedrig"
+      },
+      "battery_fault_total_overvoltage": {
+        "name": "Batterie-Gesamtspannung zu hoch"
+      },
+      "battery_fault_cell_undervoltage": {
+        "name": "Batteriezellen-Unterspannung"
+      },
+      "battery_fault_cell_overvoltage": {
+        "name": "Batteriezellen-Überspannung"
+      },
+      "battery_fault_hardware": {
+        "name": "BMS-Hardwarefehler der Batterie"
+      },
+      "battery_fault_charge_cold": {
+        "name": "Batterie zu kalt zum Laden"
+      },
+      "battery_fault_charge_hot": {
+        "name": "Batterie zu heiß zum Laden"
+      },
+      "battery_fault_discharge_cold": {
+        "name": "Batterie zu kalt zum Entladen"
+      },
+      "battery_fault_discharge_hot": {
+        "name": "Batterie zu heiß zum Entladen"
+      },
+      "battery_fault_relay": {
+        "name": "BMS-Relaisfehler der Batterie"
+      },
+      "battery_fault_precharge": {
+        "name": "Vorladefehler der Batterie"
+      },
+      "battery_fault_insulation": {
+        "name": "BMS-Isolationsfehler der Batterie"
+      },
+      "battery_fault_bms_incompatible": {
+        "name": "BMS-Hersteller der Batterie nicht kompatibel"
+      },
+      "battery_fault_cell_supplier_incompatible": {
+        "name": "Zellhersteller der Batterie passt nicht"
+      },
+      "battery_fault_cell_incompatible": {
+        "name": "Batteriezellen passen nicht zusammen"
+      },
+      "battery_fault_voltage_level_mismatch": {
+        "name": "Spannungsniveau der Batterie passt nicht"
+      },
+      "battery_fault_breaker_open": {
+        "name": "Batterie-Leistungsschalter offen"
+      },
+      "battery_fault_cell_temperature_difference": {
+        "name": "Temperaturunterschied der Batteriezellen zu groß"
+      },
+      "battery_fault_cell_voltage_difference_2": {
+        "name": "Spannungsunterschied der Batteriezellen zu groß, Stufe 2"
+      },
+      "battery_fault_cell_voltage_difference_1": {
+        "name": "Spannungsunterschied der Batteriezellen zu groß, Stufe 1"
+      },
+      "battery_fault_cell_over_temperature": {
+        "name": "Batteriezellen-Übertemperatur"
+      },
+      "battery_fault_short_circuit": {
+        "name": "Batterie-Kurzschluss"
+      },
+      "battery_fault_total_voltage_matching": {
+        "name": "Abgleich der Batterie-Gesamtspannung fehlgeschlagen"
+      },
+      "battery_fault_system_locked": {
+        "name": "Batteriesystem gesperrt"
+      },
+      "battery_fault_fuse": {
+        "name": "Sicherungsfehler der Batterie"
+      },
+      "battery_fault_charging_port_overvoltage": {
+        "name": "Überspannung am Ladeanschluss der Batterie"
+      },
+      "battery_pack1_fault": {
+        "name": "Batteriepack 1 Fehler"
+      },
+      "battery_pack1_warning": {
+        "name": "Batteriepack 1 Warnung"
+      },
+      "battery_pack2_fault": {
+        "name": "Batteriepack 2 Fehler"
+      },
+      "battery_pack2_warning": {
+        "name": "Batteriepack 2 Warnung"
+      },
+      "battery_pack3_fault": {
+        "name": "Batteriepack 3 Fehler"
+      },
+      "battery_pack3_warning": {
+        "name": "Batteriepack 3 Warnung"
+      },
+      "battery_pack4_fault": {
+        "name": "Batteriepack 4 Fehler"
+      },
+      "battery_pack4_warning": {
+        "name": "Batteriepack 4 Warnung"
+      },
+      "ev_fault": {
+        "name": "Wallbox-Fehler"
+      },
+      "ev_fault_unrecognised": {
+        "name": "Nicht erkannter Wallbox-Fehler"
+      },
+      "ev_fault_relay_over_temperature": {
+        "name": "Wallbox-Relais-Übertemperatur"
+      },
+      "ev_fault_overload": {
+        "name": "Wallbox-Überlast"
+      },
+      "ev_fault_ac_overvoltage": {
+        "name": "Wallbox-AC-Überspannung"
+      },
+      "ev_fault_ac_undervoltage": {
+        "name": "Wallbox-AC-Unterspannung"
+      },
+      "ev_fault_ac_overcurrent": {
+        "name": "Wallbox-AC-Überstrom"
+      },
+      "ev_fault_ac_overfrequency": {
+        "name": "Wallbox-AC-Überfrequenz"
+      },
+      "ev_fault_ac_underfrequency": {
+        "name": "Wallbox-AC-Unterfrequenz"
+      },
+      "ev_fault_dc_residual_current_a": {
+        "name": "Wallbox-DC-Fehlerstromfehler A"
+      },
+      "ev_fault_emergency_stop": {
+        "name": "Wallbox-Not-Aus"
+      },
+      "ev_fault_under_temperature": {
+        "name": "Wallbox-Untertemperatur"
+      },
+      "ev_fault_ac_residual_current": {
+        "name": "Wallbox-AC-Fehlerstrom"
+      },
+      "ev_fault_input_terminal_over_temperature": {
+        "name": "Wallbox-Eingangsklemmen-Übertemperatur"
+      },
+      "ev_fault_bluetooth": {
+        "name": "Wallbox-Bluetooth-Fehler"
+      },
+      "ev_fault_dc_residual_current_b": {
+        "name": "Wallbox-DC-Fehlerstromfehler B"
+      },
+      "ev_fault_relay": {
+        "name": "Wallbox-Relaisfehler"
+      },
+      "ev_fault_grounding": {
+        "name": "Wallbox-Erdungsfehler"
+      },
+      "ev_fault_phase_sequence": {
+        "name": "Wallbox-Phasenfolgefehler"
+      },
+      "ev_fault_rcd_circuit": {
+        "name": "RCD-Schaltungsfehler der Wallbox"
+      },
+      "ev_fault_rs485_timeout": {
+        "name": "Wallbox-RS485-Kommunikations-Timeout"
+      },
+      "ev_fault_supply": {
+        "name": "Stromversorgungsfehler der Wallbox"
+      },
+      "ev_fault_meter": {
+        "name": "Wallbox-Zählerfehler"
+      },
+      "ev_fault_control_pilot": {
+        "name": "Wallbox-Control-Pilot-Fehler (unter 2 V)"
+      },
+      "ev_fault_connector_lock": {
+        "name": "Wallbox-Steckerverriegelungsfehler"
+      },
+      "ev_fault_connector_current": {
+        "name": "Wallbox-Steckerstromfehler"
+      },
+      "ev_fault_dc_residual_current_c": {
+        "name": "Wallbox-DC-Fehlerstromfehler C"
+      }
+    },
+    "number": {
+      "charge_slot_1_power": {
+        "name": "Ladezeitfenster 1 Leistung"
+      },
+      "charge_slot_1_days": {
+        "name": "Ladezeitfenster 1 Wochentage"
+      },
+      "charge_slot_2_power": {
+        "name": "Ladezeitfenster 2 Leistung"
+      },
+      "charge_slot_2_days": {
+        "name": "Ladezeitfenster 2 Wochentage"
+      },
+      "charge_slot_3_power": {
+        "name": "Ladezeitfenster 3 Leistung"
+      },
+      "charge_slot_3_days": {
+        "name": "Ladezeitfenster 3 Wochentage"
+      },
+      "charge_slot_4_power": {
+        "name": "Ladezeitfenster 4 Leistung"
+      },
+      "charge_slot_4_days": {
+        "name": "Ladezeitfenster 4 Wochentage"
+      },
+      "charge_slot_5_power": {
+        "name": "Ladezeitfenster 5 Leistung"
+      },
+      "charge_slot_5_days": {
+        "name": "Ladezeitfenster 5 Wochentage"
+      },
+      "charge_slot_6_power": {
+        "name": "Ladezeitfenster 6 Leistung"
+      },
+      "charge_slot_6_days": {
+        "name": "Ladezeitfenster 6 Wochentage"
+      },
+      "charge_slot_7_power": {
+        "name": "Ladezeitfenster 7 Leistung"
+      },
+      "charge_slot_7_days": {
+        "name": "Ladezeitfenster 7 Wochentage"
+      },
+      "discharge_slot_1_power": {
+        "name": "Entladezeitfenster 1 Leistung"
+      },
+      "discharge_slot_1_days": {
+        "name": "Entladezeitfenster 1 Wochentage"
+      },
+      "discharge_slot_2_power": {
+        "name": "Entladezeitfenster 2 Leistung"
+      },
+      "discharge_slot_2_days": {
+        "name": "Entladezeitfenster 2 Wochentage"
+      },
+      "discharge_slot_3_power": {
+        "name": "Entladezeitfenster 3 Leistung"
+      },
+      "discharge_slot_3_days": {
+        "name": "Entladezeitfenster 3 Wochentage"
+      },
+      "discharge_slot_4_power": {
+        "name": "Entladezeitfenster 4 Leistung"
+      },
+      "discharge_slot_4_days": {
+        "name": "Entladezeitfenster 4 Wochentage"
+      },
+      "discharge_slot_5_power": {
+        "name": "Entladezeitfenster 5 Leistung"
+      },
+      "discharge_slot_5_days": {
+        "name": "Entladezeitfenster 5 Wochentage"
+      },
+      "discharge_slot_6_power": {
+        "name": "Entladezeitfenster 6 Leistung"
+      },
+      "discharge_slot_6_days": {
+        "name": "Entladezeitfenster 6 Wochentage"
+      },
+      "discharge_slot_7_power": {
+        "name": "Entladezeitfenster 7 Leistung"
+      },
+      "discharge_slot_7_days": {
+        "name": "Entladezeitfenster 7 Wochentage"
+      },
+      "passive_mode": {
+        "name": "Passivmodus"
+      },
+      "passive_grid_charge_power": {
+        "name": "Passivmodus Netz-Ladeleistung"
+      },
+      "passive_grid_discharge_power": {
+        "name": "Passivmodus Netz-Entladeleistung"
+      },
+      "passive_battery_charge_power": {
+        "name": "Passivmodus Batterie-Ladeleistung"
+      },
+      "passive_battery_discharge_power": {
+        "name": "Passivmodus Batterie-Entladeleistung"
+      },
+      "battery_discharge_soc_limit_on_grid": {
+        "name": "Batterie-Entladegrenze (Ladezustand, netzgekoppelt)"
+      },
+      "battery_discharge_soc_limit_off_grid": {
+        "name": "Batterie-Entladegrenze (Ladezustand, netzunabhängig)"
+      },
+      "battery_charge_soc_limit": {
+        "name": "Batterie-Ladegrenze (Ladezustand)"
+      },
+      "battery_charge_power_limit": {
+        "name": "Batterie-Ladeleistungsgrenze"
+      },
+      "battery_discharge_power_limit": {
+        "name": "Batterie-Entladeleistungsgrenze"
+      },
+      "grid_import_power_limit": {
+        "name": "Netzbezugsleistungsgrenze"
+      },
+      "grid_export_power_limit": {
+        "name": "Netzeinspeiseleistungsgrenze"
+      },
+      "backup_reserve_soc": {
+        "name": "Notstrom-Reserve-Ladezustand"
+      },
+      "export_limit_power": {
+        "name": "Einspeisebegrenzungsleistung"
+      },
+      "export_limit_current": {
+        "name": "Einspeisebegrenzungsstrom"
+      },
+      "ev_charge_power": {
+        "name": "Wallbox-Ladeleistung"
+      },
+      "ev_ems_charge_current": {
+        "name": "Wallbox-EMS-Ladestrom"
+      },
+      "ev_slot_1_days": {
+        "name": "Wallbox-Zeitfenster 1 Wochentage"
+      },
+      "ev_slot_1_power": {
+        "name": "Wallbox-Zeitfenster 1 Leistung"
+      },
+      "ev_slot_2_days": {
+        "name": "Wallbox-Zeitfenster 2 Wochentage"
+      },
+      "ev_slot_2_power": {
+        "name": "Wallbox-Zeitfenster 2 Leistung"
+      },
+      "ev_slot_3_days": {
+        "name": "Wallbox-Zeitfenster 3 Wochentage"
+      },
+      "ev_slot_3_power": {
+        "name": "Wallbox-Zeitfenster 3 Leistung"
+      },
+      "ev_slot_4_days": {
+        "name": "Wallbox-Zeitfenster 4 Wochentage"
+      },
+      "ev_slot_4_power": {
+        "name": "Wallbox-Zeitfenster 4 Leistung"
+      },
+      "ev_slot_5_days": {
+        "name": "Wallbox-Zeitfenster 5 Wochentage"
+      },
+      "ev_slot_5_power": {
+        "name": "Wallbox-Zeitfenster 5 Leistung"
+      },
+      "ev_slot_6_days": {
+        "name": "Wallbox-Zeitfenster 6 Wochentage"
+      },
+      "ev_slot_6_power": {
+        "name": "Wallbox-Zeitfenster 6 Leistung"
+      },
+      "ev_slot_7_days": {
+        "name": "Wallbox-Zeitfenster 7 Wochentage"
+      },
+      "ev_slot_7_power": {
+        "name": "Wallbox-Zeitfenster 7 Leistung"
+      },
+      "ems_timeout": {
+        "name": "EMS-Timeout"
+      },
+      "ems_battery_charge_current_limit": {
+        "name": "EMS-Batterie-Ladestromgrenze"
+      },
+      "ems_battery_discharge_current_limit": {
+        "name": "EMS-Batterie-Entladestromgrenze"
+      },
+      "ems_inverter_import_power_limit": {
+        "name": "EMS-Wechselrichter-Bezugsleistungsgrenze"
+      },
+      "ems_inverter_export_power_limit": {
+        "name": "EMS-Wechselrichter-Einspeiseleistungsgrenze"
+      },
+      "ems_pv_power_limit": {
+        "name": "EMS-Solarleistungsgrenze"
+      },
+      "battery_power_target": {
+        "name": "Batterie-Leistungsziel"
+      },
+      "grid_power_target": {
+        "name": "Netz-Leistungsziel"
+      },
+      "inverter_power_target": {
+        "name": "Wechselrichter-Leistungsziel"
+      },
+      "battery_forced_charge_power_limit": {
+        "name": "Batterie-Zwangsladeleistungsgrenze"
+      }
+    },
+    "select": {
+      "application_mode": {
+        "name": "Anwendungsmodus",
+        "state": {
+          "self_use": "Eigenverbrauch",
+          "time_of_use": "Zeitsteuerung",
+          "backup": "Notstrom",
+          "ems": "EMS",
+          "passive": "Passiv",
+          "legacy": "Altmodus",
+          "time_of_use_bms": "Zeitsteuerung (BMS)",
+          "ai_saving": "KI-Sparmodus",
+          "peak_shaving": "Spitzenlastkappung"
+        }
+      },
+      "export_limit_mode": {
+        "name": "Einspeisebegrenzungsmodus",
+        "state": {
+          "off": "Aus",
+          "total_power": "Gesamtleistung",
+          "phase_current": "Phasenstrom",
+          "phase_power": "Phasenleistung"
+        }
+      },
+      "time_of_use_idle_mode": {
+        "name": "Leerlaufmodus der Zeitsteuerung",
+        "state": {
+          "standby": "Standby",
+          "self_use": "Eigenverbrauch"
+        }
+      },
+      "led_mode": {
+        "name": "LED-Modus",
+        "state": {
+          "all_off": "Alle aus",
+          "outer_ring_on": "Äußerer Ring an",
+          "inner_ring_on": "Innerer Ring an",
+          "all_on": "Alle an"
+        }
+      },
+      "ev_ems_phase_mode": {
+        "name": "Wallbox-EMS-Phasenmodus",
+        "state": {
+          "three_phase": "Dreiphasig",
+          "single_phase": "Einphasig"
+        }
+      },
+      "ev_mode": {
+        "name": "Wallbox-Modus",
+        "state": {
+          "disabled": "Deaktiviert",
+          "standard": "Standard",
+          "time_based": "Zeitbasiert",
+          "pv_surplus": "PV-Überschuss",
+          "ems": "EMS"
+        }
+      },
+      "ev_slot_1_mode": {
+        "name": "Wallbox-Zeitfenster 1 Modus",
+        "state": {
+          "not_set": "Nicht festgelegt",
+          "standard": "Standard",
+          "pv_surplus": "PV-Überschuss"
+        }
+      },
+      "ev_slot_2_mode": {
+        "name": "Wallbox-Zeitfenster 2 Modus",
+        "state": {
+          "not_set": "Nicht festgelegt",
+          "standard": "Standard",
+          "pv_surplus": "PV-Überschuss"
+        }
+      },
+      "ev_slot_3_mode": {
+        "name": "Wallbox-Zeitfenster 3 Modus",
+        "state": {
+          "not_set": "Nicht festgelegt",
+          "standard": "Standard",
+          "pv_surplus": "PV-Überschuss"
+        }
+      },
+      "ev_slot_4_mode": {
+        "name": "Wallbox-Zeitfenster 4 Modus",
+        "state": {
+          "not_set": "Nicht festgelegt",
+          "standard": "Standard",
+          "pv_surplus": "PV-Überschuss"
+        }
+      },
+      "ev_slot_5_mode": {
+        "name": "Wallbox-Zeitfenster 5 Modus",
+        "state": {
+          "not_set": "Nicht festgelegt",
+          "standard": "Standard",
+          "pv_surplus": "PV-Überschuss"
+        }
+      },
+      "ev_slot_6_mode": {
+        "name": "Wallbox-Zeitfenster 6 Modus",
+        "state": {
+          "not_set": "Nicht festgelegt",
+          "standard": "Standard",
+          "pv_surplus": "PV-Überschuss"
+        }
+      },
+      "ev_slot_7_mode": {
+        "name": "Wallbox-Zeitfenster 7 Modus",
+        "state": {
+          "not_set": "Nicht festgelegt",
+          "standard": "Standard",
+          "pv_surplus": "PV-Überschuss"
+        }
+      }
+    },
+    "switch": {
+      "charge_slot_1_enabled": {
+        "name": "Ladezeitfenster 1 aktiviert"
+      },
+      "charge_slot_2_enabled": {
+        "name": "Ladezeitfenster 2 aktiviert"
+      },
+      "charge_slot_3_enabled": {
+        "name": "Ladezeitfenster 3 aktiviert"
+      },
+      "charge_slot_4_enabled": {
+        "name": "Ladezeitfenster 4 aktiviert"
+      },
+      "charge_slot_5_enabled": {
+        "name": "Ladezeitfenster 5 aktiviert"
+      },
+      "charge_slot_6_enabled": {
+        "name": "Ladezeitfenster 6 aktiviert"
+      },
+      "charge_slot_7_enabled": {
+        "name": "Ladezeitfenster 7 aktiviert"
+      },
+      "discharge_slot_1_enabled": {
+        "name": "Entladezeitfenster 1 aktiviert"
+      },
+      "discharge_slot_2_enabled": {
+        "name": "Entladezeitfenster 2 aktiviert"
+      },
+      "discharge_slot_3_enabled": {
+        "name": "Entladezeitfenster 3 aktiviert"
+      },
+      "discharge_slot_4_enabled": {
+        "name": "Entladezeitfenster 4 aktiviert"
+      },
+      "discharge_slot_5_enabled": {
+        "name": "Entladezeitfenster 5 aktiviert"
+      },
+      "discharge_slot_6_enabled": {
+        "name": "Entladezeitfenster 6 aktiviert"
+      },
+      "discharge_slot_7_enabled": {
+        "name": "Entladezeitfenster 7 aktiviert"
+      },
+      "battery_auto_wake": {
+        "name": "Batterie automatisch aufwecken"
+      },
+      "time_of_use_grid_discharge": {
+        "name": "Netzentladung der Zeitsteuerung"
+      },
+      "ev_enabled": {
+        "name": "Wallbox aktiviert"
+      },
+      "ev_slot_1_grid_charging": {
+        "name": "Wallbox-Zeitfenster 1 Laden aus dem Netz"
+      },
+      "ev_slot_1_battery_discharge": {
+        "name": "Wallbox-Zeitfenster 1 Batterieentladung"
+      },
+      "ev_slot_2_grid_charging": {
+        "name": "Wallbox-Zeitfenster 2 Laden aus dem Netz"
+      },
+      "ev_slot_2_battery_discharge": {
+        "name": "Wallbox-Zeitfenster 2 Batterieentladung"
+      },
+      "ev_slot_3_grid_charging": {
+        "name": "Wallbox-Zeitfenster 3 Laden aus dem Netz"
+      },
+      "ev_slot_3_battery_discharge": {
+        "name": "Wallbox-Zeitfenster 3 Batterieentladung"
+      },
+      "ev_slot_4_grid_charging": {
+        "name": "Wallbox-Zeitfenster 4 Laden aus dem Netz"
+      },
+      "ev_slot_4_battery_discharge": {
+        "name": "Wallbox-Zeitfenster 4 Batterieentladung"
+      },
+      "ev_slot_5_grid_charging": {
+        "name": "Wallbox-Zeitfenster 5 Laden aus dem Netz"
+      },
+      "ev_slot_5_battery_discharge": {
+        "name": "Wallbox-Zeitfenster 5 Batterieentladung"
+      },
+      "ev_slot_6_grid_charging": {
+        "name": "Wallbox-Zeitfenster 6 Laden aus dem Netz"
+      },
+      "ev_slot_6_battery_discharge": {
+        "name": "Wallbox-Zeitfenster 6 Batterieentladung"
+      },
+      "ev_slot_7_grid_charging": {
+        "name": "Wallbox-Zeitfenster 7 Laden aus dem Netz"
+      },
+      "ev_slot_7_battery_discharge": {
+        "name": "Wallbox-Zeitfenster 7 Batterieentladung"
+      },
+      "ev_minimum_current_charging": {
+        "name": "Wallbox-Laden mit Mindeststrom"
+      },
+      "ev_ems_charging": {
+        "name": "Wallbox-EMS-Laden"
+      },
+      "battery_power_control": {
+        "name": "Batterie-Leistungssteuerung"
+      },
+      "grid_power_control": {
+        "name": "Netz-Leistungssteuerung"
+      },
+      "inverter_power_control": {
+        "name": "Wechselrichter-Leistungssteuerung"
+      },
+      "buzzer": {
+        "name": "Summer"
+      }
+    },
+    "time": {
+      "charge_slot_1_start": {
+        "name": "Ladezeitfenster 1 Startzeit"
+      },
+      "charge_slot_1_end": {
+        "name": "Ladezeitfenster 1 Endzeit"
+      },
+      "charge_slot_2_start": {
+        "name": "Ladezeitfenster 2 Startzeit"
+      },
+      "charge_slot_2_end": {
+        "name": "Ladezeitfenster 2 Endzeit"
+      },
+      "charge_slot_3_start": {
+        "name": "Ladezeitfenster 3 Startzeit"
+      },
+      "charge_slot_3_end": {
+        "name": "Ladezeitfenster 3 Endzeit"
+      },
+      "charge_slot_4_start": {
+        "name": "Ladezeitfenster 4 Startzeit"
+      },
+      "charge_slot_4_end": {
+        "name": "Ladezeitfenster 4 Endzeit"
+      },
+      "charge_slot_5_start": {
+        "name": "Ladezeitfenster 5 Startzeit"
+      },
+      "charge_slot_5_end": {
+        "name": "Ladezeitfenster 5 Endzeit"
+      },
+      "charge_slot_6_start": {
+        "name": "Ladezeitfenster 6 Startzeit"
+      },
+      "charge_slot_6_end": {
+        "name": "Ladezeitfenster 6 Endzeit"
+      },
+      "charge_slot_7_start": {
+        "name": "Ladezeitfenster 7 Startzeit"
+      },
+      "charge_slot_7_end": {
+        "name": "Ladezeitfenster 7 Endzeit"
+      },
+      "discharge_slot_1_start": {
+        "name": "Entladezeitfenster 1 Startzeit"
+      },
+      "discharge_slot_1_end": {
+        "name": "Entladezeitfenster 1 Endzeit"
+      },
+      "discharge_slot_2_start": {
+        "name": "Entladezeitfenster 2 Startzeit"
+      },
+      "discharge_slot_2_end": {
+        "name": "Entladezeitfenster 2 Endzeit"
+      },
+      "discharge_slot_3_start": {
+        "name": "Entladezeitfenster 3 Startzeit"
+      },
+      "discharge_slot_3_end": {
+        "name": "Entladezeitfenster 3 Endzeit"
+      },
+      "discharge_slot_4_start": {
+        "name": "Entladezeitfenster 4 Startzeit"
+      },
+      "discharge_slot_4_end": {
+        "name": "Entladezeitfenster 4 Endzeit"
+      },
+      "discharge_slot_5_start": {
+        "name": "Entladezeitfenster 5 Startzeit"
+      },
+      "discharge_slot_5_end": {
+        "name": "Entladezeitfenster 5 Endzeit"
+      },
+      "discharge_slot_6_start": {
+        "name": "Entladezeitfenster 6 Startzeit"
+      },
+      "discharge_slot_6_end": {
+        "name": "Entladezeitfenster 6 Endzeit"
+      },
+      "discharge_slot_7_start": {
+        "name": "Entladezeitfenster 7 Startzeit"
+      },
+      "discharge_slot_7_end": {
+        "name": "Entladezeitfenster 7 Endzeit"
+      },
+      "ev_slot_1_start": {
+        "name": "Wallbox-Zeitfenster 1 Startzeit"
+      },
+      "ev_slot_1_end": {
+        "name": "Wallbox-Zeitfenster 1 Endzeit"
+      },
+      "ev_slot_2_start": {
+        "name": "Wallbox-Zeitfenster 2 Startzeit"
+      },
+      "ev_slot_2_end": {
+        "name": "Wallbox-Zeitfenster 2 Endzeit"
+      },
+      "ev_slot_3_start": {
+        "name": "Wallbox-Zeitfenster 3 Startzeit"
+      },
+      "ev_slot_3_end": {
+        "name": "Wallbox-Zeitfenster 3 Endzeit"
+      },
+      "ev_slot_4_start": {
+        "name": "Wallbox-Zeitfenster 4 Startzeit"
+      },
+      "ev_slot_4_end": {
+        "name": "Wallbox-Zeitfenster 4 Endzeit"
+      },
+      "ev_slot_5_start": {
+        "name": "Wallbox-Zeitfenster 5 Startzeit"
+      },
+      "ev_slot_5_end": {
+        "name": "Wallbox-Zeitfenster 5 Endzeit"
+      },
+      "ev_slot_6_start": {
+        "name": "Wallbox-Zeitfenster 6 Startzeit"
+      },
+      "ev_slot_6_end": {
+        "name": "Wallbox-Zeitfenster 6 Endzeit"
+      },
+      "ev_slot_7_start": {
+        "name": "Wallbox-Zeitfenster 7 Startzeit"
+      },
+      "ev_slot_7_end": {
+        "name": "Wallbox-Zeitfenster 7 Endzeit"
+      }
+    },
+    "button": {
+      "clear_current_fault": {
+        "name": "Aktuellen Fehler quittieren"
+      },
+      "restart_inverter": {
+        "name": "Wechselrichter neu starten"
+      },
+      "synchronise_clock": {
+        "name": "Uhr synchronisieren"
+      },
+      "ems_pv_power_limit_remove": {
+        "name": "EMS-Solarleistungsgrenze entfernen"
+      }
+    }
+  },
+  "issues": {
+    "equipment_not_detected": {
+      "title": "{equipment} wird nicht mehr erkannt",
+      "description": "{installation} wurde mit {equipment} eingerichtet, aber der Wechselrichter meldet jetzt, dass das Teil nicht vorhanden ist. Die Entitäten von {equipment} bleiben bestehen und zeigen, was der Wechselrichter antwortet. Prüfe {equipment} oder stelle in Konfigurieren Nicht vorhanden ein, um die Entitäten zu entfernen."
+    },
+    "model_mismatch": {
+      "title": "{installation} ist auf das falsche Modell eingestellt",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Erkannten Wechselrichter übernehmen",
+            "description": "{installation} ist auf {selected_model} eingestellt, aber das Gerät unter der Adresse meldet sich als {model} mit der Seriennummer {serial}, daher wurde es nicht geladen. {model} übernehmen? Deine Entitäten, ihre IDs und ihre historischen Daten bleiben bei dieser Installation, und die Gerätedetails ändern sich. Steuerung zulassen und alle anderen Einstellungen bleiben unverändert. Um {selected_model} beizubehalten, prüfe die Adresse in Konfigurieren."
+          }
+        },
+        "error": {
+          "cannot_connect": "Der Wechselrichter konnte nicht erreicht werden. Prüfe, ob er eingeschaltet ist und ob nichts anderes die Verbindung belegt, und versuche es dann erneut.",
+          "timeout": "Der Wechselrichter hat nicht rechtzeitig geantwortet. Versuche es erneut.",
+          "read_rejected": "Der Wechselrichter hat einen benötigten Messwert verweigert. Versuche es erneut.",
+          "invalid_device_data": "Der Wechselrichter hat mit Daten geantwortet, die nicht gelesen werden konnten. Versuche es erneut.",
+          "unsupported_device": "Das Gerät unter der Adresse ist kein erkanntes Modell, daher gibt es nichts zu übernehmen. Wähle das Modell in Konfigurieren.",
+          "already_configured": "Eine andere Installation verwendet diesen Wechselrichter bereits, daher kann er hier nicht übernommen werden.",
+          "device_changed": "Das Gerät meldet jetzt {model} mit der Seriennummer {serial}, was nicht dem entspricht, was dir zuvor angezeigt wurde. Bestätige erneut, um zu übernehmen, was jetzt angezeigt wird."
+        },
+        "abort": {
+          "entry_removed": "Diese Installation existiert nicht mehr.",
+          "already_configured": "Eine andere Installation verwendet diesen Wechselrichter bereits, daher kann er hier nicht übernommen werden.",
+          "prefix_unavailable": "Das Entitäts-ID-Präfix dieser Installation ist nicht mehr verfügbar."
+        }
+      }
+    },
+    "identity_mismatch": {
+      "title": "{installation} erreicht jetzt einen anderen Wechselrichter",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Erkannten Wechselrichter übernehmen",
+            "description": "{installation} wurde mit dem Wechselrichter mit der Seriennummer {approved_serial} eingerichtet, aber das Gerät unter der Adresse hat die Seriennummer {serial} und meldet sich als {model}. Den neuen Wechselrichter übernehmen? Deine Entitäten, ihre IDs und ihre historischen Daten bleiben bei dieser Installation, und die Gerätedetails ändern sich. Steuerung zulassen und alle anderen Einstellungen bleiben unverändert. Um den ursprünglichen Wechselrichter beizubehalten, prüfe die Adresse in Konfigurieren."
+          }
+        },
+        "error": {
+          "cannot_connect": "Der Wechselrichter unter dieser Adresse konnte nicht erreicht werden, daher konnte seine Seriennummer nicht geprüft werden. Stelle sicher, dass er mit Strom versorgt wird und nicht von einem anderen Modbus-Client belegt ist, und bestätige dann erneut.",
+          "timeout": "Der Wechselrichter hat zu lange gebraucht, um seine Seriennummer zu nennen. Bestätige in einem Moment erneut.",
+          "read_rejected": "Der Wechselrichter hat einen Messwert verweigert, der zur Prüfung seiner Seriennummer nötig ist. Bestätige in einem Moment erneut.",
+          "invalid_device_data": "Der Wechselrichter hat eine Seriennummer geliefert, die nicht gelesen werden konnte. Bestätige in einem Moment erneut.",
+          "unsupported_device": "Das Gerät unter dieser Adresse ist jetzt kein erkanntes Modell, daher kann seine Seriennummer nicht übernommen werden. Wähle das Modell in Konfigurieren.",
+          "already_configured": "Der Wechselrichter unter dieser Adresse gehört jetzt zu einer anderen Installation, daher kann er hier nicht übernommen werden.",
+          "device_changed": "Der Wechselrichter unter dieser Adresse hat jetzt die Seriennummer {serial} und meldet {model}, was von dem abweicht, was dir angezeigt wurde. Bestätige erneut, um genau zu übernehmen, was jetzt aufgeführt ist."
+        },
+        "abort": {
+          "entry_removed": "Diese Installation wurde entfernt, daher gibt es nichts, wohin der Wechselrichter übernommen werden könnte.",
+          "already_configured": "Der Wechselrichter unter dieser Adresse gehört jetzt zu einer anderen Installation, daher kann er hier nicht übernommen werden.",
+          "prefix_unavailable": "Das Entitäts-ID-Präfix dieser Installation kann nicht mehr verwendet werden, daher wurde der Wechselrichter nicht übernommen."
+        }
+      }
+    },
+    "unsupported_device": {
+      "title": "{installation} erreicht ein nicht erkanntes Gerät",
+      "description": "Das Gerät unter der Adresse von {installation} meldet den Typ {device_type}, der kein erkanntes Modell ist. Es wurde nicht geladen. In Konfigurieren kann ein Modell gewählt werden, das dann ungeprüft verwendet wird."
+    },
+    "registers_refused": {
+      "title": "{installation} hat Messwerte, die der Wechselrichter verweigert",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Verweigerte Entitäten deaktivieren",
+            "description": "Der Wechselrichter verweigert diese Messwerte von {installation} weiterhin, daher werden sie nicht mehr gelesen: {entities}. Sie werden einmal am Tag und bei jedem Laden der Integration erneut versucht, und diese Reparatur verschwindet von selbst, wenn sie wieder antworten. Sie deaktivieren, damit sie dauerhaft nicht mehr gelesen werden? Du kannst sie in den Entitätseinstellungen wieder aktivieren."
+          }
+        }
+      }
+    },
+    "endpoint_unreachable": {
+      "title": "{installation} antwortet nicht mehr",
+      "description": "{installation} hat seit 15 Minuten unter {host}:{port} nicht geantwortet. Prüfe, ob der Wechselrichter und sein Kommunikationsmodul mit Strom versorgt werden, ob das Netzwerk zwischen Home Assistant und dem Wechselrichter funktioniert und ob kein anderer Modbus-Client die Verbindung belegt. Diese Reparatur verschwindet beim ersten guten Messwert."
+    }
+  },
+  "exceptions": {
+    "unsupported_device": {
+      "message": "Das angeschlossene Gerät meldet den Typ {device_type}, der nicht erkannt wird. Wähle das Modell in Konfigurieren."
+    },
+    "invalid_device_data": {
+      "message": "Der Wechselrichter hat ungültige Identitäts- oder Messdaten geliefert."
+    },
+    "cannot_connect": {
+      "message": "Die Kommunikation mit dem Wechselrichter ist fehlgeschlagen. Prüfe den Endpunkt, die Unit-ID und die Verbindung."
+    },
+    "timeout": {
+      "message": "Der Wechselrichter hat nicht geantwortet, bevor die Anfrage ablief. Prüfe seine Stromversorgung, das Netzwerk und die Unit-ID."
+    },
+    "read_rejected": {
+      "message": "Der Wechselrichter hat das Lesen eines benötigten Registers abgelehnt. Prüfe den gewählten Gerätetyp und den Registerzugriff."
+    },
+    "identity_mismatch": {
+      "message": "Der Endpunkt meldet jetzt einen anderen Wechselrichter. Prüfe den konfigurierten Endpunkt."
+    },
+    "model_mismatch": {
+      "message": "Das angeschlossene Gerät meldet sich als {detected_model}, nicht als {selected_model}. Wähle in Konfigurieren {detected_model} oder Automatisch."
+    },
+    "unknown_model": {
+      "message": "Das gespeicherte Modell {selection} ist kein bekanntes Modell. Wähle in Konfigurieren Automatisch oder ein aufgeführtes Modell."
+    },
+    "backing_off": {
+      "message": "Der Endpunkt des Wechselrichters wartet nach wiederholten Fehlern ab, daher wurde keine Verbindung versucht. Home Assistant versucht es automatisch erneut."
+    },
+    "control_not_enabled": {
+      "message": "Die Steuerung ist für diese Installation nicht aktiviert, daher wurde der Wechselrichter nicht geändert. Um Änderungen zuzulassen, öffne Einstellungen, Geräte & Dienste, SAJ Local, Konfigurieren und schalte Steuerung zulassen ein."
+    },
+    "model_unverified": {
+      "message": "Das Modell dieses Wechselrichters konnte nicht geprüft werden, daher können seine Einstellungen nicht geändert werden. Der Wechselrichter wurde nicht geändert."
+    },
+    "protected_setting": {
+      "message": "{setting} ist eine Inbetriebnahme-Einstellung und kann nicht von Home Assistant aus geändert werden. Der Wechselrichter wurde nicht geändert."
+    },
+    "unknown_setting": {
+      "message": "{setting} kann auf diesem Wechselrichter nicht geschrieben werden. Der Wechselrichter wurde nicht geändert."
+    },
+    "separate_registers": {
+      "message": "Diese Änderungen sind nicht zusammen in einem Register gespeichert und können nicht in einem Schritt vorgenommen werden. Der Wechselrichter wurde nicht geändert."
+    },
+    "invalid_value_not_a_number": {
+      "message": "Der Wert ist keine Zahl. Der Wechselrichter wurde nicht geändert."
+    },
+    "invalid_value_out_of_range": {
+      "message": "Der Wert liegt außerhalb des Bereichs, den diese Einstellung erlaubt. Der Wechselrichter wurde nicht geändert."
+    },
+    "invalid_value_not_an_option": {
+      "message": "Der Wert gehört nicht zu den Optionen, die diese Einstellung bietet. Der Wechselrichter wurde nicht geändert."
+    },
+    "invalid_value_not_a_time": {
+      "message": "Der Wert ist keine gültige Tageszeit. Der Wechselrichter wurde nicht geändert."
+    },
+    "invalid_value_not_a_clock": {
+      "message": "Der Wert ist kein gültiges Datum mit Uhrzeit. Der Wechselrichter wurde nicht geändert."
+    },
+    "invalid_value_does_not_fit": {
+      "message": "Der Wert passt nicht in das Register, in dem er gespeichert wird. Der Wechselrichter wurde nicht geändert."
+    },
+    "invalid_value_unsupported_encoding": {
+      "message": "Diese Einstellung kann nicht von Home Assistant aus geschrieben werden. Der Wechselrichter wurde nicht geändert."
+    },
+    "link_unavailable": {
+      "message": "Der Wechselrichter ist gerade nicht erreichbar, daher wurde nichts gesendet und der Wechselrichter wurde nicht geändert. Home Assistant verbindet sich von selbst wieder."
+    },
+    "write_allowance": {
+      "message": "Zu viele Änderungen: Zum Schutz des Wechselrichters sind höchstens {limit} Schreibvorgänge in {window} Sekunden erlaubt. Es wurde nichts gesendet und der Wechselrichter wurde nicht geändert. Versuche es in einem Moment erneut."
+    },
+    "ems_timeout_too_short": {
+      "message": "Der EMS-Timeout des Wechselrichters von {timeout} Sekunden ist nicht länger als der EMS-Heartbeat von {interval} Sekunden, daher würde EMS zwischen den Takten ausfallen. Der Wechselrichter wurde nicht geändert. Erhöhe den Timeout über den Heartbeat oder ändere den Heartbeat in Konfigurieren."
+    },
+    "write_rejected": {
+      "message": "Der Wechselrichter hat die Änderung mit dem Ausnahmecode {exception_code} abgelehnt. Der Wechselrichter wurde nicht geändert."
+    },
+    "write_unconfirmed": {
+      "message": "Der Wechselrichter hat die Änderung nicht bestätigt. Sie wurde möglicherweise angewendet oder nicht, daher befindet sich der Wechselrichter in einem unbekannten Zustand. Die Änderung wurde nicht erneut gesendet. Home Assistant verbindet sich neu und liest den Wechselrichter erneut aus."
+    },
+    "write_mismatch": {
+      "message": "Der Wechselrichter hat die Änderung angenommen, enthält aber jetzt einen anderen Wert, der angezeigt wird. Der Wechselrichter wurde geändert, aber nicht auf den von dir gewünschten Wert."
+    },
+    "no_power_target": {
+      "message": "Für die Funktion {function} wurde keine Leistung festgelegt. Lege zuerst ihr Leistungsziel fest. Der Wechselrichter wurde nicht geändert."
+    },
+    "another_function_running": {
+      "message": "Die Funktion {running} läuft, und es kann nur eine Funktion der Leistungssteuerung gleichzeitig laufen. Schalte sie zuerst aus. Der Wechselrichter wurde nicht geändert."
+    },
+    "unusable_power": {
+      "message": "Die Leistung muss eine ganze Zahl in Watt von {minimum} bis {maximum} sein. Der Wechselrichter wurde nicht geändert."
+    }
+  },
+  "selector": {
+    "model": {
+      "options": {
+        "automatic": "Automatisch",
+        "hs3": "HS3",
+        "h2": "H2"
+      }
+    },
+    "block": {
+      "options": {
+        "network": "Netzwerk",
+        "ev_data": "Wallbox-Daten",
+        "settings": "Einstellungen",
+        "realtime": "Echtzeit",
+        "energy": "Energie",
+        "parallel": "Parallelgeräte",
+        "ev_settings": "Wallbox-Einstellungen",
+        "averages": "Fünf-Minuten-Mittelwerte",
+        "ems": "EMS",
+        "identity": "Versionen",
+        "battery": "Batterie",
+        "meters": "Zähler",
+        "battery_identity": "Batterie-Identität"
+      }
+    },
+    "entity_state": {
+      "options": {
+        "disabled": "{entity} (deaktiviert)"
+      }
+    },
+    "equipment": {
+      "options": {
+        "battery": "Batterie",
+        "meter_a": "Zähler A",
+        "meter_b": "Zähler B",
+        "ev_charger": "Wallbox",
+        "parallel": "Parallelsystem",
+        "none": "keine optionale Ausstattung"
+      }
+    },
+    "equipment_setting": {
+      "options": {
+        "automatic": "Automatisch",
+        "fitted": "Vorhanden",
+        "not_fitted": "Nicht vorhanden"
+      }
+    },
+    "power_function": {
+      "options": {
+        "battery": "Batterie",
+        "grid": "Netz",
+        "inverter": "Wechselrichter"
+      }
+    }
+  }
+}

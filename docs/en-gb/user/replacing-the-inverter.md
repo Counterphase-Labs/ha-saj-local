@@ -1,3 +1,5 @@
+en | [de](../../de/user/replacing-the-inverter.md) | [nl](../../nl/user/replacing-the-inverter.md) | [fr](../../fr/user/replacing-the-inverter.md) | [zh](../../zh-hans/user/replacing-the-inverter.md) | [es](../../es/user/replacing-the-inverter.md) | [it](../../it/user/replacing-the-inverter.md) | [pl](../../pl/user/replacing-the-inverter.md) | [sv](../../sv/user/replacing-the-inverter.md)
+
 # Replacing the inverter
 
 The Replacing the inverter page explains how to move a system to a new inverter, or between an H2 and an HS3, and keep the device, the entities and the history. The full list is in the [Model replacement](../../../custom_components/saj_local/docs/features.md#model-replacement) section of the integration feature list.

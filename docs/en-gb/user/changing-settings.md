@@ -1,3 +1,5 @@
+en | [de](../../de/user/changing-settings.md) | [nl](../../nl/user/changing-settings.md) | [fr](../../fr/user/changing-settings.md) | [zh](../../zh-hans/user/changing-settings.md) | [es](../../es/user/changing-settings.md) | [it](../../it/user/changing-settings.md) | [pl](../../pl/user/changing-settings.md) | [sv](../../sv/user/changing-settings.md)
+
 # Changing settings
 
 The Changing settings page explains how to allow SAJ Local to change the settings of your inverter, what happens to a change and which changes are always refused. The full lists are in the [Changing settings](../../../custom_components/saj_local/docs/features.md#changing-settings) and [EMS](../../../custom_components/saj_local/docs/features.md#ems) sections of the integration feature list. The settings and commands are spread over the areas of the [entity reference](entities/README.md), mainly [Settings](entities/settings.md) and [Battery](entities/battery.md).

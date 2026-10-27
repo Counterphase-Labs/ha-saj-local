@@ -112,6 +112,16 @@ Features: [Diagnostics and debug logging](features.md#diagnostics-and-debug-logg
 
 - option to enable debug logging which will provide clear and helpful debug logs rather than spam that creates log fatigue
 
+## Languages
+
+Features: [Languages](features.md#languages)
+
+- Every user-facing text of the integration exists in every target language of the [global requirements](../../../.github/work/requirements.md#language), with the same keys and the same placeholders as the English text.
+
+- Log messages stay in English.
+
+- Entity IDs do not change with the language.
+
 ## Cards
 
 Features: [Cards](features.md#cards)

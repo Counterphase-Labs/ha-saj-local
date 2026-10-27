@@ -1,3 +1,5 @@
+en | [de](../../de/developer/simulator.md) | [nl](../../nl/developer/simulator.md) | [fr](../../fr/developer/simulator.md) | [zh](../../zh-hans/developer/simulator.md) | [es](../../es/developer/simulator.md) | [it](../../it/developer/simulator.md) | [pl](../../pl/developer/simulator.md) | [sv](../../sv/developer/simulator.md)
+
 # Modbus simulator
 
 ![The Overview of the HS3 simulator page: the status bar, the power-flow diagram and one card for each piece of fitted equipment](../../images/en-gb/developer-simulator-page-overview.png)
@@ -48,32 +50,40 @@ The examples use [mbpoll](https://github.com/epsilonrt/mbpoll) against the HS3 s
 
 Read the device type and rated power (registers `0x8F00` and `0x8F01`):
 
+<!-- jscpd:ignore-start -->
 ```bash
 mbpoll -m tcp -p 5020 -a 1 -0 -1 -t 4:hex -r 0x8F00 -c 2 localhost
 ```
+<!-- jscpd:ignore-end -->
 
 An HS3 and an H2 answer with different device types, which is the quickest way to confirm which system a port is simulating.
 
 Write a setting and read the setting back (here the application mode at `0x3647`):
 
+<!-- jscpd:ignore-start -->
 ```bash
 mbpoll -m tcp -p 5020 -a 1 -0 -t 4 -r 0x3647 localhost 1
 mbpoll -m tcp -p 5020 -a 1 -0 -1 -t 4 -r 0x3647 localhost
 ```
+<!-- jscpd:ignore-end -->
 
 See how the simulator refuses a request, for example an address outside every block:
 
+<!-- jscpd:ignore-start -->
 ```bash
 mbpoll -m tcp -p 5020 -a 1 -0 -1 -t 4 -r 0x0001 localhost
 ```
+<!-- jscpd:ignore-end -->
 
 Watch a value change by dropping `-1`; mbpoll then polls once a second until stopped.
 
 Run the simulator's own healthcheck, which needs no client installed:
 
+<!-- jscpd:ignore-start -->
 ```bash
 docker compose exec mock python -m saj_local_mock healthcheck; echo $?
 ```
+<!-- jscpd:ignore-end -->
 
 Writes are kept across restarts in `mock/state/`, which Git ignores, and reset from the simulator page or by deleting the folder contents, see [Saved state](simulator-page.md#presets-saved-state-and-export). Addresses come from the profiles; the three above are only starting points.
 
@@ -81,6 +91,7 @@ Writes are kept across restarts in `mock/state/`, which Git ignores, and reset f
 
 A scenario is a YAML file mounted at `/config/config.yaml`. Only `device.model` is required, so a file states just what differs from the defaults:
 
+<!-- jscpd:ignore-start -->
 ```yaml
 device:
   model: hs3
@@ -90,11 +101,13 @@ simulation:
 battery:
   modules: 4
 ```
+<!-- jscpd:ignore-end -->
 
-`simulation.speed` is simulated seconds per real second, so this runs ten simulated minutes every second from midsummer noon: useful for watching a full day of charge and discharge in a few minutes. `simulation.seed` picks the weather and load.
+In the example, `simulation.speed` is simulated seconds per real second, so this runs ten simulated minutes every second from midsummer noon: useful for watching a full day of charge and discharge in a few minutes. `simulation.seed` picks the weather and load.
 
 Two sections shape the random behaviour and the faults at start; a third, `link`, is described under [Link faults](simulator-page.md#link-faults). `variation` sets the bounds, depth and period of the solar, load and grid generators (the load level stays in `site.load`), and `faults` lists the active fault bits per equipment by register and bit, plus battery pack codes:
 
+<!-- jscpd:ignore-start -->
 ```yaml
 variation:
   cloud_depth: 0.9
@@ -104,6 +117,7 @@ faults:
   packs:
     - {pack: 1, fault: 1}
 ```
+<!-- jscpd:ignore-end -->
 
 A wrong key or an impossible combination stops the simulator at start and names the key. The simulator writes the line to the error output and exits:
 
@@ -115,12 +129,14 @@ invalid scenario: ev_charger.installed: not available on h2
 
 **Try a scenario once**, without touching any file. The simulator runs in the foreground on its own port until you stop the simulator:
 
+<!-- jscpd:ignore-start -->
 ```bash
 docker compose run --rm --no-deps -p 5030:502 \
   -v ./mock/scenarios/hs3-off-grid.yaml:/config/config.yaml:ro \
   -v ./mock/state/off-grid:/data \
   mock
 ```
+<!-- jscpd:ignore-end -->
 
 The extra `-v` is needed because the `mock` service otherwise brings the `/data` mount of `mock/state/hs3/`, and the first change in the off-grid run would replace the development HS3 `state.json` with off-grid state. The off-grid run keeps its own state in `mock/state/off-grid/` across runs.
 
@@ -128,6 +144,7 @@ Point the first `-v` at your own file to run a scenario you wrote.
 
 **Change what `make up` starts** in `compose.override.yaml`. Mounting another file over the same path replaces the scenario; a new service adds a system:
 
+<!-- jscpd:ignore-start -->
 ```yaml
 services:
   mock:
@@ -142,6 +159,7 @@ services:
     ports:
       - "5022:502"
 ```
+<!-- jscpd:ignore-end -->
 
 Each service is an independent device with its own state. Home Assistant reaches the new service as `mock-off-grid`, so several systems can be added to one Home Assistant side by side.
 

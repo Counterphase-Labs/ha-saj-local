@@ -1,3 +1,5 @@
+en | [de](../../../de/user/cards/battery-card.md) | [nl](../../../nl/user/cards/battery-card.md) | [fr](../../../fr/user/cards/battery-card.md) | [zh](../../../zh-hans/user/cards/battery-card.md) | [es](../../../es/user/cards/battery-card.md) | [it](../../../it/user/cards/battery-card.md) | [pl](../../../pl/user/cards/battery-card.md) | [sv](../../../sv/user/cards/battery-card.md)
+
 # Battery card
 
 The Battery card page explains the battery card, which shows the charge, the power and the readings of the battery. The full list is in the [Battery card](../../../../frontend/docs/features.md#battery-card) section of the cards feature list. [Add an element](README.md#add-an-element) explains how to add the card and choose a system.

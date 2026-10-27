@@ -1,3 +1,5 @@
+en | [de](../../de/developer/documentation.md) | [nl](../../nl/developer/documentation.md) | [fr](../../fr/developer/documentation.md) | [zh](../../zh-hans/developer/documentation.md) | [es](../../es/developer/documentation.md) | [it](../../it/developer/documentation.md) | [pl](../../pl/developer/documentation.md) | [sv](../../sv/developer/documentation.md)
+
 # Documentation
 
 How the documentation pages are organised, how the entity reference and the screenshots are made, and what `make docs-check` fails on.
@@ -65,13 +67,13 @@ The `AREAS` table of `.github/scripts/docs_check.py` names the areas, their summ
 
 ## Screenshots
 
-Every screenshot in `docs/images/en-gb/` is made by `make docs-images` from a real Home Assistant in Docker with the user language set to English (GB), or from the simulator pages of the same run. No screenshot is edited or captured by hand, so the set can be rebuilt whenever the interface changes. The screenshots show the simulators, so every reading in a screenshot is a simulated value.
+Every screenshot in `docs/images/<code>/` is made by `make docs-images` from a real Home Assistant in Docker with the user language set to the language of the folder, or from the simulator pages of the same run. `make docs-images` runs every language, English first, with fresh containers for each run, and `ARGS=<code>` selects one language. No screenshot is edited or captured by hand, so the set can be rebuilt whenever the interface changes. The screenshots show the simulators, so every reading in a screenshot is a simulated value.
 
 The target runs `tests/playwright/run-docs-images.sh`, which builds the `homeassistant` and `playwright-docs` services of [compose.playwright.yaml](../../../compose.playwright.yaml), starts the throwaway Home Assistant and two simulators, runs the spec and then removes the containers, volumes and local images. The target needs Docker, has the same time limit as `make test-browser-home-assistant` and takes options through `ARGS`, which the script receives. The Home Assistant image is built from `Dockerfile.playwright-home-assistant`, which builds the card bundle and copies the integration into the image, so no integration code is mounted. The spec is `frontend/tests/browser/docs/screenshots.spec.ts`, configured by `frontend/playwright.docs.config.ts`.
 
 - **Systems.** The HS3 is the simulator `mock-docs` on `mock/scenarios/hs3-full-house.yaml`, which has every equipment fitted. The H2 is the simulator `mock-h2` on `mock/scenarios/h2-battery.yaml` and gets the entity prefix `h2`. Neither simulator mounts a state folder, so each run starts from the scenario.
 - **Fixed conditions.** The viewport is 1280 by 800 pixels, the theme is light and the clock is real. A tall dialog or card is taken in a window 1600 pixels high, because the fixed header of Home Assistant would cover the top of the element.
-- **Language.** The spec sets the Home Assistant user language on the profile page. The locale comes from the environment variable `DOCS_LOCALE`, which defaults to `en-GB`, and the images go to `docs/images/<locale in lowercase>/`. A new locale needs an entry in `languageLabels` in the spec. The spec also finds Home Assistant controls by their English labels, so screenshots in a second language need spec selectors for that language.
+- **Language.** Each run sets both the Home Assistant server language, before SAJ Local is set up so the entities are created with names in that language, and the user language, by language code and not by the label of the language picker. The run fails when a SAJ Local entity name is not in the language of the run. The images go to `docs/images/<code>/`. The spec opens screens by URL route, finds the fields of SAJ Local forms by their `name` attribute, and finds Home Assistant controls that have only text by the text read at run time from the running Home Assistant with `hass.localize`. The spec holds no table of labels, so every language runs the same steps.
 - **Names.** Each file is named `<page>-<subject>.png`, where `<page>` is the page path with `/` replaced by `-`, for example `cards-battery-card.png`, and the page that shows the image links to the file.
 - **Simulator pages.** The screenshots of the simulator pages come from the two simulators of the same run, `mock-docs` and `mock-h2`, and use the name prefix `developer-simulator-page-`. They are taken last, after every Home Assistant screenshot, so nothing done on a simulator page changes a Home Assistant screenshot. The spec sets the fault "Fan 1 fault" on the HS3 page, and the register that the repair screenshot makes the simulator refuse stays refused, so the Link view, the traffic log and the changes in the status bar show real changes.
 - **Setup.** The spec creates a user through the onboarding API, adds the HS3 through the config flow in the browser, adds the H2 through the config flow API, switches Allow control on for both systems and adds one dashboard for each system with every SAJ Local card and the status badge, through the Home Assistant WebSocket API.
@@ -101,9 +103,18 @@ Screenshots are not compared pixel for pixel, in CI or anywhere else. Home Assis
 
 Keep the pages useful: link to the file that holds a fact instead of copying the fact, record the reason for a decision because reasons change rarely and details constantly, and keep examples few and run each example again when the example changes.
 
-## Adding a second language
+## Languages
 
-A second language adds sibling folders with the same file names, `docs/<locale>/user/`, `docs/<locale>/developer/` and `docs/images/<locale>/`, with lowercase BCP 47 tags, and nothing moves. Today `make docs-check` reads only `docs/en-gb/`, so a second locale needs the script to read the new folder as well: the orphan image rule reports every image in `docs/images/` that no page read by the script references. The generator reads only `en.json` and writes only `docs/en-gb/user/entities/`, so the generator needs a change before a second locale has an entity reference. The spec needs the steps under Language in the Screenshots section.
+The documentation exists in English and in every target language of the [global requirements](../../../.github/work/requirements.md#language). The feature lists and the requirement documents stay English only.
+
+- **Layout.** Each language has the sibling folders `docs/<code>/user/`, `docs/<code>/developer/` and `docs/images/<code>/`, with the same file names in every language. The codes are `en-gb`, `de`, `nl`, `fr`, `zh-hans`, `es`, `it`, `pl` and `sv`. A code block that is the same in several languages stays inline on every page and is wrapped in a `jscpd:ignore-start` and `jscpd:ignore-end` marker pair, only under an exception the user approved in a plan, as `AGENTS.md` says. A marker pair wraps one code block and nothing else.
+- **Generator.** `make docs` writes `docs/<code>/user/entities/` for each language from the matching file in `custom_components/saj_local/translations/`. The equipment names come from the same translation file, and the other texts of the generator come from `.github/scripts/docs_text/<code>.json`.
+- **Docs check.** `make docs-check` runs every rule on every language folder. The [Feature Coverage Table](#feature-coverage-table) on this page applies to every language under the same page names, and the orphan image rule checks `docs/images/<code>/` against the pages of the same language.
+- **Language bar.** The first line of every page under `docs/<code>/user/` and `docs/<code>/developer/`, the generated entity pages included, is the language bar `en | de | nl | fr | zh | es | it | pl | sv`, always in that order. Each label except the current language links to the same page in that language's folder, and the current language is plain text. `make docs` writes the bar, and `make docs-check` reports a page whose first line is not the expected bar and a bar link to a page that does not exist.
+- **Translated README.** The root `README.md` stays English in the repository root and is translated at `docs/<code>/README.md`, whose links point to the pages of that language. The root `README.md` and every `docs/<code>/README.md` carry the same bar as their first line, and `make docs-check` reports a missing `docs/<code>/README.md`.
+- **Screenshots.** `make docs-images` runs the spec once for each language, English first, with fresh containers for each run. `ARGS=<code>` selects one language, see [Screenshots](#screenshots).
+- **Nomenclature.** The `user/nomenclature.md` page of each language is the list of terms that every translation of the integration, the cards and the pages of the language follows. The English [nomenclature](../user/nomenclature.md) is the source.
+- **Changing English.** A change to an English text, page or screenshot updates every language in the same change. No check keeps the languages in step.
 
 ## Feature Coverage Table
 
@@ -123,6 +134,7 @@ Each feature list section is investigated from the `Files:` line of the section 
 | Integration | Model replacement | [`user/replacing-the-inverter.md`](../user/replacing-the-inverter.md) |
 | Integration | Device faults and repairs | [`user/faults-and-repairs.md`](../user/faults-and-repairs.md) |
 | Integration | Diagnostics and debug logging | [`user/troubleshooting.md`](../user/troubleshooting.md) |
+| Integration | Languages | [`user/nomenclature.md`](../user/nomenclature.md) |
 | Integration | Cards | [`user/cards/README.md`](../user/cards/README.md), [`developer/frontend.md`](frontend.md) |
 | Cards | Elements and setup | [`user/cards/README.md`](../user/cards/README.md) |
 | Cards | Power flow card | [`user/cards/power-flow-card.md`](../user/cards/power-flow-card.md) |

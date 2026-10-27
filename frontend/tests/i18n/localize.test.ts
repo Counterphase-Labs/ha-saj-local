@@ -117,15 +117,35 @@ describe("bundled language files", () => {
         );
     });
 
-    it("gives every language the same keys as English", () => {
+    it("gives every language the keys of English, with the plural forms of the language", () => {
+        const pluralSuffix = /_(zero|one|two|few|many|other)$/;
         const english = Object.keys(
             JSON.parse(
                 readFileSync(resolve(sourceDirectory, "en.json"), "utf8"),
             ) as Translations,
-        ).sort();
+        );
+        const plainKeys = english.filter((key) => !pluralSuffix.test(key));
+        const pluralBases = [
+            ...new Set(
+                english
+                    .filter((key) => pluralSuffix.test(key))
+                    .map((key) => key.replace(pluralSuffix, "")),
+            ),
+        ];
 
         for (const [language, translations] of bundledTranslations()) {
-            expect(Object.keys(translations).sort(), language).toEqual(english);
+            const forms = new Intl.PluralRules(language).resolvedOptions()
+                .pluralCategories;
+            const expected = [
+                ...plainKeys,
+                ...pluralBases.flatMap((base) =>
+                    forms.map((form) => `${base}_${form}`),
+                ),
+            ].sort();
+
+            expect(Object.keys(translations).sort(), language).toEqual(
+                expected,
+            );
         }
     });
 

@@ -1,0 +1,89 @@
+{
+  "generated_notice": "Generado por `make docs`. No editar a mano.",
+  "areas": {
+    "inverter-and-pv": {
+      "title": "Inversor y PV",
+      "summary": "Salida del inversor, strings solares, puerto de respaldo, contadores de energía, versiones y la carga doméstica"
+    },
+    "grid-and-meter-a": {
+      "title": "Red y Contador A",
+      "summary": "La conexión a la red y el Contador A, el contador de la red"
+    },
+    "meter-b": {
+      "title": "Contador B",
+      "summary": "El Contador B, el segundo contador, que mide un inversor solar"
+    },
+    "battery": {
+      "title": "Batería",
+      "summary": "La batería en conjunto"
+    },
+    "battery-packs": {
+      "title": "Módulos de batería",
+      "summary": "Lecturas e identidad de cada módulo de batería"
+    },
+    "ev-charger": {
+      "title": "Cargador de VE",
+      "summary": "El cargador de VE y sus controles de carga"
+    },
+    "parallel-system": {
+      "title": "Sistema en paralelo",
+      "summary": "Las lecturas de un sistema de máquinas en paralelo"
+    },
+    "settings": {
+      "title": "Ajustes",
+      "summary": "Ajustes y órdenes que cambian el inversor"
+    },
+    "faults": {
+      "title": "Fallos",
+      "summary": "Fallos que informan el inversor, la batería y el cargador de VE"
+    },
+    "added-by-the-integration": {
+      "title": "Añadidas por la integración",
+      "summary": "Entidades que la integración añade fuera del catálogo de registros"
+    }
+  },
+  "kinds": {
+    "binary_sensor": "Sensor binario",
+    "button": "Botón",
+    "number": "Número",
+    "select": "Seleccionar",
+    "sensor": "Sensor",
+    "switch": "Interruptor",
+    "time": "Hora"
+  },
+  "summary_line": "{summary}.",
+  "area_intro": "La lista de funciones de la integración explica las entidades de {title} en {links}.",
+  "link_join": " y ",
+  "sections": {
+    "Devices and entities": "Dispositivos y entidades",
+    "Optional equipment": "Equipo opcional",
+    "Changing settings": "Cambiar ajustes",
+    "Device faults and repairs": "Fallos del dispositivo y reparaciones",
+    "Power control": "Control de potencia"
+  },
+  "count_line": "{count} entidades. {notice}",
+  "prefix_note": "Un prefijo definido en Configurar va después de `{entity_prefix}_` en el ID de cada entidad de {title}, por ejemplo `{example}` con el prefijo `{prefix}`.",
+  "area_header": [
+    "Nombre",
+    "ID de entidad",
+    "Tipo",
+    "Unidad",
+    "Modelos",
+    "Equipo y números",
+    "Habilitada por defecto"
+  ],
+  "phase_note": "Fase {n} y superiores",
+  "string_note": "String PV {n} y superiores",
+  "pack_note": "Módulo de batería {n} y superiores",
+  "yes": "Sí",
+  "no": "No",
+  "only": "Solo {models}",
+  "index_title": "Entidades",
+  "index_intro": "Todas las entidades que SAJ Local puede crear, una página por área. La sección [{section}]({link}) de la lista de funciones de la integración explica los tipos de entidad, qué entidades están habilitadas por defecto y el signo de las lecturas de potencia.",
+  "index_fit": "Un sistema recibe solo las entidades que encajan con su modelo, su equipo instalado y su número de fases, strings solares y módulos de batería. La columna Modelos indica qué modelos tienen una entidad, y la columna Equipo y números indica qué debe estar instalado.",
+  "index_header": [
+    "Área",
+    "Entidades",
+    "Qué contiene"
+  ]
+}

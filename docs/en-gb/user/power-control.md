@@ -1,3 +1,5 @@
+en | [de](../../de/user/power-control.md) | [nl](../../nl/user/power-control.md) | [fr](../../fr/user/power-control.md) | [zh](../../zh-hans/user/power-control.md) | [es](../../es/user/power-control.md) | [it](../../it/user/power-control.md) | [pl](../../pl/user/power-control.md) | [sv](../../sv/user/power-control.md)
+
 # Power control
 
 The Power control page explains how to hold the battery, the grid connection point or the inverter at a set power, by hand or with a Home Assistant schedule. The full list is in the [Power control](../../../custom_components/saj_local/docs/features.md#power-control) section of the integration feature list. The switches and targets are in the [entities the integration adds](entities/added-by-the-integration.md) in the entity reference.

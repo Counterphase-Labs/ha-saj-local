@@ -1,3 +1,5 @@
+en | [de](../../de/developer/releasing.md) | [nl](../../nl/developer/releasing.md) | [fr](../../fr/developer/releasing.md) | [zh](../../zh-hans/developer/releasing.md) | [es](../../es/developer/releasing.md) | [it](../../it/developer/releasing.md) | [pl](../../pl/developer/releasing.md) | [sv](../../sv/developer/releasing.md)
+
 # Releasing
 
 What to do before a release, how a release is published and how the Home Assistant version is bumped. Pushing a version tag starts the `Release` workflow in `.github/workflows/release.yml`, which checks the tag, runs the checks and creates a draft GitHub release.

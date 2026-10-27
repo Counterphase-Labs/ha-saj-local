@@ -1,3 +1,5 @@
+en | [de](../../../de/user/entities/battery.md) | [nl](../../../nl/user/entities/battery.md) | [fr](../../../fr/user/entities/battery.md) | [zh](../../../zh-hans/user/entities/battery.md) | [es](../../../es/user/entities/battery.md) | [it](../../../it/user/entities/battery.md) | [pl](../../../pl/user/entities/battery.md) | [sv](../../../sv/user/entities/battery.md)
+
 # Battery
 
 The battery as a whole.

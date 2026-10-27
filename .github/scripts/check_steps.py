@@ -913,15 +913,19 @@ SUPPORT_STEPS: tuple[Step, ...] = (
             runs=(
                 "build and mock-build first, so the image copies the card bundle "
                 "built from the working tree and uses the saj-local-mock image, "
-                "then Playwright against a throwaway Home Assistant in Docker, "
-                "writing docs/images"
+                "then Playwright against a fresh throwaway Home Assistant in "
+                "Docker once for each language, English first, writing "
+                "docs/images/<code>"
             ),
             success="pass count",
             failure=(
                 "failing steps with assertion messages, plus the report path "
                 f"{DOCS_IMAGES_REPORT}"
             ),
-            args="options passed to the Playwright run script",
+            args=(
+                "one language code (en-GB, de, nl, fr, zh-Hans, es, it, pl or "
+                "sv) to take the screenshots of that language only"
+            ),
         ),
         requires=("build", "mock-build"),
     ),

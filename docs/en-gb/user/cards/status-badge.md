@@ -1,3 +1,5 @@
+en | [de](../../../de/user/cards/status-badge.md) | [nl](../../../nl/user/cards/status-badge.md) | [fr](../../../fr/user/cards/status-badge.md) | [zh](../../../zh-hans/user/cards/status-badge.md) | [es](../../../es/user/cards/status-badge.md) | [it](../../../it/user/cards/status-badge.md) | [pl](../../../pl/user/cards/status-badge.md) | [sv](../../../sv/user/cards/status-badge.md)
+
 # Status badge
 
 The Status badge page explains the status badge, which shows the state of a system in the badge row of a dashboard. The full list is in the [Status badge](../../../../frontend/docs/features.md#status-badge) section of the cards feature list. [Add an element](README.md#add-an-element) explains how to add the badge and choose a system.

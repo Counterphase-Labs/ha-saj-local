@@ -1,3 +1,5 @@
+en | [de](../../../de/user/entities/battery-packs.md) | [nl](../../../nl/user/entities/battery-packs.md) | [fr](../../../fr/user/entities/battery-packs.md) | [zh](../../../zh-hans/user/entities/battery-packs.md) | [es](../../../es/user/entities/battery-packs.md) | [it](../../../it/user/entities/battery-packs.md) | [pl](../../../pl/user/entities/battery-packs.md) | [sv](../../../sv/user/entities/battery-packs.md)
+
 # Battery packs
 
 Readings and identity of each battery pack.

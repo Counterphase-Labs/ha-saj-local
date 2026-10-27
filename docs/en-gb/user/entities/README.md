@@ -1,3 +1,5 @@
+en | [de](../../../de/user/entities/README.md) | [nl](../../../nl/user/entities/README.md) | [fr](../../../fr/user/entities/README.md) | [zh](../../../zh-hans/user/entities/README.md) | [es](../../../es/user/entities/README.md) | [it](../../../it/user/entities/README.md) | [pl](../../../pl/user/entities/README.md) | [sv](../../../sv/user/entities/README.md)
+
 # Entities
 
 Every entity SAJ Local can create, one page for each area. The [Devices and entities](../../../../custom_components/saj_local/docs/features.md#devices-and-entities) section of the integration feature list explains the entity types, which entities are enabled by default and the sign of power readings.

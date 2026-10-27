@@ -1,3 +1,5 @@
+en | [de](../../../de/user/cards/README.md) | [nl](../../../nl/user/cards/README.md) | [fr](../../../fr/user/cards/README.md) | [zh](../../../zh-hans/user/cards/README.md) | [es](../../../es/user/cards/README.md) | [it](../../../it/user/cards/README.md) | [pl](../../../pl/user/cards/README.md) | [sv](../../../sv/user/cards/README.md)
+
 # Dashboard cards
 
 The Dashboard cards page explains how to add the SAJ Local cards to a dashboard and choose a system, and lists what each element shows. The full lists are in the [Elements and setup](../../../../frontend/docs/features.md#elements-and-setup) and [Theme and language](../../../../frontend/docs/features.md#theme-and-language) sections of the cards feature list, and in the [Cards](../../../../custom_components/saj_local/docs/features.md#cards) section of the integration feature list.
@@ -38,8 +40,8 @@ The elements find the entities of a system through the entity registry, and not 
 
 ## Theme and language
 
-The elements follow the Home Assistant theme. Entity names, values and states use the formatting and the language of Home Assistant. The texts of the cards exist in English only, so a dashboard in another language shows the texts of the cards in English.
+The elements follow the Home Assistant theme. Entity names, values and states use the formatting and the language of Home Assistant. The texts of the cards exist in English, German, Dutch, French, Simplified Chinese, Spanish, Italian, Polish and Swedish. A dashboard in any other language shows the texts of the cards in English.
 
 ## Not supported yet
 
-- Card texts in languages other than English.
+- Card texts in languages other than the nine above.

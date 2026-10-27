@@ -1,3 +1,5 @@
+en | [de](../../de/user/entities-and-prefix.md) | [nl](../../nl/user/entities-and-prefix.md) | [fr](../../fr/user/entities-and-prefix.md) | [zh](../../zh-hans/user/entities-and-prefix.md) | [es](../../es/user/entities-and-prefix.md) | [it](../../it/user/entities-and-prefix.md) | [pl](../../pl/user/entities-and-prefix.md) | [sv](../../sv/user/entities-and-prefix.md)
+
 # Entities and the prefix
 
 The Entities and the prefix page explains what the entities of a system are, how the entity IDs are formed and how to add a prefix to the entity IDs. The full lists are in the [Devices and entities](../../../custom_components/saj_local/docs/features.md#devices-and-entities) and [Entity IDs and prefix](../../../custom_components/saj_local/docs/features.md#entity-ids-and-prefix) sections of the integration feature list. Every entity name, ID, model and default is in the [entity reference](entities/README.md).

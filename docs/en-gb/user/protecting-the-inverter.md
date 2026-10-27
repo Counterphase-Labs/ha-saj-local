@@ -1,3 +1,5 @@
+en | [de](../../de/user/protecting-the-inverter.md) | [nl](../../nl/user/protecting-the-inverter.md) | [fr](../../fr/user/protecting-the-inverter.md) | [zh](../../zh-hans/user/protecting-the-inverter.md) | [es](../../es/user/protecting-the-inverter.md) | [it](../../it/user/protecting-the-inverter.md) | [pl](../../pl/user/protecting-the-inverter.md) | [sv](../../sv/user/protecting-the-inverter.md)
+
 # Protecting the inverter
 
 The Protecting the inverter page lists the limits SAJ Local keeps on everything SAJ Local sends, so the communication module of the inverter keeps serving Home Assistant. A module can stop serving a client that polls too hard, so no setting removes a limit. The full list is in the [Protecting the inverter](../../../custom_components/saj_local/docs/features.md#protecting-the-inverter) section of the integration feature list.

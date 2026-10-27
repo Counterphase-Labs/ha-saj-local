@@ -1,0 +1,3313 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connetti a un inverter SAJ",
+        "description": "Inserisci l'endpoint Modbus TCP locale, l'intervallo di polling e il modello. Lascia il modello su Automatico, a meno che l'inverter non venga riconosciuto.",
+        "data": {
+          "host": "Host",
+          "port": "Porta",
+          "unit_id": "ID unità",
+          "scan_interval": "Secondi tra gli aggiornamenti",
+          "model": "Modello",
+          "prefix": "Prefisso",
+          "allow_control": "Consenti controllo"
+        },
+        "data_description": {
+          "prefix": "Facoltativo. Aggiunge un prefisso agli ID entità di questa installazione, per esempio sensor.saj_house_pv_power invece di sensor.saj_pv_power. Usalo quando hai più di un sistema SAJ. Solo lettere minuscole e cifre, senza trattini bassi, fino a 32 caratteri, e due installazioni non possono condividere lo stesso prefisso.",
+          "allow_control": "Disattivato per impostazione predefinita. Quando è attivo, le modifiche alle entità, i pulsanti e le automazioni possono cambiare le impostazioni dell'inverter. Le impostazioni che mettono in servizio l'inverter (contatore, RS485, protocollo della batteria, rete, collegamento del caricatore EV) restano di sola lettura. Ti viene chiesto di confermare quando lo attivi."
+        }
+      },
+      "confirm_model": {
+        "title": "Conferma il modello",
+        "description": "Il dispositivo comunica il tipo {device_type}, che non è riconosciuto come {model}, quindi non è stato possibile verificarlo come tale modello. I registri richiesti hanno risposto, ma le letture potrebbero essere errate se si tratta di un modello diverso. Usare comunque {model}?"
+      },
+      "confirm_control": {
+        "title": "Conferma che il controllo è consentito",
+        "description": "Con il controllo consentito, le modifiche alle entità e le automazioni cambieranno le impostazioni del tuo inverter. Un'impostazione errata può fermare l'inverter, cambiare il modo in cui usa la batteria o la rete, o costarti denaro.\n\nAbilitare le funzioni EMS disattiva la protezione dalla corrente inversa dell'inverter.\n\nQuando Home Assistant si ferma o questa installazione viene ricaricata, tenta di spegnere le funzioni che hai acceso da Home Assistant. Si tratta di un tentativo al meglio delle possibilità, non di una garanzia. Se l'inverter non è raggiungibile o Home Assistant si ferma all'improvviso, le funzioni possono restare accese. Il timeout EMS dell'inverter può allora terminarle, ma non si è dimostrato affidabile.\n\nConsentire il controllo abilita anche fino a {count} entità di controllo di questo sistema, come le fasce di pianificazione e i limiti della batteria, in modo che possano essere mostrate e modificate nelle plance. Leggerle aumenta il carico da {before} fino a {after} di {budget} richieste al minuto. Le entità compaiono circa 30 secondi dopo il salvataggio. Attendi che compaiano prima di cambiare qualsiasi cosa: il sistema si ricarica ancora una volta quando compaiono, e la ricarica spegne ogni funzione di controllo della potenza accesa prima di quel momento.\n\nConsentire il controllo?",
+        "data": {
+          "ems_heartbeat": "Heartbeat EMS (secondi)"
+        },
+        "data_description": {
+          "ems_heartbeat": "Ogni quanto vengono letti gli obiettivi delle funzioni EMS che accendi da Home Assistant, e i limiti EMS, per mantenerli attivi, da 30 a 3600 secondi. Il timeout EMS dell'inverter deve essere più lungo di questo valore. Mostrato solo per i modelli con EMS."
+        }
+      }
+    },
+    "error": {
+      "already_configured": "Questo endpoint è già configurato.",
+      "invalid_host": "Inserisci un nome host o un indirizzo IP.",
+      "invalid_unit_id": "Inserisci un ID unità intero da 1 a 247.",
+      "cannot_connect": "Impossibile connettersi o leggere l'inverter. Controlla l'endpoint e riprova.",
+      "unsupported_device": "Il dispositivo comunica il tipo {device_type}, che non viene riconosciuto automaticamente. Scegli il modello manualmente.",
+      "invalid_device_data": "L'inverter ha restituito dati di identità o di telemetria non validi.",
+      "timeout": "L'inverter non ha risposto in tempo. Controlla l'endpoint e riprova.",
+      "read_rejected": "L'inverter ha rifiutato la lettura di un registro necessario. Verifica che si tratti di un dispositivo e di un modello SAJ supportati.",
+      "invalid_port": "Inserisci una porta intera da 1 a 65535.",
+      "invalid_endpoint": "Inserisci una porta e un ID unità validi.",
+      "invalid_scan_interval": "Inserisci un intervallo di polling intero di almeno 10 secondi.",
+      "model_mismatch": "Questo dispositivo si identifica come {detected_model}, non come {selected_model}. Scegli {detected_model} o Automatico.",
+      "unknown_model": "Il modello {selection} non è un modello noto. Scegli Automatico o uno dei modelli elencati.",
+      "invalid_prefix": "Usa solo lettere minuscole e cifre, senza trattini bassi, fino a 32 caratteri.",
+      "prefix_in_use": "Un'altra installazione di SAJ Local usa già questo prefisso. Anche lasciarlo vuoto conta, quindi una sola installazione può non avere prefisso.",
+      "entity_id_taken": "L'ID entità {entity_id} è già in uso in Home Assistant. Scegli un prefisso diverso.",
+      "prefix_shadows_entity": "Questo prefisso creerebbe ID entità in conflitto con il nome di un'entità. Scegli un prefisso diverso.",
+      "invalid_ems_heartbeat": "Inserisci un heartbeat intero da 30 a 3600 secondi."
+    },
+    "abort": {
+      "already_configured": "Questo inverter è già configurato.",
+      "confirmation_not_pending": "Nessuna modifica convalidata è in attesa di conferma."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Connessione e polling",
+        "description": "Inserisci l'endpoint Modbus TCP locale, l'intervallo di polling e il modello. Le impostazioni vengono salvate dopo la convalida dell'endpoint. L'integrazione invia all'inverter al massimo {budget} richieste al minuto, in modo che il suo modulo di comunicazione non si sovraccarichi. Questa installazione ne usa attualmente {load}.",
+        "data": {
+          "host": "Host",
+          "port": "Porta",
+          "unit_id": "ID unità",
+          "scan_interval": "Secondi tra gli aggiornamenti",
+          "model": "Modello",
+          "prefix": "Prefisso",
+          "allow_control": "Consenti controllo",
+          "ems_heartbeat": "Heartbeat EMS (secondi)"
+        },
+        "data_description": {
+          "prefix": "Facoltativo. Aggiunge un prefisso agli ID entità di questa installazione, per esempio sensor.saj_house_pv_power invece di sensor.saj_pv_power. Usalo quando hai più di un sistema SAJ. Solo lettere minuscole e cifre, senza trattini bassi, fino a 32 caratteri, e due installazioni non possono condividere lo stesso prefisso. Modificarlo rinomina le entità di questa installazione dopo la tua conferma.",
+          "allow_control": "Disattivato per impostazione predefinita. Quando è attivo, le modifiche alle entità, i pulsanti e le automazioni possono cambiare le impostazioni dell'inverter. Le impostazioni che mettono in servizio l'inverter (contatore, RS485, protocollo della batteria, rete, collegamento del caricatore EV) restano di sola lettura. Ti viene chiesto di confermare quando lo attivi.",
+          "ems_heartbeat": "Ogni quanto vengono letti gli obiettivi delle funzioni EMS che accendi da Home Assistant, e i limiti EMS, per mantenerli attivi, da 30 a 3600 secondi. Il timeout EMS dell'inverter deve essere più lungo di questo valore. Mostrato solo per i modelli con EMS."
+        },
+        "sections": {
+          "equipment": {
+            "name": "Apparecchiature",
+            "description": "Considerate installate ora: {equipment_fitted}. Automatico rileva ciascuna a ogni avvio e a ogni ricarica, e mantiene ciò che ha rilevato finché non scegli Non installato. Installato crea le sue entità senza rilevamento. Non installato rimuove le sue entità da Home Assistant, comprese le personalizzazioni che hai fatto, e dimentica ciò che era stato rilevato. Gli ID entità restano gli stessi se l'apparecchiatura viene di nuovo installata, quindi la cronologia continua.",
+            "data": {
+              "battery": "Batteria",
+              "meter_a": "Contatore A",
+              "meter_b": "Contatore B",
+              "ev_charger": "Caricatore EV",
+              "parallel": "Sistema in parallelo"
+            },
+            "data_description": {
+              "battery": "Entità della batteria. Quando l'inverter non risponde al rilevamento, si presume che ci sia una batteria.",
+              "meter_a": "Entità del primo contatore. Quando l'inverter non risponde al rilevamento, si presume che il contatore ci sia.",
+              "meter_b": "Entità del secondo contatore, rilevate dallo stato del contatore B dell'inverter.",
+              "ev_charger": "Entità del caricatore EV SAJ, rilevate dall'impostazione di abilitazione del caricatore EV dell'inverter.",
+              "parallel": "Entità di un sistema di macchine in parallelo, rilevate dalla modalità parallelo dell'inverter e dal numero di macchine online."
+            }
+          }
+        }
+      },
+      "confirm_replacement": {
+        "title": "Conferma la sostituzione dell'inverter",
+        "description": "Sostituire l'hardware di questa installazione esistente con il {model} con numero di serie {serial}? Le tue entità e i loro dati storici restano con questa installazione."
+      },
+      "confirm_model": {
+        "title": "Conferma il modello",
+        "description": "Il dispositivo comunica il tipo {device_type}, che non è riconosciuto come {model}, quindi non è stato possibile verificarlo come tale modello. I registri richiesti hanno risposto, ma le letture potrebbero essere errate se si tratta di un modello diverso. Usare comunque {model}?"
+      },
+      "confirm_prefix": {
+        "title": "Conferma la modifica degli ID entità",
+        "description": "Gli ID entità cambiano da `{old_pattern}` a `{new_pattern}`, per ogni tipo di entità.\n\nLa cronologia e le statistiche a lungo termine passano ai nuovi ID entità.\n\nAutomazioni, script, plance, template e impostazioni Energia che usano i vecchi ID entità smetteranno di funzionare finché non li aggiorni.\n\nLe entità che hai rinominato tu non vengono toccate. Modificare gli ID entità?"
+      },
+      "confirm_load": {
+        "title": "Conferma il polling più lento",
+        "description": "Con questo intervallo predefinito l'installazione richiederebbe {after} richieste al minuto, rispetto alle {before} attuali. L'integrazione invia all'inverter al massimo {budget} richieste al minuto, in modo che il suo modulo di comunicazione non si sovraccarichi. Poiché il limite viene superato, le entità verranno lette più lentamente di quanto configurato. Salvare comunque l'intervallo?"
+      },
+      "confirm_control": {
+        "title": "Conferma che il controllo è consentito",
+        "description": "Con il controllo consentito, le modifiche alle entità e le automazioni cambieranno le impostazioni del tuo inverter. Un'impostazione errata può fermare l'inverter, cambiare il modo in cui usa la batteria o la rete, o costarti denaro.\n\nAbilitare le funzioni EMS disattiva la protezione dalla corrente inversa dell'inverter.\n\nQuando Home Assistant si ferma o questa installazione viene ricaricata, tenta di spegnere le funzioni che hai acceso da Home Assistant. Si tratta di un tentativo al meglio delle possibilità, non di una garanzia. Se l'inverter non è raggiungibile o Home Assistant si ferma all'improvviso, le funzioni possono restare accese. Il timeout EMS dell'inverter può allora terminarle, ma non si è dimostrato affidabile.\n\nConsentire il controllo abilita anche {count} entità di controllo di questo sistema, come le fasce di pianificazione e i limiti della batteria, in modo che possano essere mostrate e modificate nelle plance. Leggerle aumenta il carico da {before} a {after} di {budget} richieste al minuto. Le entità compaiono circa 30 secondi dopo il salvataggio. Attendi che compaiano prima di cambiare qualsiasi cosa: il sistema si ricarica ancora una volta quando compaiono, e la ricarica spegne ogni funzione di controllo della potenza accesa prima di quel momento.\n\nConsentire il controllo?"
+      }
+    },
+    "error": {
+      "already_configured": "Un'altra voce di SAJ Local possiede già questo endpoint o questo numero di serie dell'inverter.",
+      "invalid_host": "Inserisci un nome host o un indirizzo IP.",
+      "invalid_port": "Inserisci una porta intera da 1 a 65535.",
+      "invalid_unit_id": "Inserisci un ID unità intero da 1 a 247.",
+      "invalid_endpoint": "Inserisci una porta e un ID unità validi.",
+      "invalid_scan_interval": "Inserisci un intervallo di polling intero di almeno 10 secondi.",
+      "cannot_connect": "Impossibile connettersi o leggere l'inverter. Controlla l'endpoint e riprova.",
+      "unsupported_device": "Il dispositivo comunica il tipo {device_type}, che non viene riconosciuto automaticamente. Scegli il modello manualmente.",
+      "invalid_device_data": "L'inverter ha restituito dati di identità o di telemetria non validi.",
+      "timeout": "L'inverter non ha risposto in tempo. Controlla l'endpoint e riprova.",
+      "read_rejected": "L'inverter ha rifiutato la lettura di un registro necessario. Verifica che si tratti di un dispositivo e di un modello SAJ supportati.",
+      "model_mismatch": "Questo dispositivo si identifica come {detected_model}, non come {selected_model}. Scegli {detected_model} o Automatico.",
+      "unknown_model": "Il modello {selection} non è un modello noto. Scegli Automatico o uno dei modelli elencati.",
+      "invalid_prefix": "Usa solo lettere minuscole e cifre, senza trattini bassi, fino a 32 caratteri.",
+      "prefix_in_use": "Un'altra installazione di SAJ Local usa già questo prefisso. Anche lasciarlo vuoto conta, quindi una sola installazione può non avere prefisso.",
+      "entity_id_taken": "L'ID entità {entity_id} è già in uso in Home Assistant. Scegli un prefisso diverso.",
+      "statistics_exist": "Home Assistant contiene già statistiche a lungo termine sotto {entity_id}, quindi la cronologia di questa installazione non ha potuto essere spostata lì. Scegli un prefisso diverso.",
+      "prefix_shadows_entity": "Questo prefisso creerebbe ID entità in conflitto con il nome di un'entità. Scegli un prefisso diverso.",
+      "invalid_ems_heartbeat": "Inserisci un heartbeat intero da 30 a 3600 secondi.",
+      "invalid_equipment": "Scegli Automatico, Installato o Non installato per ogni apparecchiatura."
+    },
+    "abort": {
+      "changes_saved": "Le impostazioni di SAJ Local sono state salvate.",
+      "already_configured": "Un'altra voce di SAJ Local possiede ora questo endpoint o questo numero di serie dell'inverter.",
+      "confirmation_not_pending": "Nessuna modifica convalidata è in attesa di conferma.",
+      "prefix_unavailable": "Il prefisso o uno dei suoi ID entità è stato occupato durante la conferma. Non è stato modificato nulla."
+    }
+  },
+  "config_subentries": {
+    "polling_group": {
+      "entry_type": "Gruppo di polling",
+      "initiate_flow": {
+        "user": "Aggiungi gruppo di polling"
+      },
+      "step": {
+        "user": {
+          "title": "Aggiungi gruppo di polling",
+          "description": "Le entità di un gruppo di polling vengono lette con l'intervallo del gruppo. Tutte le altre entità vengono lette con l'intervallo predefinito. L'integrazione invia all'inverter al massimo {budget} richieste al minuto, in modo che il suo modulo di comunicazione non si sovraccarichi. Questa installazione ne usa attualmente {load}. Le entità disabilitate possono essere raggruppate ora e non costano nulla finché non vengono abilitate.",
+          "data": {
+            "name": "Nome",
+            "scan_interval": "Secondi tra gli aggiornamenti",
+            "keys": "Entità"
+          },
+          "data_description": {
+            "keys": "Elencate in ordine di registro, ciascuna con il blocco di registri da cui viene letta. Le entità dello stesso blocco possono condividere una richiesta."
+          }
+        },
+        "reconfigure": {
+          "title": "Modifica gruppo di polling",
+          "description": "Le entità di un gruppo di polling vengono lette con l'intervallo del gruppo. Un'entità può appartenere a un solo gruppo. L'integrazione invia all'inverter al massimo {budget} richieste al minuto, in modo che il suo modulo di comunicazione non si sovraccarichi. Questa installazione ne usa attualmente {load}. Le entità disabilitate possono essere raggruppate ora e non costano nulla finché non vengono abilitate.",
+          "data": {
+            "name": "Nome",
+            "scan_interval": "Secondi tra gli aggiornamenti",
+            "keys": "Entità"
+          },
+          "data_description": {
+            "keys": "Elencate in ordine di registro, ciascuna con il blocco di registri da cui viene letta. Le entità dello stesso blocco possono condividere una richiesta."
+          }
+        },
+        "review_group": {
+          "title": "Controlla il carico di richieste",
+          "description": "Richieste necessarie per leggere questo gruppo una volta: {requests}.\n\nL'integrazione invia all'inverter al massimo {budget} richieste al minuto, in modo che il suo modulo di comunicazione non si sovraccarichi. Questa installazione ne usa ora {before} e ne userà {after} con questo gruppo salvato.",
+          "menu_options": {
+            "save_group": "Salva il gruppo",
+            "change_selection": "Cambia la selezione"
+          }
+        },
+        "review_group_over_budget": {
+          "title": "Controlla il carico di richieste",
+          "description": "Richieste necessarie per leggere questo gruppo una volta: {requests}.\n\nL'integrazione invia all'inverter al massimo {budget} richieste al minuto, in modo che il suo modulo di comunicazione non si sovraccarichi. Questa installazione ne usa ora {before} e ne richiederebbe {after} con questo gruppo salvato. Poiché il limite viene superato, le entità verranno lette più lentamente di quanto configurato. Puoi comunque salvare il gruppo.",
+          "menu_options": {
+            "save_group": "Salva il gruppo",
+            "change_selection": "Cambia la selezione"
+          }
+        }
+      },
+      "error": {
+        "invalid_scan_interval": "Inserisci un intervallo di polling intero di almeno 10 secondi.",
+        "no_sensors_selected": "Seleziona almeno un'entità.",
+        "sensor_in_other_group": "Un'entità selezionata appartiene già a un altro gruppo di polling."
+      },
+      "abort": {
+        "no_sensors": "Questa installazione non ha ancora entità, quindi non è possibile creare un gruppo di polling.",
+        "all_sensors_assigned": "Ogni entità appartiene già a un gruppo di polling, quindi non ne resta nessuna da aggiungere.",
+        "reconfigure_successful": "Il gruppo di polling è stato salvato.",
+        "confirmation_not_pending": "Nessun gruppo di polling convalidato è in attesa di una decisione."
+      }
+    },
+    "power_schedule": {
+      "entry_type": "Pianificazione del controllo della potenza",
+      "initiate_flow": {
+        "user": "Aggiungi pianificazione del controllo della potenza"
+      },
+      "step": {
+        "user": {
+          "title": "Aggiungi pianificazione del controllo della potenza",
+          "description": "Scegli la funzione da mantenere a una potenza impostata e l'aiutante di pianificazione di Home Assistant che indica quando. L'integrazione accende la funzione quando la pianificazione si attiva e la spegne quando si disattiva. Un blocco della pianificazione può contenere il dato aggiuntivo power, in watt interi, con un numero negativo per caricare o prelevare e uno positivo per scaricare o immettere; senza di esso viene usato l'obiettivo di potenza della funzione. Consenti controllo deve essere attivo.",
+          "data": {
+            "function": "Funzione",
+            "schedule": "Pianificazione"
+          },
+          "data_description": {
+            "function": "Ogni funzione può seguire una sola pianificazione.",
+            "schedule": "Un aiutante di pianificazione può essere usato da una sola funzione di questo sistema."
+          }
+        },
+        "reconfigure": {
+          "title": "Modifica pianificazione del controllo della potenza",
+          "description": "Scegli la funzione da mantenere a una potenza impostata e l'aiutante di pianificazione di Home Assistant che indica quando. L'integrazione accende la funzione quando la pianificazione si attiva e la spegne quando si disattiva. Un blocco della pianificazione può contenere il dato aggiuntivo power, in watt interi, con un numero negativo per caricare o prelevare e uno positivo per scaricare o immettere; senza di esso viene usato l'obiettivo di potenza della funzione. Consenti controllo deve essere attivo.",
+          "data": {
+            "function": "Funzione",
+            "schedule": "Pianificazione"
+          },
+          "data_description": {
+            "function": "Ogni funzione può seguire una sola pianificazione.",
+            "schedule": "Un aiutante di pianificazione può essere usato da una sola funzione di questo sistema."
+          }
+        }
+      },
+      "error": {
+        "control_not_allowed": "Consenti controllo è disattivato, quindi una pianificazione non potrebbe fare nulla. Attiva prima Consenti controllo in Configura.",
+        "function_already_scheduled": "Questa funzione segue già una pianificazione in questo sistema.",
+        "schedule_in_use": "Questo aiutante di pianificazione è già usato da un'altra pianificazione del controllo della potenza di questo sistema.",
+        "schedule_not_registered": "Questo aiutante di pianificazione non ha una voce nel registro delle entità, quindi la pianificazione del controllo della potenza non potrebbe seguire una rinomina dell'aiutante. Scegli un aiutante di pianificazione creato dall'interfaccia."
+      },
+      "abort": {
+        "reconfigure_successful": "La pianificazione del controllo della potenza è stata salvata."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "ethernet_protocol_version": {
+        "name": "Versione del protocollo Ethernet"
+      },
+      "ethernet_mac_address": {
+        "name": "Indirizzo MAC Ethernet"
+      },
+      "ev_serial_number": {
+        "name": "Numero di serie del caricatore EV"
+      },
+      "ev_model": {
+        "name": "Modello del caricatore EV"
+      },
+      "ev_software_version": {
+        "name": "Versione software del caricatore EV"
+      },
+      "ev_hardware_version": {
+        "name": "Versione hardware del caricatore EV"
+      },
+      "ev_phase_count": {
+        "name": "Numero di fasi del caricatore EV"
+      },
+      "ev_minimum_power": {
+        "name": "Potenza minima del caricatore EV"
+      },
+      "ev_maximum_power": {
+        "name": "Potenza massima del caricatore EV"
+      },
+      "ev_work_mode": {
+        "name": "Modalità di lavoro del caricatore EV",
+        "state": {
+          "disabled": "Disabilitato",
+          "standard": "Standard",
+          "time_based": "A fasce orarie",
+          "pv_surplus": "Surplus solare",
+          "ems": "EMS"
+        }
+      },
+      "ev_status": {
+        "name": "Stato del caricatore EV",
+        "state": {
+          "idle": "Inattivo",
+          "ready": "Pronto",
+          "charging": "In carica",
+          "charger_suspended": "Caricatore sospeso",
+          "vehicle_suspended": "Veicolo sospeso",
+          "complete": "Completato"
+        }
+      },
+      "ev_l1_voltage": {
+        "name": "Tensione L1 del caricatore EV"
+      },
+      "ev_l1_current": {
+        "name": "Corrente L1 del caricatore EV"
+      },
+      "ev_l2_voltage": {
+        "name": "Tensione L2 del caricatore EV"
+      },
+      "ev_l2_current": {
+        "name": "Corrente L2 del caricatore EV"
+      },
+      "ev_l3_voltage": {
+        "name": "Tensione L3 del caricatore EV"
+      },
+      "ev_l3_current": {
+        "name": "Corrente L3 del caricatore EV"
+      },
+      "ev_power": {
+        "name": "Potenza del caricatore EV"
+      },
+      "ev_charge_duration": {
+        "name": "Durata della ricarica EV"
+      },
+      "ev_session_energy": {
+        "name": "Energia della sessione del caricatore EV"
+      },
+      "ev_total_energy": {
+        "name": "Energia totale del caricatore EV"
+      },
+      "ev_control_pilot_voltage": {
+        "name": "Tensione del control pilot del caricatore EV"
+      },
+      "ev_duty_cycle": {
+        "name": "Duty cycle del caricatore EV"
+      },
+      "ev_remote_control": {
+        "name": "Controllo remoto del caricatore EV",
+        "state": {
+          "off": "Spento",
+          "on": "Acceso"
+        }
+      },
+      "ev_current_setpoint": {
+        "name": "Valore impostato della corrente del caricatore EV"
+      },
+      "ev_session_start": {
+        "name": "Inizio della sessione del caricatore EV"
+      },
+      "ev_session_end": {
+        "name": "Fine della sessione del caricatore EV"
+      },
+      "settings_protocol_version": {
+        "name": "Versione del protocollo delle impostazioni"
+      },
+      "inverter_clock": {
+        "name": "Orologio dell'inverter"
+      },
+      "operating_mode": {
+        "name": "Modalità di funzionamento",
+        "state": {
+          "initialisation": "Inizializzazione",
+          "standby": "Standby",
+          "operating": "In funzione",
+          "off_grid": "Off-grid",
+          "grid_connected_load_bypass": "Carico collegato alla rete / bypass",
+          "fault": "Guasto",
+          "upgrade": "Aggiornamento",
+          "debugging": "Debug",
+          "self_check": "Autodiagnosi",
+          "reset": "Reset"
+        }
+      },
+      "inverter_temperature": {
+        "name": "Temperatura dell'inverter"
+      },
+      "ambient_temperature": {
+        "name": "Temperatura ambiente"
+      },
+      "leakage_current": {
+        "name": "Corrente di dispersione"
+      },
+      "pv1_insulation_resistance": {
+        "name": "Resistenza di isolamento PV1"
+      },
+      "pv2_insulation_resistance": {
+        "name": "Resistenza di isolamento PV2"
+      },
+      "grid_connection_countdown": {
+        "name": "Conto alla rovescia del collegamento alla rete"
+      },
+      "inverter_discharge_power_setpoint": {
+        "name": "Valore impostato della potenza di scarica dell'inverter"
+      },
+      "inverter_charge_power_setpoint": {
+        "name": "Valore impostato della potenza di carica dell'inverter"
+      },
+      "battery_discharge_current_setpoint": {
+        "name": "Valore impostato della corrente di scarica della batteria"
+      },
+      "battery_charge_current_setpoint": {
+        "name": "Valore impostato della corrente di carica della batteria"
+      },
+      "battery_status_code": {
+        "name": "Codice di stato della batteria"
+      },
+      "battery_protocol_active": {
+        "name": "Protocollo della batteria (in vigore)"
+      },
+      "battery_charge_limit_active": {
+        "name": "Limite di carica della batteria (in vigore)"
+      },
+      "battery_discharge_limit_active": {
+        "name": "Limite di scarica della batteria (in vigore)"
+      },
+      "battery_depth_of_discharge_active": {
+        "name": "Profondità di scarica della batteria (in vigore)"
+      },
+      "backup_reserve_soc_active": {
+        "name": "Stato di carica di riserva per il backup (in vigore)"
+      },
+      "meter_configuration_active": {
+        "name": "Configurazione del contatore (in vigore)"
+      },
+      "grid_l1_voltage": {
+        "name": "Tensione rete L1"
+      },
+      "grid_l1_current": {
+        "name": "Corrente rete L1"
+      },
+      "grid_l1_frequency": {
+        "name": "Frequenza rete L1"
+      },
+      "grid_l1_dc_current": {
+        "name": "Corrente continua rete L1"
+      },
+      "grid_l1_power": {
+        "name": "Potenza rete L1"
+      },
+      "grid_l1_apparent_power": {
+        "name": "Potenza apparente rete L1"
+      },
+      "grid_l1_power_factor": {
+        "name": "Fattore di potenza rete L1"
+      },
+      "grid_l2_voltage": {
+        "name": "Tensione rete L2"
+      },
+      "grid_l2_current": {
+        "name": "Corrente rete L2"
+      },
+      "grid_l2_frequency": {
+        "name": "Frequenza rete L2"
+      },
+      "grid_l2_dc_current": {
+        "name": "Corrente continua rete L2"
+      },
+      "grid_l2_power": {
+        "name": "Potenza rete L2"
+      },
+      "grid_l2_apparent_power": {
+        "name": "Potenza apparente rete L2"
+      },
+      "grid_l2_power_factor": {
+        "name": "Fattore di potenza rete L2"
+      },
+      "grid_l3_voltage": {
+        "name": "Tensione rete L3"
+      },
+      "grid_l3_current": {
+        "name": "Corrente rete L3"
+      },
+      "grid_l3_frequency": {
+        "name": "Frequenza rete L3"
+      },
+      "grid_l3_dc_current": {
+        "name": "Corrente continua rete L3"
+      },
+      "grid_l3_power": {
+        "name": "Potenza rete L3"
+      },
+      "grid_l3_apparent_power": {
+        "name": "Potenza apparente rete L3"
+      },
+      "grid_l3_power_factor": {
+        "name": "Fattore di potenza rete L3"
+      },
+      "inverter_l1_voltage": {
+        "name": "Tensione inverter L1"
+      },
+      "inverter_l1_current": {
+        "name": "Corrente inverter L1"
+      },
+      "inverter_l1_frequency": {
+        "name": "Frequenza inverter L1"
+      },
+      "inverter_l1_power": {
+        "name": "Potenza inverter L1"
+      },
+      "inverter_l1_apparent_power": {
+        "name": "Potenza apparente inverter L1"
+      },
+      "inverter_l2_voltage": {
+        "name": "Tensione inverter L2"
+      },
+      "inverter_l2_current": {
+        "name": "Corrente inverter L2"
+      },
+      "inverter_l2_frequency": {
+        "name": "Frequenza inverter L2"
+      },
+      "inverter_l2_power": {
+        "name": "Potenza inverter L2"
+      },
+      "inverter_l2_apparent_power": {
+        "name": "Potenza apparente inverter L2"
+      },
+      "inverter_l3_voltage": {
+        "name": "Tensione inverter L3"
+      },
+      "inverter_l3_current": {
+        "name": "Corrente inverter L3"
+      },
+      "inverter_l3_frequency": {
+        "name": "Frequenza inverter L3"
+      },
+      "inverter_l3_power": {
+        "name": "Potenza inverter L3"
+      },
+      "inverter_l3_apparent_power": {
+        "name": "Potenza apparente inverter L3"
+      },
+      "backup_l1_voltage": {
+        "name": "Tensione backup L1"
+      },
+      "backup_l1_current": {
+        "name": "Corrente backup L1"
+      },
+      "backup_l1_frequency": {
+        "name": "Frequenza backup L1"
+      },
+      "backup_l1_dc_voltage": {
+        "name": "Tensione continua backup L1"
+      },
+      "backup_l1_power": {
+        "name": "Potenza backup L1"
+      },
+      "backup_l1_apparent_power": {
+        "name": "Potenza apparente backup L1"
+      },
+      "backup_l2_voltage": {
+        "name": "Tensione backup L2"
+      },
+      "backup_l2_current": {
+        "name": "Corrente backup L2"
+      },
+      "backup_l2_frequency": {
+        "name": "Frequenza backup L2"
+      },
+      "backup_l2_dc_voltage": {
+        "name": "Tensione continua backup L2"
+      },
+      "backup_l2_power": {
+        "name": "Potenza backup L2"
+      },
+      "backup_l2_apparent_power": {
+        "name": "Potenza apparente backup L2"
+      },
+      "backup_l3_voltage": {
+        "name": "Tensione backup L3"
+      },
+      "backup_l3_current": {
+        "name": "Corrente backup L3"
+      },
+      "backup_l3_frequency": {
+        "name": "Frequenza backup L3"
+      },
+      "backup_l3_dc_voltage": {
+        "name": "Tensione continua backup L3"
+      },
+      "backup_l3_power": {
+        "name": "Potenza backup L3"
+      },
+      "backup_l3_apparent_power": {
+        "name": "Potenza apparente backup L3"
+      },
+      "dc_bus_voltage": {
+        "name": "Tensione del bus CC"
+      },
+      "dc_bus_slave_voltage": {
+        "name": "Tensione del bus CC slave"
+      },
+      "battery_voltage": {
+        "name": "Tensione della batteria"
+      },
+      "battery_current": {
+        "name": "Corrente della batteria"
+      },
+      "battery_port_power": {
+        "name": "Potenza della porta della batteria"
+      },
+      "battery_temperature": {
+        "name": "Temperatura della batteria"
+      },
+      "battery_soc": {
+        "name": "Stato di carica della batteria"
+      },
+      "pv1_voltage": {
+        "name": "Tensione PV1"
+      },
+      "pv1_current": {
+        "name": "Corrente PV1"
+      },
+      "pv1_power": {
+        "name": "Potenza PV1"
+      },
+      "pv2_voltage": {
+        "name": "Tensione PV2"
+      },
+      "pv2_current": {
+        "name": "Corrente PV2"
+      },
+      "pv2_power": {
+        "name": "Potenza PV2"
+      },
+      "grid_output_l1_voltage": {
+        "name": "Tensione uscita rete L1"
+      },
+      "grid_output_l1_current": {
+        "name": "Corrente uscita rete L1"
+      },
+      "grid_output_l1_frequency": {
+        "name": "Frequenza uscita rete L1"
+      },
+      "grid_output_l1_power": {
+        "name": "Potenza uscita rete L1"
+      },
+      "grid_output_l2_voltage": {
+        "name": "Tensione uscita rete L2"
+      },
+      "grid_output_l2_power": {
+        "name": "Potenza uscita rete L2"
+      },
+      "grid_output_l3_voltage": {
+        "name": "Tensione uscita rete L3"
+      },
+      "grid_output_l3_power": {
+        "name": "Potenza uscita rete L3"
+      },
+      "load_power": {
+        "name": "Potenza del carico domestico"
+      },
+      "pv_power": {
+        "name": "Potenza solare"
+      },
+      "battery_power": {
+        "name": "Potenza della batteria"
+      },
+      "grid_power": {
+        "name": "Potenza della rete"
+      },
+      "inverter_power": {
+        "name": "Potenza dell'inverter"
+      },
+      "grid_load_power": {
+        "name": "Potenza del carico di rete"
+      },
+      "pv_energy_today": {
+        "name": "Energia solare oggi"
+      },
+      "pv_energy_month": {
+        "name": "Energia solare questo mese"
+      },
+      "pv_energy_year": {
+        "name": "Energia solare quest'anno"
+      },
+      "pv_energy_total": {
+        "name": "Energia solare totale"
+      },
+      "battery_charge_energy_today": {
+        "name": "Energia di carica della batteria oggi"
+      },
+      "battery_charge_energy_month": {
+        "name": "Energia di carica della batteria questo mese"
+      },
+      "battery_charge_energy_year": {
+        "name": "Energia di carica della batteria quest'anno"
+      },
+      "battery_charge_energy_total": {
+        "name": "Energia di carica della batteria totale"
+      },
+      "battery_discharge_energy_today": {
+        "name": "Energia di scarica della batteria oggi"
+      },
+      "battery_discharge_energy_month": {
+        "name": "Energia di scarica della batteria questo mese"
+      },
+      "battery_discharge_energy_year": {
+        "name": "Energia di scarica della batteria quest'anno"
+      },
+      "battery_discharge_energy_total": {
+        "name": "Energia di scarica della batteria totale"
+      },
+      "load_energy_today": {
+        "name": "Energia del carico domestico oggi"
+      },
+      "load_energy_month": {
+        "name": "Energia del carico domestico questo mese"
+      },
+      "load_energy_year": {
+        "name": "Energia del carico domestico quest'anno"
+      },
+      "load_energy_total": {
+        "name": "Energia del carico domestico totale"
+      },
+      "backup_load_energy_today": {
+        "name": "Energia dei carichi di backup oggi"
+      },
+      "backup_load_energy_month": {
+        "name": "Energia dei carichi di backup questo mese"
+      },
+      "backup_load_energy_year": {
+        "name": "Energia dei carichi di backup quest'anno"
+      },
+      "backup_load_energy_total": {
+        "name": "Energia dei carichi di backup totale"
+      },
+      "grid_l1_export_energy_today": {
+        "name": "Energia immessa in rete L1 oggi"
+      },
+      "grid_l1_export_energy_month": {
+        "name": "Energia immessa in rete L1 questo mese"
+      },
+      "grid_l1_export_energy_year": {
+        "name": "Energia immessa in rete L1 quest'anno"
+      },
+      "grid_l1_export_energy_total": {
+        "name": "Energia immessa in rete L1 totale"
+      },
+      "grid_l1_import_energy_today": {
+        "name": "Energia prelevata dalla rete L1 oggi"
+      },
+      "grid_l1_import_energy_month": {
+        "name": "Energia prelevata dalla rete L1 questo mese"
+      },
+      "grid_l1_import_energy_year": {
+        "name": "Energia prelevata dalla rete L1 quest'anno"
+      },
+      "grid_l1_import_energy_total": {
+        "name": "Energia prelevata dalla rete L1 totale"
+      },
+      "grid_l2_export_energy_today": {
+        "name": "Energia immessa in rete L2 oggi"
+      },
+      "grid_l2_export_energy_month": {
+        "name": "Energia immessa in rete L2 questo mese"
+      },
+      "grid_l2_export_energy_year": {
+        "name": "Energia immessa in rete L2 quest'anno"
+      },
+      "grid_l2_export_energy_total": {
+        "name": "Energia immessa in rete L2 totale"
+      },
+      "grid_l3_export_energy_today": {
+        "name": "Energia immessa in rete L3 oggi"
+      },
+      "grid_l3_export_energy_month": {
+        "name": "Energia immessa in rete L3 questo mese"
+      },
+      "grid_l3_export_energy_year": {
+        "name": "Energia immessa in rete L3 quest'anno"
+      },
+      "grid_l3_export_energy_total": {
+        "name": "Energia immessa in rete L3 totale"
+      },
+      "grid_l2_import_energy_today": {
+        "name": "Energia prelevata dalla rete L2 oggi"
+      },
+      "grid_l2_import_energy_month": {
+        "name": "Energia prelevata dalla rete L2 questo mese"
+      },
+      "grid_l2_import_energy_year": {
+        "name": "Energia prelevata dalla rete L2 quest'anno"
+      },
+      "grid_l2_import_energy_total": {
+        "name": "Energia prelevata dalla rete L2 totale"
+      },
+      "grid_l3_import_energy_today": {
+        "name": "Energia prelevata dalla rete L3 oggi"
+      },
+      "grid_l3_import_energy_month": {
+        "name": "Energia prelevata dalla rete L3 questo mese"
+      },
+      "grid_l3_import_energy_year": {
+        "name": "Energia prelevata dalla rete L3 quest'anno"
+      },
+      "grid_l3_import_energy_total": {
+        "name": "Energia prelevata dalla rete L3 totale"
+      },
+      "grid_import_energy_today": {
+        "name": "Energia prelevata dalla rete oggi"
+      },
+      "grid_import_energy_month": {
+        "name": "Energia prelevata dalla rete questo mese"
+      },
+      "grid_import_energy_year": {
+        "name": "Energia prelevata dalla rete quest'anno"
+      },
+      "grid_import_energy_total": {
+        "name": "Energia prelevata dalla rete totale"
+      },
+      "grid_export_energy_today": {
+        "name": "Energia immessa in rete oggi"
+      },
+      "grid_export_energy_month": {
+        "name": "Energia immessa in rete questo mese"
+      },
+      "grid_export_energy_year": {
+        "name": "Energia immessa in rete quest'anno"
+      },
+      "grid_export_energy_total": {
+        "name": "Energia immessa in rete totale"
+      },
+      "parallel_mode": {
+        "name": "Modalità parallelo"
+      },
+      "parallel_id": {
+        "name": "ID della macchina in parallelo"
+      },
+      "parallel_count": {
+        "name": "Numero di macchine in parallelo"
+      },
+      "parallel_online_count": {
+        "name": "Macchine in parallelo online"
+      },
+      "parallel_battery_soc": {
+        "name": "Stato di carica della batteria del sistema in parallelo"
+      },
+      "parallel_battery_capacity": {
+        "name": "Capacità della batteria del sistema in parallelo"
+      },
+      "parallel_meter_b_power": {
+        "name": "Potenza del contatore B del sistema in parallelo"
+      },
+      "parallel_pv_energy_today": {
+        "name": "Energia solare del sistema in parallelo oggi"
+      },
+      "parallel_pv_energy_month": {
+        "name": "Energia solare del sistema in parallelo questo mese"
+      },
+      "parallel_pv_energy_year": {
+        "name": "Energia solare del sistema in parallelo quest'anno"
+      },
+      "parallel_pv_energy_total": {
+        "name": "Energia solare del sistema in parallelo totale"
+      },
+      "parallel_battery_charge_energy_today": {
+        "name": "Energia di carica della batteria del sistema in parallelo oggi"
+      },
+      "parallel_battery_charge_energy_month": {
+        "name": "Energia di carica della batteria del sistema in parallelo questo mese"
+      },
+      "parallel_battery_charge_energy_year": {
+        "name": "Energia di carica della batteria del sistema in parallelo quest'anno"
+      },
+      "parallel_battery_charge_energy_total": {
+        "name": "Energia di carica della batteria del sistema in parallelo totale"
+      },
+      "parallel_battery_discharge_energy_today": {
+        "name": "Energia di scarica della batteria del sistema in parallelo oggi"
+      },
+      "parallel_battery_discharge_energy_month": {
+        "name": "Energia di scarica della batteria del sistema in parallelo questo mese"
+      },
+      "parallel_battery_discharge_energy_year": {
+        "name": "Energia di scarica della batteria del sistema in parallelo quest'anno"
+      },
+      "parallel_battery_discharge_energy_total": {
+        "name": "Energia di scarica della batteria del sistema in parallelo totale"
+      },
+      "parallel_grid_l1_export_energy_today": {
+        "name": "Energia immessa in rete L1 del sistema in parallelo oggi"
+      },
+      "parallel_grid_l1_export_energy_month": {
+        "name": "Energia immessa in rete L1 del sistema in parallelo questo mese"
+      },
+      "parallel_grid_l1_export_energy_year": {
+        "name": "Energia immessa in rete L1 del sistema in parallelo quest'anno"
+      },
+      "parallel_grid_l1_export_energy_total": {
+        "name": "Energia immessa in rete L1 del sistema in parallelo totale"
+      },
+      "parallel_grid_l2_export_energy_today": {
+        "name": "Energia immessa in rete L2 del sistema in parallelo oggi"
+      },
+      "parallel_grid_l2_export_energy_month": {
+        "name": "Energia immessa in rete L2 del sistema in parallelo questo mese"
+      },
+      "parallel_grid_l2_export_energy_year": {
+        "name": "Energia immessa in rete L2 del sistema in parallelo quest'anno"
+      },
+      "parallel_grid_l2_export_energy_total": {
+        "name": "Energia immessa in rete L2 del sistema in parallelo totale"
+      },
+      "parallel_grid_l3_export_energy_today": {
+        "name": "Energia immessa in rete L3 del sistema in parallelo oggi"
+      },
+      "parallel_grid_l3_export_energy_month": {
+        "name": "Energia immessa in rete L3 del sistema in parallelo questo mese"
+      },
+      "parallel_grid_l3_export_energy_year": {
+        "name": "Energia immessa in rete L3 del sistema in parallelo quest'anno"
+      },
+      "parallel_grid_l3_export_energy_total": {
+        "name": "Energia immessa in rete L3 del sistema in parallelo totale"
+      },
+      "parallel_grid_l1_import_energy_today": {
+        "name": "Energia prelevata dalla rete L1 del sistema in parallelo oggi"
+      },
+      "parallel_grid_l1_import_energy_month": {
+        "name": "Energia prelevata dalla rete L1 del sistema in parallelo questo mese"
+      },
+      "parallel_grid_l1_import_energy_year": {
+        "name": "Energia prelevata dalla rete L1 del sistema in parallelo quest'anno"
+      },
+      "parallel_grid_l1_import_energy_total": {
+        "name": "Energia prelevata dalla rete L1 del sistema in parallelo totale"
+      },
+      "parallel_grid_l2_import_energy_today": {
+        "name": "Energia prelevata dalla rete L2 del sistema in parallelo oggi"
+      },
+      "parallel_grid_l2_import_energy_month": {
+        "name": "Energia prelevata dalla rete L2 del sistema in parallelo questo mese"
+      },
+      "parallel_grid_l2_import_energy_year": {
+        "name": "Energia prelevata dalla rete L2 del sistema in parallelo quest'anno"
+      },
+      "parallel_grid_l2_import_energy_total": {
+        "name": "Energia prelevata dalla rete L2 del sistema in parallelo totale"
+      },
+      "parallel_grid_l3_import_energy_today": {
+        "name": "Energia prelevata dalla rete L3 del sistema in parallelo oggi"
+      },
+      "parallel_grid_l3_import_energy_month": {
+        "name": "Energia prelevata dalla rete L3 del sistema in parallelo questo mese"
+      },
+      "parallel_grid_l3_import_energy_year": {
+        "name": "Energia prelevata dalla rete L3 del sistema in parallelo quest'anno"
+      },
+      "parallel_grid_l3_import_energy_total": {
+        "name": "Energia prelevata dalla rete L3 del sistema in parallelo totale"
+      },
+      "parallel_load_energy_today": {
+        "name": "Energia del carico domestico del sistema in parallelo oggi"
+      },
+      "parallel_load_energy_month": {
+        "name": "Energia del carico domestico del sistema in parallelo questo mese"
+      },
+      "parallel_load_energy_year": {
+        "name": "Energia del carico domestico del sistema in parallelo quest'anno"
+      },
+      "parallel_load_energy_total": {
+        "name": "Energia del carico domestico del sistema in parallelo totale"
+      },
+      "parallel_grid_import_energy_today": {
+        "name": "Energia prelevata dalla rete del sistema in parallelo oggi"
+      },
+      "parallel_grid_import_energy_month": {
+        "name": "Energia prelevata dalla rete del sistema in parallelo questo mese"
+      },
+      "parallel_grid_import_energy_year": {
+        "name": "Energia prelevata dalla rete del sistema in parallelo quest'anno"
+      },
+      "parallel_grid_import_energy_total": {
+        "name": "Energia prelevata dalla rete del sistema in parallelo totale"
+      },
+      "parallel_grid_export_energy_today": {
+        "name": "Energia immessa in rete del sistema in parallelo oggi"
+      },
+      "parallel_grid_export_energy_month": {
+        "name": "Energia immessa in rete del sistema in parallelo questo mese"
+      },
+      "parallel_grid_export_energy_year": {
+        "name": "Energia immessa in rete del sistema in parallelo quest'anno"
+      },
+      "parallel_grid_export_energy_total": {
+        "name": "Energia immessa in rete del sistema in parallelo totale"
+      },
+      "parallel_pv_meter_energy_today": {
+        "name": "Energia del contatore solare del sistema in parallelo oggi"
+      },
+      "parallel_pv_meter_energy_month": {
+        "name": "Energia del contatore solare del sistema in parallelo questo mese"
+      },
+      "parallel_pv_meter_energy_year": {
+        "name": "Energia del contatore solare del sistema in parallelo quest'anno"
+      },
+      "parallel_pv_meter_energy_total": {
+        "name": "Energia del contatore solare del sistema in parallelo totale"
+      },
+      "ev_settings_protocol_version": {
+        "name": "Versione del protocollo delle impostazioni del caricatore EV"
+      },
+      "five_minute_average_grid_power": {
+        "name": "Potenza della rete (media 5 minuti)"
+      },
+      "five_minute_average_grid_l1_power": {
+        "name": "Potenza rete L1 (media 5 minuti)"
+      },
+      "five_minute_average_grid_l1_voltage": {
+        "name": "Tensione rete L1 (media 5 minuti)"
+      },
+      "five_minute_average_grid_l1_current": {
+        "name": "Corrente rete L1 (media 5 minuti)"
+      },
+      "five_minute_average_grid_l1_frequency": {
+        "name": "Frequenza rete L1 (media 5 minuti)"
+      },
+      "five_minute_average_grid_l2_power": {
+        "name": "Potenza rete L2 (media 5 minuti)"
+      },
+      "five_minute_average_grid_l2_voltage": {
+        "name": "Tensione rete L2 (media 5 minuti)"
+      },
+      "five_minute_average_grid_l2_current": {
+        "name": "Corrente rete L2 (media 5 minuti)"
+      },
+      "five_minute_average_grid_l2_frequency": {
+        "name": "Frequenza rete L2 (media 5 minuti)"
+      },
+      "five_minute_average_grid_l3_power": {
+        "name": "Potenza rete L3 (media 5 minuti)"
+      },
+      "five_minute_average_grid_l3_voltage": {
+        "name": "Tensione rete L3 (media 5 minuti)"
+      },
+      "five_minute_average_grid_l3_current": {
+        "name": "Corrente rete L3 (media 5 minuti)"
+      },
+      "five_minute_average_grid_l3_frequency": {
+        "name": "Frequenza rete L3 (media 5 minuti)"
+      },
+      "five_minute_average_inverter_power": {
+        "name": "Potenza dell'inverter (media 5 minuti)"
+      },
+      "five_minute_average_inverter_l1_power": {
+        "name": "Potenza inverter L1 (media 5 minuti)"
+      },
+      "five_minute_average_inverter_l1_voltage": {
+        "name": "Tensione inverter L1 (media 5 minuti)"
+      },
+      "five_minute_average_inverter_l1_current": {
+        "name": "Corrente inverter L1 (media 5 minuti)"
+      },
+      "five_minute_average_inverter_l1_frequency": {
+        "name": "Frequenza inverter L1 (media 5 minuti)"
+      },
+      "five_minute_average_inverter_l2_power": {
+        "name": "Potenza inverter L2 (media 5 minuti)"
+      },
+      "five_minute_average_inverter_l2_voltage": {
+        "name": "Tensione inverter L2 (media 5 minuti)"
+      },
+      "five_minute_average_inverter_l2_current": {
+        "name": "Corrente inverter L2 (media 5 minuti)"
+      },
+      "five_minute_average_inverter_l2_frequency": {
+        "name": "Frequenza inverter L2 (media 5 minuti)"
+      },
+      "five_minute_average_inverter_l3_power": {
+        "name": "Potenza inverter L3 (media 5 minuti)"
+      },
+      "five_minute_average_inverter_l3_voltage": {
+        "name": "Tensione inverter L3 (media 5 minuti)"
+      },
+      "five_minute_average_inverter_l3_current": {
+        "name": "Corrente inverter L3 (media 5 minuti)"
+      },
+      "five_minute_average_inverter_l3_frequency": {
+        "name": "Frequenza inverter L3 (media 5 minuti)"
+      },
+      "five_minute_average_load_power": {
+        "name": "Potenza del carico domestico (media 5 minuti)"
+      },
+      "five_minute_average_load_l1_power": {
+        "name": "Potenza carico domestico L1 (media 5 minuti)"
+      },
+      "five_minute_average_load_l1_voltage": {
+        "name": "Tensione carico domestico L1 (media 5 minuti)"
+      },
+      "five_minute_average_load_l1_current": {
+        "name": "Corrente carico domestico L1 (media 5 minuti)"
+      },
+      "five_minute_average_load_l1_frequency": {
+        "name": "Frequenza carico domestico L1 (media 5 minuti)"
+      },
+      "five_minute_average_load_l2_power": {
+        "name": "Potenza carico domestico L2 (media 5 minuti)"
+      },
+      "five_minute_average_load_l2_voltage": {
+        "name": "Tensione carico domestico L2 (media 5 minuti)"
+      },
+      "five_minute_average_load_l2_current": {
+        "name": "Corrente carico domestico L2 (media 5 minuti)"
+      },
+      "five_minute_average_load_l2_frequency": {
+        "name": "Frequenza carico domestico L2 (media 5 minuti)"
+      },
+      "five_minute_average_load_l3_power": {
+        "name": "Potenza carico domestico L3 (media 5 minuti)"
+      },
+      "five_minute_average_load_l3_voltage": {
+        "name": "Tensione carico domestico L3 (media 5 minuti)"
+      },
+      "five_minute_average_load_l3_current": {
+        "name": "Corrente carico domestico L3 (media 5 minuti)"
+      },
+      "five_minute_average_load_l3_frequency": {
+        "name": "Frequenza carico domestico L3 (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_power": {
+        "name": "Potenza del carico di rete (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_l1_power": {
+        "name": "Potenza carico di rete L1 (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_l1_voltage": {
+        "name": "Tensione carico di rete L1 (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_l1_current": {
+        "name": "Corrente carico di rete L1 (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_l1_frequency": {
+        "name": "Frequenza carico di rete L1 (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_l2_power": {
+        "name": "Potenza carico di rete L2 (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_l2_voltage": {
+        "name": "Tensione carico di rete L2 (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_l2_current": {
+        "name": "Corrente carico di rete L2 (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_l2_frequency": {
+        "name": "Frequenza carico di rete L2 (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_l3_power": {
+        "name": "Potenza carico di rete L3 (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_l3_voltage": {
+        "name": "Tensione carico di rete L3 (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_l3_current": {
+        "name": "Corrente carico di rete L3 (media 5 minuti)"
+      },
+      "five_minute_average_grid_load_l3_frequency": {
+        "name": "Frequenza carico di rete L3 (media 5 minuti)"
+      },
+      "five_minute_average_backup_power": {
+        "name": "Potenza backup (media 5 minuti)"
+      },
+      "five_minute_average_backup_l1_power": {
+        "name": "Potenza backup L1 (media 5 minuti)"
+      },
+      "five_minute_average_backup_l1_voltage": {
+        "name": "Tensione backup L1 (media 5 minuti)"
+      },
+      "five_minute_average_backup_l1_current": {
+        "name": "Corrente backup L1 (media 5 minuti)"
+      },
+      "five_minute_average_backup_l1_frequency": {
+        "name": "Frequenza backup L1 (media 5 minuti)"
+      },
+      "five_minute_average_backup_l2_power": {
+        "name": "Potenza backup L2 (media 5 minuti)"
+      },
+      "five_minute_average_backup_l2_voltage": {
+        "name": "Tensione backup L2 (media 5 minuti)"
+      },
+      "five_minute_average_backup_l2_current": {
+        "name": "Corrente backup L2 (media 5 minuti)"
+      },
+      "five_minute_average_backup_l2_frequency": {
+        "name": "Frequenza backup L2 (media 5 minuti)"
+      },
+      "five_minute_average_backup_l3_power": {
+        "name": "Potenza backup L3 (media 5 minuti)"
+      },
+      "five_minute_average_backup_l3_voltage": {
+        "name": "Tensione backup L3 (media 5 minuti)"
+      },
+      "five_minute_average_backup_l3_current": {
+        "name": "Corrente backup L3 (media 5 minuti)"
+      },
+      "five_minute_average_backup_l3_frequency": {
+        "name": "Frequenza backup L3 (media 5 minuti)"
+      },
+      "five_minute_average_pv_power": {
+        "name": "Potenza solare (media 5 minuti)"
+      },
+      "five_minute_average_pv1_voltage": {
+        "name": "Tensione PV1 (media 5 minuti)"
+      },
+      "five_minute_average_pv1_current": {
+        "name": "Corrente PV1 (media 5 minuti)"
+      },
+      "five_minute_average_pv1_power": {
+        "name": "Potenza PV1 (media 5 minuti)"
+      },
+      "five_minute_average_pv2_voltage": {
+        "name": "Tensione PV2 (media 5 minuti)"
+      },
+      "five_minute_average_pv2_current": {
+        "name": "Corrente PV2 (media 5 minuti)"
+      },
+      "five_minute_average_pv2_power": {
+        "name": "Potenza PV2 (media 5 minuti)"
+      },
+      "five_minute_average_generator_power": {
+        "name": "Potenza del generatore (media 5 minuti)"
+      },
+      "five_minute_average_generator_l1_power": {
+        "name": "Potenza generatore L1 (media 5 minuti)"
+      },
+      "five_minute_average_generator_l1_voltage": {
+        "name": "Tensione generatore L1 (media 5 minuti)"
+      },
+      "five_minute_average_generator_l1_current": {
+        "name": "Corrente generatore L1 (media 5 minuti)"
+      },
+      "five_minute_average_generator_l1_frequency": {
+        "name": "Frequenza generatore L1 (media 5 minuti)"
+      },
+      "five_minute_average_generator_l2_power": {
+        "name": "Potenza generatore L2 (media 5 minuti)"
+      },
+      "five_minute_average_generator_l2_voltage": {
+        "name": "Tensione generatore L2 (media 5 minuti)"
+      },
+      "five_minute_average_generator_l2_current": {
+        "name": "Corrente generatore L2 (media 5 minuti)"
+      },
+      "five_minute_average_generator_l2_frequency": {
+        "name": "Frequenza generatore L2 (media 5 minuti)"
+      },
+      "five_minute_average_generator_l3_power": {
+        "name": "Potenza generatore L3 (media 5 minuti)"
+      },
+      "five_minute_average_generator_l3_voltage": {
+        "name": "Tensione generatore L3 (media 5 minuti)"
+      },
+      "five_minute_average_generator_l3_current": {
+        "name": "Corrente generatore L3 (media 5 minuti)"
+      },
+      "five_minute_average_generator_l3_frequency": {
+        "name": "Frequenza generatore L3 (media 5 minuti)"
+      },
+      "five_minute_average_battery_power": {
+        "name": "Potenza della batteria (media 5 minuti)"
+      },
+      "five_minute_average_battery_soc": {
+        "name": "Stato di carica della batteria (media 5 minuti)"
+      },
+      "five_minute_average_battery_pack1_power": {
+        "name": "Potenza modulo batteria 1 (media 5 minuti)"
+      },
+      "five_minute_average_battery_pack1_voltage": {
+        "name": "Tensione modulo batteria 1 (media 5 minuti)"
+      },
+      "five_minute_average_battery_pack1_current": {
+        "name": "Corrente modulo batteria 1 (media 5 minuti)"
+      },
+      "five_minute_average_battery_pack1_soc": {
+        "name": "Stato di carica modulo batteria 1 (media 5 minuti)"
+      },
+      "five_minute_average_battery_pack1_temperature": {
+        "name": "Temperatura modulo batteria 1 (media 5 minuti)"
+      },
+      "product_code": {
+        "name": "Codice prodotto"
+      },
+      "display_software_version": {
+        "name": "Versione software del display"
+      },
+      "master_software_version": {
+        "name": "Versione software master"
+      },
+      "slave_software_version": {
+        "name": "Versione software slave"
+      },
+      "display_hardware_version": {
+        "name": "Versione hardware del display"
+      },
+      "control_hardware_version": {
+        "name": "Versione hardware di controllo"
+      },
+      "power_hardware_version": {
+        "name": "Versione hardware di potenza"
+      },
+      "battery_pack_count": {
+        "name": "Numero di moduli batteria"
+      },
+      "battery_capacity": {
+        "name": "Capacità della batteria"
+      },
+      "battery_usable_capacity": {
+        "name": "Capacità utilizzabile della batteria"
+      },
+      "battery_online_code": {
+        "name": "Codice online della batteria"
+      },
+      "battery_pack1_soc": {
+        "name": "Stato di carica modulo batteria 1"
+      },
+      "battery_pack1_soh": {
+        "name": "Stato di salute modulo batteria 1"
+      },
+      "battery_pack1_voltage": {
+        "name": "Tensione modulo batteria 1"
+      },
+      "battery_pack1_current": {
+        "name": "Corrente modulo batteria 1"
+      },
+      "battery_pack1_temperature": {
+        "name": "Temperatura modulo batteria 1"
+      },
+      "battery_pack1_cycles": {
+        "name": "Cicli modulo batteria 1"
+      },
+      "battery_pack1_discharged_energy": {
+        "name": "Energia scaricata modulo batteria 1"
+      },
+      "battery_discharge_current_limit": {
+        "name": "Limite della corrente di scarica della batteria"
+      },
+      "battery_charge_current_limit": {
+        "name": "Limite della corrente di carica della batteria"
+      },
+      "meter_a_status": {
+        "name": "Stato del contatore A",
+        "state": {
+          "offline": "Offline",
+          "online": "Online"
+        }
+      },
+      "meter_a_l1_voltage": {
+        "name": "Tensione contatore A L1"
+      },
+      "meter_a_l1_current": {
+        "name": "Corrente contatore A L1"
+      },
+      "meter_a_l1_power": {
+        "name": "Potenza contatore A L1"
+      },
+      "meter_a_l1_apparent_power": {
+        "name": "Potenza apparente contatore A L1"
+      },
+      "meter_a_l1_power_factor": {
+        "name": "Fattore di potenza contatore A L1"
+      },
+      "meter_a_l1_frequency": {
+        "name": "Frequenza contatore A L1"
+      },
+      "meter_a_l2_voltage": {
+        "name": "Tensione contatore A L2"
+      },
+      "meter_a_l2_current": {
+        "name": "Corrente contatore A L2"
+      },
+      "meter_a_l2_power": {
+        "name": "Potenza contatore A L2"
+      },
+      "meter_a_l2_apparent_power": {
+        "name": "Potenza apparente contatore A L2"
+      },
+      "meter_a_l2_power_factor": {
+        "name": "Fattore di potenza contatore A L2"
+      },
+      "meter_a_l2_frequency": {
+        "name": "Frequenza contatore A L2"
+      },
+      "meter_a_l3_voltage": {
+        "name": "Tensione contatore A L3"
+      },
+      "meter_a_l3_current": {
+        "name": "Corrente contatore A L3"
+      },
+      "meter_a_l3_power": {
+        "name": "Potenza contatore A L3"
+      },
+      "meter_a_l3_apparent_power": {
+        "name": "Potenza apparente contatore A L3"
+      },
+      "meter_a_l3_power_factor": {
+        "name": "Fattore di potenza contatore A L3"
+      },
+      "meter_a_l3_frequency": {
+        "name": "Frequenza contatore A L3"
+      },
+      "meter_b_status": {
+        "name": "Stato del contatore B",
+        "state": {
+          "offline": "Offline",
+          "online": "Online"
+        }
+      },
+      "meter_b_l1_voltage": {
+        "name": "Tensione contatore B L1"
+      },
+      "meter_b_l1_current": {
+        "name": "Corrente contatore B L1"
+      },
+      "meter_b_l1_power": {
+        "name": "Potenza contatore B L1"
+      },
+      "meter_b_l1_apparent_power": {
+        "name": "Potenza apparente contatore B L1"
+      },
+      "meter_b_l1_power_factor": {
+        "name": "Fattore di potenza contatore B L1"
+      },
+      "meter_b_l1_frequency": {
+        "name": "Frequenza contatore B L1"
+      },
+      "meter_b_l2_voltage": {
+        "name": "Tensione contatore B L2"
+      },
+      "meter_b_l2_current": {
+        "name": "Corrente contatore B L2"
+      },
+      "meter_b_l2_power": {
+        "name": "Potenza contatore B L2"
+      },
+      "meter_b_l2_apparent_power": {
+        "name": "Potenza apparente contatore B L2"
+      },
+      "meter_b_l2_power_factor": {
+        "name": "Fattore di potenza contatore B L2"
+      },
+      "meter_b_l2_frequency": {
+        "name": "Frequenza contatore B L2"
+      },
+      "meter_b_l3_voltage": {
+        "name": "Tensione contatore B L3"
+      },
+      "meter_b_l3_current": {
+        "name": "Corrente contatore B L3"
+      },
+      "meter_b_l3_power": {
+        "name": "Potenza contatore B L3"
+      },
+      "meter_b_l3_apparent_power": {
+        "name": "Potenza apparente contatore B L3"
+      },
+      "meter_b_l3_power_factor": {
+        "name": "Fattore di potenza contatore B L3"
+      },
+      "meter_b_l3_frequency": {
+        "name": "Frequenza contatore B L3"
+      },
+      "meter_a_l1_reactive_power": {
+        "name": "Potenza reattiva contatore A L1"
+      },
+      "meter_a_l2_reactive_power": {
+        "name": "Potenza reattiva contatore A L2"
+      },
+      "meter_a_l3_reactive_power": {
+        "name": "Potenza reattiva contatore A L3"
+      },
+      "meter_b_l1_reactive_power": {
+        "name": "Potenza reattiva contatore B L1"
+      },
+      "meter_b_l2_reactive_power": {
+        "name": "Potenza reattiva contatore B L2"
+      },
+      "meter_b_l3_reactive_power": {
+        "name": "Potenza reattiva contatore B L3"
+      },
+      "meter_a_power": {
+        "name": "Potenza del contatore A"
+      },
+      "meter_b_power": {
+        "name": "Potenza del contatore B"
+      },
+      "parallel_backup_load_power": {
+        "name": "Potenza dei carichi di backup del sistema in parallelo"
+      },
+      "parallel_battery_power": {
+        "name": "Potenza della batteria del sistema in parallelo"
+      },
+      "parallel_grid_load_power": {
+        "name": "Potenza del carico di rete del sistema in parallelo"
+      },
+      "parallel_grid_power": {
+        "name": "Potenza della rete del sistema in parallelo"
+      },
+      "parallel_load_power": {
+        "name": "Potenza del carico domestico del sistema in parallelo"
+      },
+      "parallel_pv_power": {
+        "name": "Potenza solare del sistema in parallelo"
+      },
+      "pv3_insulation_resistance": {
+        "name": "Resistenza di isolamento PV3"
+      },
+      "pv4_insulation_resistance": {
+        "name": "Resistenza di isolamento PV4"
+      },
+      "pv3_voltage": {
+        "name": "Tensione PV3"
+      },
+      "pv3_current": {
+        "name": "Corrente PV3"
+      },
+      "pv3_power": {
+        "name": "Potenza PV3"
+      },
+      "pv4_voltage": {
+        "name": "Tensione PV4"
+      },
+      "pv4_current": {
+        "name": "Corrente PV4"
+      },
+      "pv4_power": {
+        "name": "Potenza PV4"
+      },
+      "ct_grid_power": {
+        "name": "Potenza della rete CT"
+      },
+      "ct_grid_apparent_power": {
+        "name": "Potenza apparente della rete CT"
+      },
+      "ct_pv_power": {
+        "name": "Potenza solare CT"
+      },
+      "ct_pv_apparent_power": {
+        "name": "Potenza apparente solare CT"
+      },
+      "grid_apparent_power": {
+        "name": "Potenza apparente della rete"
+      },
+      "inverter_apparent_power": {
+        "name": "Potenza apparente dell'inverter"
+      },
+      "backup_load_power": {
+        "name": "Potenza dei carichi di backup"
+      },
+      "backup_load_apparent_power": {
+        "name": "Potenza apparente dei carichi di backup"
+      },
+      "inverter_energy_today": {
+        "name": "Energia dell'inverter oggi"
+      },
+      "inverter_energy_month": {
+        "name": "Energia dell'inverter questo mese"
+      },
+      "inverter_energy_year": {
+        "name": "Energia dell'inverter quest'anno"
+      },
+      "inverter_energy_total": {
+        "name": "Energia dell'inverter totale"
+      },
+      "pv2_energy_today": {
+        "name": "Energia PV2 oggi"
+      },
+      "pv2_energy_month": {
+        "name": "Energia PV2 questo mese"
+      },
+      "pv2_energy_year": {
+        "name": "Energia PV2 quest'anno"
+      },
+      "pv2_energy_total": {
+        "name": "Energia PV2 totale"
+      },
+      "pv3_energy_today": {
+        "name": "Energia PV3 oggi"
+      },
+      "pv3_energy_month": {
+        "name": "Energia PV3 questo mese"
+      },
+      "pv3_energy_year": {
+        "name": "Energia PV3 quest'anno"
+      },
+      "pv3_energy_total": {
+        "name": "Energia PV3 totale"
+      },
+      "identity_protocol_version": {
+        "name": "Versione del protocollo di identità"
+      },
+      "battery_pack2_soc": {
+        "name": "Stato di carica modulo batteria 2"
+      },
+      "battery_pack2_soh": {
+        "name": "Stato di salute modulo batteria 2"
+      },
+      "battery_pack2_voltage": {
+        "name": "Tensione modulo batteria 2"
+      },
+      "battery_pack2_current": {
+        "name": "Corrente modulo batteria 2"
+      },
+      "battery_pack2_temperature": {
+        "name": "Temperatura modulo batteria 2"
+      },
+      "battery_pack2_cycles": {
+        "name": "Cicli modulo batteria 2"
+      },
+      "battery_pack3_soc": {
+        "name": "Stato di carica modulo batteria 3"
+      },
+      "battery_pack3_soh": {
+        "name": "Stato di salute modulo batteria 3"
+      },
+      "battery_pack3_voltage": {
+        "name": "Tensione modulo batteria 3"
+      },
+      "battery_pack3_current": {
+        "name": "Corrente modulo batteria 3"
+      },
+      "battery_pack3_temperature": {
+        "name": "Temperatura modulo batteria 3"
+      },
+      "battery_pack3_cycles": {
+        "name": "Cicli modulo batteria 3"
+      },
+      "battery_pack4_soc": {
+        "name": "Stato di carica modulo batteria 4"
+      },
+      "battery_pack4_soh": {
+        "name": "Stato di salute modulo batteria 4"
+      },
+      "battery_pack4_voltage": {
+        "name": "Tensione modulo batteria 4"
+      },
+      "battery_pack4_current": {
+        "name": "Corrente modulo batteria 4"
+      },
+      "battery_pack4_temperature": {
+        "name": "Temperatura modulo batteria 4"
+      },
+      "battery_pack4_cycles": {
+        "name": "Cicli modulo batteria 4"
+      },
+      "battery_pack2_discharged_energy": {
+        "name": "Energia scaricata modulo batteria 2"
+      },
+      "battery_pack3_discharged_energy": {
+        "name": "Energia scaricata modulo batteria 3"
+      },
+      "battery_pack4_discharged_energy": {
+        "name": "Energia scaricata modulo batteria 4"
+      },
+      "battery_voltage_high_protection": {
+        "name": "Protezione da tensione alta della batteria"
+      },
+      "battery_charge_voltage": {
+        "name": "Tensione di carica della batteria"
+      },
+      "battery_discharge_cutoff_voltage": {
+        "name": "Tensione di interruzione della scarica della batteria"
+      },
+      "off_grid_mode": {
+        "name": "Modalità off-grid",
+        "state": {
+          "off": "Spento",
+          "on": "Acceso"
+        }
+      },
+      "inverter_stop": {
+        "name": "Arresto dell'inverter",
+        "state": {
+          "running": "In funzione",
+          "stopped": "Fermo"
+        }
+      },
+      "inverter_error_count": {
+        "name": "Numero di errori dell'inverter"
+      },
+      "drm_hardware_status": {
+        "name": "Stato hardware DRM"
+      },
+      "drm_software_status": {
+        "name": "Stato software DRM"
+      },
+      "fault_record_sequence": {
+        "name": "Sequenza dei registri dei guasti"
+      },
+      "application_mode_active": {
+        "name": "Modalità applicativa (in vigore)",
+        "state": {
+          "self_use": "Autoconsumo",
+          "time_of_use": "Fasce orarie",
+          "backup": "Backup",
+          "passive": "Passivo",
+          "legacy": "Legacy",
+          "ai_saving": "Risparmio AI",
+          "peak_shaving": "Riduzione dei picchi"
+        }
+      },
+      "battery_controller_1_current": {
+        "name": "Corrente del controller della batteria 1"
+      },
+      "battery_controller_2_current": {
+        "name": "Corrente del controller della batteria 2"
+      },
+      "pv_generation_time_today": {
+        "name": "Tempo di generazione solare oggi"
+      },
+      "pv_generation_time_total": {
+        "name": "Tempo di generazione solare totale"
+      },
+      "battery_voltage_low_warning": {
+        "name": "Avviso di tensione bassa della batteria"
+      },
+      "battery_pack1_bms_type": {
+        "name": "Tipo di BMS modulo batteria 1"
+      },
+      "battery_pack1_bms_serial_number": {
+        "name": "Numero di serie del BMS modulo batteria 1"
+      },
+      "battery_pack1_bms_software_version": {
+        "name": "Versione software del BMS modulo batteria 1"
+      },
+      "battery_pack1_bms_hardware_version": {
+        "name": "Versione hardware del BMS modulo batteria 1"
+      },
+      "battery_pack1_type": {
+        "name": "Tipo di modulo batteria 1",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack1_serial_number": {
+        "name": "Numero di serie modulo batteria 1"
+      },
+      "battery_pack2_bms_type": {
+        "name": "Tipo di BMS modulo batteria 2"
+      },
+      "battery_pack2_bms_serial_number": {
+        "name": "Numero di serie del BMS modulo batteria 2"
+      },
+      "battery_pack2_bms_software_version": {
+        "name": "Versione software del BMS modulo batteria 2"
+      },
+      "battery_pack2_bms_hardware_version": {
+        "name": "Versione hardware del BMS modulo batteria 2"
+      },
+      "battery_pack2_type": {
+        "name": "Tipo di modulo batteria 2",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack2_serial_number": {
+        "name": "Numero di serie modulo batteria 2"
+      },
+      "battery_pack3_bms_type": {
+        "name": "Tipo di BMS modulo batteria 3"
+      },
+      "battery_pack3_bms_serial_number": {
+        "name": "Numero di serie del BMS modulo batteria 3"
+      },
+      "battery_pack3_bms_software_version": {
+        "name": "Versione software del BMS modulo batteria 3"
+      },
+      "battery_pack3_bms_hardware_version": {
+        "name": "Versione hardware del BMS modulo batteria 3"
+      },
+      "battery_pack3_type": {
+        "name": "Tipo di modulo batteria 3",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack3_serial_number": {
+        "name": "Numero di serie modulo batteria 3"
+      },
+      "battery_pack4_bms_type": {
+        "name": "Tipo di BMS modulo batteria 4"
+      },
+      "battery_pack4_bms_serial_number": {
+        "name": "Numero di serie del BMS modulo batteria 4"
+      },
+      "battery_pack4_bms_software_version": {
+        "name": "Versione software del BMS modulo batteria 4"
+      },
+      "battery_pack4_bms_hardware_version": {
+        "name": "Versione hardware del BMS modulo batteria 4"
+      },
+      "battery_pack4_type": {
+        "name": "Tipo di modulo batteria 4",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack4_serial_number": {
+        "name": "Numero di serie modulo batteria 4"
+      },
+      "battery_pack5_bms_type": {
+        "name": "Tipo di BMS modulo batteria 5"
+      },
+      "battery_pack5_bms_serial_number": {
+        "name": "Numero di serie del BMS modulo batteria 5"
+      },
+      "battery_pack5_bms_software_version": {
+        "name": "Versione software del BMS modulo batteria 5"
+      },
+      "battery_pack5_bms_hardware_version": {
+        "name": "Versione hardware del BMS modulo batteria 5"
+      },
+      "battery_pack5_type": {
+        "name": "Tipo di modulo batteria 5",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack5_serial_number": {
+        "name": "Numero di serie modulo batteria 5"
+      },
+      "battery_input_mode": {
+        "name": "Modalità di ingresso della batteria",
+        "state": {
+          "independent": "Indipendente",
+          "parallel": "Parallelo"
+        }
+      },
+      "battery_protocol": {
+        "name": "Protocollo della batteria",
+        "state": {
+          "not_in_use": "Non in uso",
+          "saj_bu3": "SAJ BU3",
+          "lead_acid": "Piombo-acido",
+          "dyness_h": "Dyness DYNESS-H",
+          "pylon_sc0500": "Pylon SC0500",
+          "b2_can": "B2 CAN"
+        }
+      },
+      "bms_update_id": {
+        "name": "ID aggiornamento BMS"
+      },
+      "bms_update_mode": {
+        "name": "Modalità di aggiornamento BMS"
+      },
+      "ethernet_mode": {
+        "name": "Modalità Ethernet",
+        "state": {
+          "manual": "Manuale",
+          "automatic": "Automatico"
+        }
+      },
+      "ev_address": {
+        "name": "Indirizzo del caricatore EV"
+      },
+      "ev_baud_rate": {
+        "name": "Baud rate del caricatore EV",
+        "state": {
+          "115200": "115200 baud",
+          "57600": "57600 baud",
+          "38400": "38400 baud",
+          "19200": "19200 baud",
+          "9600": "9600 baud",
+          "4800": "4800 baud",
+          "2400": "2400 baud",
+          "1200": "1200 baud"
+        }
+      },
+      "ev_charger_count": {
+        "name": "Numero di caricatori EV"
+      },
+      "ev_communication_timeout": {
+        "name": "Timeout di comunicazione del caricatore EV"
+      },
+      "ev_port_address": {
+        "name": "Indirizzo della porta del caricatore EV"
+      },
+      "ev_port_mode": {
+        "name": "Modalità della porta del caricatore EV",
+        "state": {
+          "invalid": "Non valida",
+          "host": "Host",
+          "modbus_slave": "Modbus slave"
+        }
+      },
+      "fcas_frequency_hysteresis": {
+        "name": "Isteresi di frequenza FCAS"
+      },
+      "function_flags_1": {
+        "name": "Flag di funzione 1"
+      },
+      "function_flags_2": {
+        "name": "Flag di funzione 2"
+      },
+      "grid_type": {
+        "name": "Tipo di rete",
+        "state": {
+          "single_phase": "Monofase",
+          "split_phase": "Fase divisa",
+          "three_phase_three_wire": "Trifase a tre fili",
+          "three_phase_four_wire": "Trifase a quattro fili"
+        }
+      },
+      "insulation_resistance_limit": {
+        "name": "Limite della resistenza di isolamento"
+      },
+      "lead_acid_capacity": {
+        "name": "Capacità piombo-acido"
+      },
+      "lead_acid_charge_current_limit": {
+        "name": "Limite della corrente di carica piombo-acido"
+      },
+      "lead_acid_charge_cutoff_voltage": {
+        "name": "Tensione di interruzione della carica piombo-acido"
+      },
+      "lead_acid_discharge_current_limit": {
+        "name": "Limite della corrente di scarica piombo-acido"
+      },
+      "lead_acid_equalising_charge_voltage": {
+        "name": "Tensione di carica di equalizzazione piombo-acido"
+      },
+      "lead_acid_float_charge_voltage": {
+        "name": "Tensione di carica di mantenimento piombo-acido"
+      },
+      "lead_acid_high_voltage_protection": {
+        "name": "Protezione da tensione alta piombo-acido"
+      },
+      "lead_acid_low_voltage_warning": {
+        "name": "Avviso di tensione bassa piombo-acido"
+      },
+      "lead_acid_off_grid_discharge_cutoff_voltage": {
+        "name": "Tensione di interruzione della scarica off-grid piombo-acido"
+      },
+      "lead_acid_on_grid_discharge_cutoff_voltage": {
+        "name": "Tensione di interruzione della scarica on-grid piombo-acido"
+      },
+      "machine_model": {
+        "name": "Modello della macchina"
+      },
+      "max_dc_current_component": {
+        "name": "Componente massima della corrente continua"
+      },
+      "max_dc_voltage_component": {
+        "name": "Componente massima della tensione continua"
+      },
+      "max_leakage_current": {
+        "name": "Corrente di dispersione massima"
+      },
+      "meter_address": {
+        "name": "Indirizzo del contatore"
+      },
+      "meter_configuration": {
+        "name": "Configurazione del contatore",
+        "state": {
+          "no_meter_or_ct": "Nessun contatore o CT",
+          "single_phase_meter": "Contatore monofase",
+          "three_phase_three_wire_meter": "Contatore trifase a tre fili",
+          "three_phase_four_wire_meter_on_single_phase_machine": "Contatore trifase a quattro fili su una macchina monofase",
+          "three_phase_four_wire_meter_grid_and_pv": "Contatore trifase a quattro fili (rete e solare)",
+          "two_three_phase_three_wire_meters": "Due contatori trifase a tre fili",
+          "two_three_phase_four_wire_meters": "Due contatori trifase a quattro fili",
+          "two_single_phase_meters": "Due contatori monofase",
+          "single_phase_meter_with_two_ct_channels": "Contatore monofase con due canali CT",
+          "one_grid_ct": "Un CT di rete",
+          "grid_and_pv_cts": "CT di rete e solare",
+          "dual_circuit_three_phase_four_wire_meter_with_six_ct_channels": "Contatore trifase a quattro fili a doppio circuito con sei canali CT"
+        }
+      },
+      "motor_enable": {
+        "name": "Abilitazione del motore"
+      },
+      "mppt_scan_time": {
+        "name": "Tempo di scansione MPPT"
+      },
+      "mppt_voltage_high": {
+        "name": "Tensione MPPT alta"
+      },
+      "mppt_voltage_low": {
+        "name": "Tensione MPPT bassa"
+      },
+      "off_grid_output_frequency": {
+        "name": "Frequenza di uscita off-grid"
+      },
+      "off_grid_output_voltage": {
+        "name": "Tensione di uscita off-grid"
+      },
+      "parallel_configured_mode": {
+        "name": "Modalità parallelo configurata",
+        "state": {
+          "not_parallel": "Non in parallelo",
+          "on_grid": "On-grid",
+          "off_grid": "Off-grid",
+          "on_and_off_grid": "On-grid e off-grid"
+        }
+      },
+      "parallel_number": {
+        "name": "Numero in parallelo"
+      },
+      "parallel_role": {
+        "name": "Ruolo in parallelo"
+      },
+      "pv_input_mode": {
+        "name": "Modalità di ingresso PV",
+        "state": {
+          "automatic": "Automatico",
+          "independent": "Indipendente",
+          "parallel": "Parallelo"
+        }
+      },
+      "pv_shutdown_voltage": {
+        "name": "Tensione di spegnimento PV"
+      },
+      "pv_start_voltage": {
+        "name": "Tensione di avvio PV"
+      },
+      "rated_power": {
+        "name": "Potenza nominale"
+      },
+      "reverse_flow_mode": {
+        "name": "Modalità di flusso inverso",
+        "state": {
+          "off": "Spento",
+          "master": "Master",
+          "slave": "Slave"
+        }
+      },
+      "rs485_address": {
+        "name": "Indirizzo RS485"
+      },
+      "rs485_baud_rate": {
+        "name": "Baud rate RS485",
+        "state": {
+          "115200": "115200 baud",
+          "57600": "57600 baud",
+          "38400": "38400 baud",
+          "19200": "19200 baud",
+          "9600": "9600 baud",
+          "4800": "4800 baud",
+          "2400": "2400 baud",
+          "1200": "1200 baud"
+        }
+      },
+      "rs485_slave_address": {
+        "name": "Indirizzo slave RS485"
+      },
+      "rs485_slave_baud_rate": {
+        "name": "Baud rate slave RS485",
+        "state": {
+          "115200": "115200 baud",
+          "57600": "57600 baud",
+          "38400": "38400 baud",
+          "19200": "19200 baud",
+          "9600": "9600 baud",
+          "4800": "4800 baud",
+          "2400": "2400 baud",
+          "1200": "1200 baud"
+        }
+      },
+      "settings_sequence": {
+        "name": "Sequenza delle impostazioni"
+      },
+      "ethernet_ip_address": {
+        "name": "Indirizzo IP Ethernet"
+      },
+      "ethernet_subnet_mask": {
+        "name": "Subnet mask Ethernet"
+      },
+      "ethernet_gateway": {
+        "name": "Gateway Ethernet"
+      },
+      "ethernet_dns_primary": {
+        "name": "DNS primario Ethernet"
+      },
+      "ethernet_dns_secondary": {
+        "name": "DNS secondario Ethernet"
+      }
+    },
+    "binary_sensor": {
+      "control_allowed": {
+        "name": "Controllo consentito"
+      },
+      "inverter_fault": {
+        "name": "Guasto dell'inverter"
+      },
+      "inverter_fault_unrecognised": {
+        "name": "Guasto non riconosciuto dell'inverter"
+      },
+      "inverter_fault_internal_communication": {
+        "name": "Comunicazione interna persa"
+      },
+      "inverter_fault_meter_communication": {
+        "name": "Comunicazione con il contatore persa"
+      },
+      "inverter_fault_display_memory": {
+        "name": "Guasto della memoria della scheda display"
+      },
+      "inverter_fault_display_clock": {
+        "name": "Guasto dell'orologio della scheda display"
+      },
+      "inverter_fault_bms_device": {
+        "name": "Guasto del dispositivo BMS"
+      },
+      "inverter_fault_bms_communication": {
+        "name": "Comunicazione con il BMS persa"
+      },
+      "inverter_fault_ct_device": {
+        "name": "Guasto del dispositivo CT"
+      },
+      "inverter_fault_afci_communication": {
+        "name": "Comunicazione con la scheda di rilevamento archi persa"
+      },
+      "inverter_fault_slave_communication": {
+        "name": "Comunicazione con il controller slave persa"
+      },
+      "inverter_fault_pv_meter_communication": {
+        "name": "Comunicazione con il contatore solare persa"
+      },
+      "inverter_fault_ev_charger_communication": {
+        "name": "Comunicazione con il caricatore EV persa"
+      },
+      "inverter_fault_grid_phase_r_overvoltage": {
+        "name": "Sovratensione di rete fase R"
+      },
+      "inverter_fault_grid_phase_r_undervoltage": {
+        "name": "Sottotensione di rete fase R"
+      },
+      "inverter_fault_grid_phase_s_overvoltage": {
+        "name": "Sovratensione di rete fase S"
+      },
+      "inverter_fault_grid_phase_s_undervoltage": {
+        "name": "Sottotensione di rete fase S"
+      },
+      "inverter_fault_grid_phase_t_overvoltage": {
+        "name": "Sovratensione di rete fase T"
+      },
+      "inverter_fault_grid_phase_t_undervoltage": {
+        "name": "Sottotensione di rete fase T"
+      },
+      "inverter_fault_grid_overfrequency": {
+        "name": "Sovrafrequenza di rete"
+      },
+      "inverter_fault_grid_underfrequency": {
+        "name": "Sottofrequenza di rete"
+      },
+      "inverter_fault_dcdc_communication": {
+        "name": "Comunicazione con l'unità DC-DC persa"
+      },
+      "inverter_fault_dcdc_device": {
+        "name": "Guasto dell'unità DC-DC"
+      },
+      "inverter_fault_parallel_communication": {
+        "name": "Comunicazione del sistema in parallelo persa"
+      },
+      "inverter_fault_grid_lost": {
+        "name": "Rete assente"
+      },
+      "inverter_fault_pv_input_mode": {
+        "name": "Guasto della modalità di ingresso PV"
+      },
+      "inverter_fault_pv_hardware_overcurrent": {
+        "name": "Sovracorrente hardware PV"
+      },
+      "inverter_fault_pv_overvoltage": {
+        "name": "Sovratensione PV"
+      },
+      "inverter_fault_bus_hardware_overvoltage": {
+        "name": "Sovratensione hardware del bus CC"
+      },
+      "inverter_fault_bus_overvoltage": {
+        "name": "Sovratensione del bus CC"
+      },
+      "inverter_fault_bus_undervoltage": {
+        "name": "Sottotensione del bus CC"
+      },
+      "inverter_fault_grid_phase": {
+        "name": "Guasto di fase della rete"
+      },
+      "inverter_fault_islanding": {
+        "name": "Funzionamento in isola"
+      },
+      "inverter_fault_arc_device": {
+        "name": "Guasto del dispositivo di rilevamento archi"
+      },
+      "inverter_fault_pv_input": {
+        "name": "Guasto dell'ingresso PV"
+      },
+      "inverter_fault_hardware_overcurrent": {
+        "name": "Sovracorrente hardware dell'inverter"
+      },
+      "inverter_fault_neutral_earth_voltage": {
+        "name": "Guasto di tensione tra neutro e terra"
+      },
+      "inverter_fault_drm0": {
+        "name": "Guasto DRM0"
+      },
+      "inverter_fault_fan_1": {
+        "name": "Guasto della ventola 1"
+      },
+      "inverter_fault_fan_2": {
+        "name": "Guasto della ventola 2"
+      },
+      "inverter_fault_fan_3": {
+        "name": "Guasto della ventola 3"
+      },
+      "inverter_fault_fan_4": {
+        "name": "Guasto della ventola 4"
+      },
+      "inverter_fault_arc": {
+        "name": "Guasto da arco elettrico"
+      },
+      "inverter_fault_pv_software_overcurrent": {
+        "name": "Sovracorrente software PV"
+      },
+      "inverter_fault_battery_overvoltage": {
+        "name": "Sovratensione della porta della batteria"
+      },
+      "inverter_fault_battery_overcurrent": {
+        "name": "Sovracorrente della porta della batteria"
+      },
+      "inverter_fault_battery_charge_overvoltage": {
+        "name": "Tensione di carica della batteria alta"
+      },
+      "inverter_fault_battery_overload": {
+        "name": "Sovraccarico della porta della batteria"
+      },
+      "inverter_fault_battery_soft_start": {
+        "name": "Timeout dell'avvio graduale della batteria"
+      },
+      "inverter_fault_output_overload": {
+        "name": "Sovraccarico dell'uscita"
+      },
+      "inverter_fault_battery_open_circuit": {
+        "name": "Circuito aperto della batteria"
+      },
+      "inverter_fault_battery_discharge_undervoltage": {
+        "name": "Tensione di scarica della batteria bassa"
+      },
+      "inverter_fault_authorisation_expired": {
+        "name": "Autorizzazione scaduta"
+      },
+      "inverter_fault_display_communication": {
+        "name": "Comunicazione con la scheda display persa"
+      },
+      "inverter_fault_relay": {
+        "name": "Guasto del relè"
+      },
+      "inverter_fault_controller_memory": {
+        "name": "Guasto della memoria del controller"
+      },
+      "inverter_fault_over_temperature": {
+        "name": "Sovratemperatura"
+      },
+      "inverter_fault_under_temperature": {
+        "name": "Sottotemperatura"
+      },
+      "inverter_fault_leakage_current_device": {
+        "name": "Guasto del sensore della corrente di dispersione"
+      },
+      "inverter_fault_dc_injection_device": {
+        "name": "Guasto del sensore di iniezione CC"
+      },
+      "inverter_fault_current_sensor": {
+        "name": "Guasto del sensore di corrente"
+      },
+      "inverter_fault_grid_average_overvoltage": {
+        "name": "Sovratensione media di rete su 10 minuti"
+      },
+      "inverter_fault_off_grid_undervoltage": {
+        "name": "Sottotensione dell'uscita off-grid"
+      },
+      "inverter_fault_grid_phase_r_dc_voltage": {
+        "name": "Tensione continua di rete fase R alta"
+      },
+      "inverter_fault_grid_phase_s_dc_voltage": {
+        "name": "Tensione continua di rete fase S alta"
+      },
+      "inverter_fault_grid_phase_t_dc_voltage": {
+        "name": "Tensione continua di rete fase T alta"
+      },
+      "inverter_fault_leakage_current": {
+        "name": "Guasto di corrente di dispersione"
+      },
+      "inverter_fault_grid_phase_r_dc_injection": {
+        "name": "Iniezione CC di rete fase R alta"
+      },
+      "inverter_fault_grid_phase_s_dc_injection": {
+        "name": "Iniezione CC di rete fase S alta"
+      },
+      "inverter_fault_grid_phase_t_dc_injection": {
+        "name": "Iniezione CC di rete fase T alta"
+      },
+      "inverter_fault_insulation": {
+        "name": "Guasto di isolamento"
+      },
+      "inverter_fault_bus_imbalance": {
+        "name": "Squilibrio della tensione del bus CC"
+      },
+      "battery_fault": {
+        "name": "Guasto della batteria"
+      },
+      "battery_fault_unrecognised": {
+        "name": "Guasto non riconosciuto della batteria"
+      },
+      "battery_fault_internal_communication": {
+        "name": "Comunicazione interna del BMS della batteria persa"
+      },
+      "battery_fault_pack_sequence": {
+        "name": "Guasto di indirizzamento dei moduli batteria"
+      },
+      "battery_fault_discharge_overcurrent": {
+        "name": "Sovracorrente di scarica della batteria"
+      },
+      "battery_fault_charge_overcurrent": {
+        "name": "Sovracorrente di carica della batteria"
+      },
+      "battery_fault_total_undervoltage": {
+        "name": "Tensione totale della batteria bassa"
+      },
+      "battery_fault_total_overvoltage": {
+        "name": "Tensione totale della batteria alta"
+      },
+      "battery_fault_cell_undervoltage": {
+        "name": "Sottotensione di una cella della batteria"
+      },
+      "battery_fault_cell_overvoltage": {
+        "name": "Sovratensione di una cella della batteria"
+      },
+      "battery_fault_hardware": {
+        "name": "Guasto hardware del BMS della batteria"
+      },
+      "battery_fault_charge_cold": {
+        "name": "Batteria troppo fredda per caricare"
+      },
+      "battery_fault_charge_hot": {
+        "name": "Batteria troppo calda per caricare"
+      },
+      "battery_fault_discharge_cold": {
+        "name": "Batteria troppo fredda per scaricare"
+      },
+      "battery_fault_discharge_hot": {
+        "name": "Batteria troppo calda per scaricare"
+      },
+      "battery_fault_relay": {
+        "name": "Guasto del relè del BMS della batteria"
+      },
+      "battery_fault_precharge": {
+        "name": "Guasto di precarica della batteria"
+      },
+      "battery_fault_insulation": {
+        "name": "Guasto di isolamento del BMS della batteria"
+      },
+      "battery_fault_bms_incompatible": {
+        "name": "Produttore del BMS della batteria incompatibile"
+      },
+      "battery_fault_cell_supplier_incompatible": {
+        "name": "Produttore delle celle della batteria non corrispondente"
+      },
+      "battery_fault_cell_incompatible": {
+        "name": "Celle della batteria non corrispondenti"
+      },
+      "battery_fault_voltage_level_mismatch": {
+        "name": "Livello di tensione della batteria non corrispondente"
+      },
+      "battery_fault_breaker_open": {
+        "name": "Interruttore automatico della batteria aperto"
+      },
+      "battery_fault_cell_temperature_difference": {
+        "name": "Differenza di temperatura tra le celle della batteria troppo grande"
+      },
+      "battery_fault_cell_voltage_difference_2": {
+        "name": "Differenza di tensione tra le celle della batteria troppo grande, livello 2"
+      },
+      "battery_fault_cell_voltage_difference_1": {
+        "name": "Differenza di tensione tra le celle della batteria troppo grande, livello 1"
+      },
+      "battery_fault_cell_over_temperature": {
+        "name": "Sovratemperatura di una cella della batteria"
+      },
+      "battery_fault_short_circuit": {
+        "name": "Cortocircuito della batteria"
+      },
+      "battery_fault_total_voltage_matching": {
+        "name": "Mancata corrispondenza della tensione totale della batteria"
+      },
+      "battery_fault_system_locked": {
+        "name": "Sistema della batteria bloccato"
+      },
+      "battery_fault_fuse": {
+        "name": "Guasto del fusibile della batteria"
+      },
+      "battery_fault_charging_port_overvoltage": {
+        "name": "Sovratensione della porta di carica della batteria"
+      },
+      "battery_pack1_fault": {
+        "name": "Guasto modulo batteria 1"
+      },
+      "battery_pack1_warning": {
+        "name": "Avviso modulo batteria 1"
+      },
+      "battery_pack2_fault": {
+        "name": "Guasto modulo batteria 2"
+      },
+      "battery_pack2_warning": {
+        "name": "Avviso modulo batteria 2"
+      },
+      "battery_pack3_fault": {
+        "name": "Guasto modulo batteria 3"
+      },
+      "battery_pack3_warning": {
+        "name": "Avviso modulo batteria 3"
+      },
+      "battery_pack4_fault": {
+        "name": "Guasto modulo batteria 4"
+      },
+      "battery_pack4_warning": {
+        "name": "Avviso modulo batteria 4"
+      },
+      "ev_fault": {
+        "name": "Guasto del caricatore EV"
+      },
+      "ev_fault_unrecognised": {
+        "name": "Guasto non riconosciuto del caricatore EV"
+      },
+      "ev_fault_relay_over_temperature": {
+        "name": "Sovratemperatura del relè del caricatore EV"
+      },
+      "ev_fault_overload": {
+        "name": "Sovraccarico del caricatore EV"
+      },
+      "ev_fault_ac_overvoltage": {
+        "name": "Sovratensione CA del caricatore EV"
+      },
+      "ev_fault_ac_undervoltage": {
+        "name": "Sottotensione CA del caricatore EV"
+      },
+      "ev_fault_ac_overcurrent": {
+        "name": "Sovracorrente CA del caricatore EV"
+      },
+      "ev_fault_ac_overfrequency": {
+        "name": "Sovrafrequenza CA del caricatore EV"
+      },
+      "ev_fault_ac_underfrequency": {
+        "name": "Sottofrequenza CA del caricatore EV"
+      },
+      "ev_fault_dc_residual_current_a": {
+        "name": "Guasto A della corrente residua CC del caricatore EV"
+      },
+      "ev_fault_emergency_stop": {
+        "name": "Arresto di emergenza del caricatore EV"
+      },
+      "ev_fault_under_temperature": {
+        "name": "Sottotemperatura del caricatore EV"
+      },
+      "ev_fault_ac_residual_current": {
+        "name": "Corrente residua CA del caricatore EV"
+      },
+      "ev_fault_input_terminal_over_temperature": {
+        "name": "Sovratemperatura del morsetto di ingresso del caricatore EV"
+      },
+      "ev_fault_bluetooth": {
+        "name": "Guasto Bluetooth del caricatore EV"
+      },
+      "ev_fault_dc_residual_current_b": {
+        "name": "Guasto B della corrente residua CC del caricatore EV"
+      },
+      "ev_fault_relay": {
+        "name": "Guasto del relè del caricatore EV"
+      },
+      "ev_fault_grounding": {
+        "name": "Guasto di messa a terra del caricatore EV"
+      },
+      "ev_fault_phase_sequence": {
+        "name": "Guasto della sequenza delle fasi del caricatore EV"
+      },
+      "ev_fault_rcd_circuit": {
+        "name": "Guasto del circuito RCD del caricatore EV"
+      },
+      "ev_fault_rs485_timeout": {
+        "name": "Timeout di comunicazione RS485 del caricatore EV"
+      },
+      "ev_fault_supply": {
+        "name": "Guasto dell'alimentazione elettrica del caricatore EV"
+      },
+      "ev_fault_meter": {
+        "name": "Guasto del contatore del caricatore EV"
+      },
+      "ev_fault_control_pilot": {
+        "name": "Guasto del control pilot del caricatore EV (sotto 2 V)"
+      },
+      "ev_fault_connector_lock": {
+        "name": "Guasto del blocco del connettore del caricatore EV"
+      },
+      "ev_fault_connector_current": {
+        "name": "Guasto di corrente del connettore del caricatore EV"
+      },
+      "ev_fault_dc_residual_current_c": {
+        "name": "Guasto C della corrente residua CC del caricatore EV"
+      }
+    },
+    "number": {
+      "charge_slot_1_power": {
+        "name": "Potenza fascia di carica 1"
+      },
+      "charge_slot_1_days": {
+        "name": "Giorni della settimana fascia di carica 1"
+      },
+      "charge_slot_2_power": {
+        "name": "Potenza fascia di carica 2"
+      },
+      "charge_slot_2_days": {
+        "name": "Giorni della settimana fascia di carica 2"
+      },
+      "charge_slot_3_power": {
+        "name": "Potenza fascia di carica 3"
+      },
+      "charge_slot_3_days": {
+        "name": "Giorni della settimana fascia di carica 3"
+      },
+      "charge_slot_4_power": {
+        "name": "Potenza fascia di carica 4"
+      },
+      "charge_slot_4_days": {
+        "name": "Giorni della settimana fascia di carica 4"
+      },
+      "charge_slot_5_power": {
+        "name": "Potenza fascia di carica 5"
+      },
+      "charge_slot_5_days": {
+        "name": "Giorni della settimana fascia di carica 5"
+      },
+      "charge_slot_6_power": {
+        "name": "Potenza fascia di carica 6"
+      },
+      "charge_slot_6_days": {
+        "name": "Giorni della settimana fascia di carica 6"
+      },
+      "charge_slot_7_power": {
+        "name": "Potenza fascia di carica 7"
+      },
+      "charge_slot_7_days": {
+        "name": "Giorni della settimana fascia di carica 7"
+      },
+      "discharge_slot_1_power": {
+        "name": "Potenza fascia di scarica 1"
+      },
+      "discharge_slot_1_days": {
+        "name": "Giorni della settimana fascia di scarica 1"
+      },
+      "discharge_slot_2_power": {
+        "name": "Potenza fascia di scarica 2"
+      },
+      "discharge_slot_2_days": {
+        "name": "Giorni della settimana fascia di scarica 2"
+      },
+      "discharge_slot_3_power": {
+        "name": "Potenza fascia di scarica 3"
+      },
+      "discharge_slot_3_days": {
+        "name": "Giorni della settimana fascia di scarica 3"
+      },
+      "discharge_slot_4_power": {
+        "name": "Potenza fascia di scarica 4"
+      },
+      "discharge_slot_4_days": {
+        "name": "Giorni della settimana fascia di scarica 4"
+      },
+      "discharge_slot_5_power": {
+        "name": "Potenza fascia di scarica 5"
+      },
+      "discharge_slot_5_days": {
+        "name": "Giorni della settimana fascia di scarica 5"
+      },
+      "discharge_slot_6_power": {
+        "name": "Potenza fascia di scarica 6"
+      },
+      "discharge_slot_6_days": {
+        "name": "Giorni della settimana fascia di scarica 6"
+      },
+      "discharge_slot_7_power": {
+        "name": "Potenza fascia di scarica 7"
+      },
+      "discharge_slot_7_days": {
+        "name": "Giorni della settimana fascia di scarica 7"
+      },
+      "passive_mode": {
+        "name": "Modalità passiva"
+      },
+      "passive_grid_charge_power": {
+        "name": "Potenza di carica dalla rete in modalità passiva"
+      },
+      "passive_grid_discharge_power": {
+        "name": "Potenza di scarica verso la rete in modalità passiva"
+      },
+      "passive_battery_charge_power": {
+        "name": "Potenza di carica della batteria in modalità passiva"
+      },
+      "passive_battery_discharge_power": {
+        "name": "Potenza di scarica della batteria in modalità passiva"
+      },
+      "battery_discharge_soc_limit_on_grid": {
+        "name": "Limite di scarica della batteria (stato di carica, on-grid)"
+      },
+      "battery_discharge_soc_limit_off_grid": {
+        "name": "Limite di scarica della batteria (stato di carica, off-grid)"
+      },
+      "battery_charge_soc_limit": {
+        "name": "Limite di carica della batteria (stato di carica)"
+      },
+      "battery_charge_power_limit": {
+        "name": "Limite della potenza di carica della batteria"
+      },
+      "battery_discharge_power_limit": {
+        "name": "Limite della potenza di scarica della batteria"
+      },
+      "grid_import_power_limit": {
+        "name": "Limite della potenza prelevata dalla rete"
+      },
+      "grid_export_power_limit": {
+        "name": "Limite della potenza immessa in rete"
+      },
+      "backup_reserve_soc": {
+        "name": "Stato di carica di riserva per il backup"
+      },
+      "export_limit_power": {
+        "name": "Potenza del limite di immissione"
+      },
+      "export_limit_current": {
+        "name": "Corrente del limite di immissione"
+      },
+      "ev_charge_power": {
+        "name": "Potenza di ricarica EV"
+      },
+      "ev_ems_charge_current": {
+        "name": "Corrente di carica EMS del caricatore EV"
+      },
+      "ev_slot_1_days": {
+        "name": "Giorni della settimana fascia 1 del caricatore EV"
+      },
+      "ev_slot_1_power": {
+        "name": "Potenza fascia 1 del caricatore EV"
+      },
+      "ev_slot_2_days": {
+        "name": "Giorni della settimana fascia 2 del caricatore EV"
+      },
+      "ev_slot_2_power": {
+        "name": "Potenza fascia 2 del caricatore EV"
+      },
+      "ev_slot_3_days": {
+        "name": "Giorni della settimana fascia 3 del caricatore EV"
+      },
+      "ev_slot_3_power": {
+        "name": "Potenza fascia 3 del caricatore EV"
+      },
+      "ev_slot_4_days": {
+        "name": "Giorni della settimana fascia 4 del caricatore EV"
+      },
+      "ev_slot_4_power": {
+        "name": "Potenza fascia 4 del caricatore EV"
+      },
+      "ev_slot_5_days": {
+        "name": "Giorni della settimana fascia 5 del caricatore EV"
+      },
+      "ev_slot_5_power": {
+        "name": "Potenza fascia 5 del caricatore EV"
+      },
+      "ev_slot_6_days": {
+        "name": "Giorni della settimana fascia 6 del caricatore EV"
+      },
+      "ev_slot_6_power": {
+        "name": "Potenza fascia 6 del caricatore EV"
+      },
+      "ev_slot_7_days": {
+        "name": "Giorni della settimana fascia 7 del caricatore EV"
+      },
+      "ev_slot_7_power": {
+        "name": "Potenza fascia 7 del caricatore EV"
+      },
+      "ems_timeout": {
+        "name": "Timeout EMS"
+      },
+      "ems_battery_charge_current_limit": {
+        "name": "Limite EMS della corrente di carica della batteria"
+      },
+      "ems_battery_discharge_current_limit": {
+        "name": "Limite EMS della corrente di scarica della batteria"
+      },
+      "ems_inverter_import_power_limit": {
+        "name": "Limite EMS della potenza prelevata dall'inverter"
+      },
+      "ems_inverter_export_power_limit": {
+        "name": "Limite EMS della potenza immessa dall'inverter"
+      },
+      "ems_pv_power_limit": {
+        "name": "Limite EMS della potenza solare"
+      },
+      "battery_power_target": {
+        "name": "Obiettivo di potenza della batteria"
+      },
+      "grid_power_target": {
+        "name": "Obiettivo di potenza della rete"
+      },
+      "inverter_power_target": {
+        "name": "Obiettivo di potenza dell'inverter"
+      },
+      "battery_forced_charge_power_limit": {
+        "name": "Limite della potenza di carica forzata della batteria"
+      }
+    },
+    "select": {
+      "application_mode": {
+        "name": "Modalità applicativa",
+        "state": {
+          "self_use": "Autoconsumo",
+          "time_of_use": "Fasce orarie",
+          "backup": "Backup",
+          "ems": "EMS",
+          "passive": "Passivo",
+          "legacy": "Legacy",
+          "time_of_use_bms": "Fasce orarie (BMS)",
+          "ai_saving": "Risparmio AI",
+          "peak_shaving": "Riduzione dei picchi"
+        }
+      },
+      "export_limit_mode": {
+        "name": "Modalità del limite di immissione",
+        "state": {
+          "off": "Spento",
+          "total_power": "Potenza totale",
+          "phase_current": "Corrente di fase",
+          "phase_power": "Potenza di fase"
+        }
+      },
+      "time_of_use_idle_mode": {
+        "name": "Modalità di inattività a fasce orarie",
+        "state": {
+          "standby": "Standby",
+          "self_use": "Autoconsumo"
+        }
+      },
+      "led_mode": {
+        "name": "Modalità LED",
+        "state": {
+          "all_off": "Tutti spenti",
+          "outer_ring_on": "Anello esterno acceso",
+          "inner_ring_on": "Anello interno acceso",
+          "all_on": "Tutti accesi"
+        }
+      },
+      "ev_ems_phase_mode": {
+        "name": "Modalità di fase EMS del caricatore EV",
+        "state": {
+          "three_phase": "Trifase",
+          "single_phase": "Monofase"
+        }
+      },
+      "ev_mode": {
+        "name": "Modalità del caricatore EV",
+        "state": {
+          "disabled": "Disabilitato",
+          "standard": "Standard",
+          "time_based": "A fasce orarie",
+          "pv_surplus": "Surplus solare",
+          "ems": "EMS"
+        }
+      },
+      "ev_slot_1_mode": {
+        "name": "Modalità fascia 1 del caricatore EV",
+        "state": {
+          "not_set": "Non impostata",
+          "standard": "Standard",
+          "pv_surplus": "Surplus solare"
+        }
+      },
+      "ev_slot_2_mode": {
+        "name": "Modalità fascia 2 del caricatore EV",
+        "state": {
+          "not_set": "Non impostata",
+          "standard": "Standard",
+          "pv_surplus": "Surplus solare"
+        }
+      },
+      "ev_slot_3_mode": {
+        "name": "Modalità fascia 3 del caricatore EV",
+        "state": {
+          "not_set": "Non impostata",
+          "standard": "Standard",
+          "pv_surplus": "Surplus solare"
+        }
+      },
+      "ev_slot_4_mode": {
+        "name": "Modalità fascia 4 del caricatore EV",
+        "state": {
+          "not_set": "Non impostata",
+          "standard": "Standard",
+          "pv_surplus": "Surplus solare"
+        }
+      },
+      "ev_slot_5_mode": {
+        "name": "Modalità fascia 5 del caricatore EV",
+        "state": {
+          "not_set": "Non impostata",
+          "standard": "Standard",
+          "pv_surplus": "Surplus solare"
+        }
+      },
+      "ev_slot_6_mode": {
+        "name": "Modalità fascia 6 del caricatore EV",
+        "state": {
+          "not_set": "Non impostata",
+          "standard": "Standard",
+          "pv_surplus": "Surplus solare"
+        }
+      },
+      "ev_slot_7_mode": {
+        "name": "Modalità fascia 7 del caricatore EV",
+        "state": {
+          "not_set": "Non impostata",
+          "standard": "Standard",
+          "pv_surplus": "Surplus solare"
+        }
+      }
+    },
+    "switch": {
+      "charge_slot_1_enabled": {
+        "name": "Fascia di carica 1 abilitata"
+      },
+      "charge_slot_2_enabled": {
+        "name": "Fascia di carica 2 abilitata"
+      },
+      "charge_slot_3_enabled": {
+        "name": "Fascia di carica 3 abilitata"
+      },
+      "charge_slot_4_enabled": {
+        "name": "Fascia di carica 4 abilitata"
+      },
+      "charge_slot_5_enabled": {
+        "name": "Fascia di carica 5 abilitata"
+      },
+      "charge_slot_6_enabled": {
+        "name": "Fascia di carica 6 abilitata"
+      },
+      "charge_slot_7_enabled": {
+        "name": "Fascia di carica 7 abilitata"
+      },
+      "discharge_slot_1_enabled": {
+        "name": "Fascia di scarica 1 abilitata"
+      },
+      "discharge_slot_2_enabled": {
+        "name": "Fascia di scarica 2 abilitata"
+      },
+      "discharge_slot_3_enabled": {
+        "name": "Fascia di scarica 3 abilitata"
+      },
+      "discharge_slot_4_enabled": {
+        "name": "Fascia di scarica 4 abilitata"
+      },
+      "discharge_slot_5_enabled": {
+        "name": "Fascia di scarica 5 abilitata"
+      },
+      "discharge_slot_6_enabled": {
+        "name": "Fascia di scarica 6 abilitata"
+      },
+      "discharge_slot_7_enabled": {
+        "name": "Fascia di scarica 7 abilitata"
+      },
+      "battery_auto_wake": {
+        "name": "Riattivazione automatica della batteria"
+      },
+      "time_of_use_grid_discharge": {
+        "name": "Scarica verso la rete a fasce orarie"
+      },
+      "ev_enabled": {
+        "name": "Caricatore EV abilitato"
+      },
+      "ev_slot_1_grid_charging": {
+        "name": "Ricarica dalla rete fascia 1 del caricatore EV"
+      },
+      "ev_slot_1_battery_discharge": {
+        "name": "Scarica della batteria fascia 1 del caricatore EV"
+      },
+      "ev_slot_2_grid_charging": {
+        "name": "Ricarica dalla rete fascia 2 del caricatore EV"
+      },
+      "ev_slot_2_battery_discharge": {
+        "name": "Scarica della batteria fascia 2 del caricatore EV"
+      },
+      "ev_slot_3_grid_charging": {
+        "name": "Ricarica dalla rete fascia 3 del caricatore EV"
+      },
+      "ev_slot_3_battery_discharge": {
+        "name": "Scarica della batteria fascia 3 del caricatore EV"
+      },
+      "ev_slot_4_grid_charging": {
+        "name": "Ricarica dalla rete fascia 4 del caricatore EV"
+      },
+      "ev_slot_4_battery_discharge": {
+        "name": "Scarica della batteria fascia 4 del caricatore EV"
+      },
+      "ev_slot_5_grid_charging": {
+        "name": "Ricarica dalla rete fascia 5 del caricatore EV"
+      },
+      "ev_slot_5_battery_discharge": {
+        "name": "Scarica della batteria fascia 5 del caricatore EV"
+      },
+      "ev_slot_6_grid_charging": {
+        "name": "Ricarica dalla rete fascia 6 del caricatore EV"
+      },
+      "ev_slot_6_battery_discharge": {
+        "name": "Scarica della batteria fascia 6 del caricatore EV"
+      },
+      "ev_slot_7_grid_charging": {
+        "name": "Ricarica dalla rete fascia 7 del caricatore EV"
+      },
+      "ev_slot_7_battery_discharge": {
+        "name": "Scarica della batteria fascia 7 del caricatore EV"
+      },
+      "ev_minimum_current_charging": {
+        "name": "Ricarica a corrente minima del caricatore EV"
+      },
+      "ev_ems_charging": {
+        "name": "Ricarica EMS del caricatore EV"
+      },
+      "battery_power_control": {
+        "name": "Controllo della potenza della batteria"
+      },
+      "grid_power_control": {
+        "name": "Controllo della potenza della rete"
+      },
+      "inverter_power_control": {
+        "name": "Controllo della potenza dell'inverter"
+      },
+      "buzzer": {
+        "name": "Cicalino"
+      }
+    },
+    "time": {
+      "charge_slot_1_start": {
+        "name": "Ora di inizio fascia di carica 1"
+      },
+      "charge_slot_1_end": {
+        "name": "Ora di fine fascia di carica 1"
+      },
+      "charge_slot_2_start": {
+        "name": "Ora di inizio fascia di carica 2"
+      },
+      "charge_slot_2_end": {
+        "name": "Ora di fine fascia di carica 2"
+      },
+      "charge_slot_3_start": {
+        "name": "Ora di inizio fascia di carica 3"
+      },
+      "charge_slot_3_end": {
+        "name": "Ora di fine fascia di carica 3"
+      },
+      "charge_slot_4_start": {
+        "name": "Ora di inizio fascia di carica 4"
+      },
+      "charge_slot_4_end": {
+        "name": "Ora di fine fascia di carica 4"
+      },
+      "charge_slot_5_start": {
+        "name": "Ora di inizio fascia di carica 5"
+      },
+      "charge_slot_5_end": {
+        "name": "Ora di fine fascia di carica 5"
+      },
+      "charge_slot_6_start": {
+        "name": "Ora di inizio fascia di carica 6"
+      },
+      "charge_slot_6_end": {
+        "name": "Ora di fine fascia di carica 6"
+      },
+      "charge_slot_7_start": {
+        "name": "Ora di inizio fascia di carica 7"
+      },
+      "charge_slot_7_end": {
+        "name": "Ora di fine fascia di carica 7"
+      },
+      "discharge_slot_1_start": {
+        "name": "Ora di inizio fascia di scarica 1"
+      },
+      "discharge_slot_1_end": {
+        "name": "Ora di fine fascia di scarica 1"
+      },
+      "discharge_slot_2_start": {
+        "name": "Ora di inizio fascia di scarica 2"
+      },
+      "discharge_slot_2_end": {
+        "name": "Ora di fine fascia di scarica 2"
+      },
+      "discharge_slot_3_start": {
+        "name": "Ora di inizio fascia di scarica 3"
+      },
+      "discharge_slot_3_end": {
+        "name": "Ora di fine fascia di scarica 3"
+      },
+      "discharge_slot_4_start": {
+        "name": "Ora di inizio fascia di scarica 4"
+      },
+      "discharge_slot_4_end": {
+        "name": "Ora di fine fascia di scarica 4"
+      },
+      "discharge_slot_5_start": {
+        "name": "Ora di inizio fascia di scarica 5"
+      },
+      "discharge_slot_5_end": {
+        "name": "Ora di fine fascia di scarica 5"
+      },
+      "discharge_slot_6_start": {
+        "name": "Ora di inizio fascia di scarica 6"
+      },
+      "discharge_slot_6_end": {
+        "name": "Ora di fine fascia di scarica 6"
+      },
+      "discharge_slot_7_start": {
+        "name": "Ora di inizio fascia di scarica 7"
+      },
+      "discharge_slot_7_end": {
+        "name": "Ora di fine fascia di scarica 7"
+      },
+      "ev_slot_1_start": {
+        "name": "Ora di inizio fascia 1 del caricatore EV"
+      },
+      "ev_slot_1_end": {
+        "name": "Ora di fine fascia 1 del caricatore EV"
+      },
+      "ev_slot_2_start": {
+        "name": "Ora di inizio fascia 2 del caricatore EV"
+      },
+      "ev_slot_2_end": {
+        "name": "Ora di fine fascia 2 del caricatore EV"
+      },
+      "ev_slot_3_start": {
+        "name": "Ora di inizio fascia 3 del caricatore EV"
+      },
+      "ev_slot_3_end": {
+        "name": "Ora di fine fascia 3 del caricatore EV"
+      },
+      "ev_slot_4_start": {
+        "name": "Ora di inizio fascia 4 del caricatore EV"
+      },
+      "ev_slot_4_end": {
+        "name": "Ora di fine fascia 4 del caricatore EV"
+      },
+      "ev_slot_5_start": {
+        "name": "Ora di inizio fascia 5 del caricatore EV"
+      },
+      "ev_slot_5_end": {
+        "name": "Ora di fine fascia 5 del caricatore EV"
+      },
+      "ev_slot_6_start": {
+        "name": "Ora di inizio fascia 6 del caricatore EV"
+      },
+      "ev_slot_6_end": {
+        "name": "Ora di fine fascia 6 del caricatore EV"
+      },
+      "ev_slot_7_start": {
+        "name": "Ora di inizio fascia 7 del caricatore EV"
+      },
+      "ev_slot_7_end": {
+        "name": "Ora di fine fascia 7 del caricatore EV"
+      }
+    },
+    "button": {
+      "clear_current_fault": {
+        "name": "Cancella il guasto attuale"
+      },
+      "restart_inverter": {
+        "name": "Riavvia l'inverter"
+      },
+      "synchronise_clock": {
+        "name": "Sincronizza l'orologio"
+      },
+      "ems_pv_power_limit_remove": {
+        "name": "Rimuovi il limite EMS della potenza solare"
+      }
+    }
+  },
+  "issues": {
+    "equipment_not_detected": {
+      "title": "{equipment} non è più rilevato",
+      "description": "{installation} è stata configurata con {equipment}, ma l'inverter ora comunica che non è presente. Le entità di {equipment} restano e mostrano ciò che l'inverter risponde. Controlla {equipment}, oppure impostalo su Non installato in Configura per rimuovere le sue entità."
+    },
+    "model_mismatch": {
+      "title": "{installation} è impostata sul modello sbagliato",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Adotta l'inverter rilevato",
+            "description": "{installation} è impostata su {selected_model}, ma il dispositivo al suo indirizzo si identifica come {model} con numero di serie {serial}, quindi non è stata caricata. Adottare il {model}? Le tue entità, i loro ID e i loro dati storici restano con questa installazione, e i dettagli del dispositivo cambiano. Consenti controllo e ogni altra impostazione restano come sono. Per mantenere invece {selected_model}, controlla l'indirizzo in Configura."
+          }
+        },
+        "error": {
+          "cannot_connect": "Impossibile raggiungere l'inverter. Verifica che sia acceso e che nient'altro occupi la connessione, poi riprova.",
+          "timeout": "L'inverter non ha risposto in tempo. Riprova.",
+          "read_rejected": "L'inverter ha rifiutato una lettura necessaria. Riprova.",
+          "invalid_device_data": "L'inverter ha risposto con dati non leggibili. Riprova.",
+          "unsupported_device": "Il dispositivo all'indirizzo non è un modello riconosciuto, quindi non c'è nulla da adottare. Scegli il suo modello in Configura.",
+          "already_configured": "Un'altra installazione usa già questo inverter, quindi non può essere adottato qui.",
+          "device_changed": "Il dispositivo ora comunica {model} con numero di serie {serial}, che non è ciò che ti era stato mostrato prima. Conferma di nuovo per adottare ciò che viene mostrato ora."
+        },
+        "abort": {
+          "entry_removed": "Questa installazione non esiste più.",
+          "already_configured": "Un'altra installazione usa già questo inverter, quindi non può essere adottato qui.",
+          "prefix_unavailable": "Il prefisso degli ID entità di questa installazione non è più disponibile."
+        }
+      }
+    },
+    "identity_mismatch": {
+      "title": "{installation} ora raggiunge un inverter diverso",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Adotta l'inverter rilevato",
+            "description": "{installation} è stata configurata con l'inverter con numero di serie {approved_serial}, ma il dispositivo al suo indirizzo ha il numero di serie {serial} e si identifica come {model}. Adottare il nuovo inverter? Le tue entità, i loro ID e i loro dati storici restano con questa installazione, e i dettagli del dispositivo cambiano. Consenti controllo e ogni altra impostazione restano come sono. Per mantenere invece l'inverter originale, controlla l'indirizzo in Configura."
+          }
+        },
+        "error": {
+          "cannot_connect": "Impossibile raggiungere l'inverter a questo indirizzo, quindi non è stato possibile controllarne il numero di serie. Assicurati che sia alimentato e che non sia occupato da un altro client Modbus, poi conferma di nuovo.",
+          "timeout": "L'inverter ha impiegato troppo tempo a comunicare il numero di serie. Conferma di nuovo tra poco.",
+          "read_rejected": "L'inverter ha rifiutato una lettura necessaria per controllare il numero di serie. Conferma di nuovo tra poco.",
+          "invalid_device_data": "L'inverter ha comunicato un numero di serie non leggibile. Conferma di nuovo tra poco.",
+          "unsupported_device": "Il dispositivo ora presente a questo indirizzo non è un modello riconosciuto, quindi il suo numero di serie non può essere adottato. Scegli il suo modello in Configura.",
+          "already_configured": "L'inverter ora presente a questo indirizzo appartiene già a un'altra installazione, quindi non può essere adottato qui.",
+          "device_changed": "L'inverter a questo indirizzo ora ha il numero di serie {serial} e comunica {model}, che è diverso da ciò che ti era stato mostrato. Conferma di nuovo per adottare esattamente ciò che è elencato ora."
+        },
+        "abort": {
+          "entry_removed": "Questa installazione è stata rimossa, quindi non c'è nulla in cui adottare l'inverter.",
+          "already_configured": "L'inverter ora presente a questo indirizzo appartiene già a un'altra installazione, quindi non può essere adottato qui.",
+          "prefix_unavailable": "Il prefisso degli ID entità di questa installazione non può più essere usato, quindi l'inverter non è stato adottato."
+        }
+      }
+    },
+    "unsupported_device": {
+      "title": "{installation} raggiunge un dispositivo non riconosciuto",
+      "description": "Il dispositivo all'indirizzo di {installation} comunica il tipo {device_type}, che non è un modello riconosciuto. Non è stato caricato. Un modello può essere scelto in Configura, dove viene usato non verificato."
+    },
+    "registers_refused": {
+      "title": "{installation} ha letture che l'inverter rifiuta",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Disabilita le entità rifiutate",
+            "description": "L'inverter continua a rifiutare queste letture di {installation}, quindi non vengono più lette: {entities}. Vengono riprovate una volta al giorno e a ogni caricamento dell'integrazione, e questa riparazione scompare da sola quando rispondono di nuovo. Disabilitarle per smettere di leggerle definitivamente? Puoi abilitarle di nuovo dalle impostazioni dell'entità."
+          }
+        }
+      }
+    },
+    "endpoint_unreachable": {
+      "title": "{installation} ha smesso di rispondere",
+      "description": "{installation} non risponde a {host}:{port} da 15 minuti. Verifica che l'inverter e il suo modulo di comunicazione siano alimentati, che la rete tra Home Assistant e l'inverter funzioni e che nessun altro client Modbus occupi la connessione. Questa riparazione scompare alla prima lettura corretta."
+    }
+  },
+  "exceptions": {
+    "unsupported_device": {
+      "message": "Il dispositivo connesso comunica il tipo {device_type}, che non è riconosciuto. Scegli il suo modello in Configura."
+    },
+    "invalid_device_data": {
+      "message": "L'inverter ha restituito dati di identità o di telemetria non validi."
+    },
+    "cannot_connect": {
+      "message": "La comunicazione con l'inverter non è riuscita. Controlla l'endpoint, l'ID unità e la connessione."
+    },
+    "timeout": {
+      "message": "L'inverter non ha risposto prima della scadenza della richiesta. Controlla alimentazione, rete e ID unità."
+    },
+    "read_rejected": {
+      "message": "L'inverter ha rifiutato la lettura di un registro necessario. Controlla il tipo di dispositivo selezionato e l'accesso ai registri."
+    },
+    "identity_mismatch": {
+      "message": "L'endpoint ora identifica un inverter diverso. Controlla l'endpoint configurato."
+    },
+    "model_mismatch": {
+      "message": "Il dispositivo connesso si identifica come {detected_model}, non come {selected_model}. Scegli {detected_model} o Automatico in Configura."
+    },
+    "unknown_model": {
+      "message": "Il modello salvato {selection} non è un modello noto. Scegli Automatico o un modello elencato in Configura."
+    },
+    "backing_off": {
+      "message": "L'endpoint dell'inverter è in attesa dopo ripetuti errori, quindi non è stata tentata alcuna connessione. Home Assistant riproverà automaticamente."
+    },
+    "control_not_enabled": {
+      "message": "Il controllo non è abilitato per questa installazione, quindi l'inverter non è stato modificato. Per consentire le modifiche, apri Impostazioni, Dispositivi e servizi, SAJ Local, Configura e attiva Consenti controllo."
+    },
+    "model_unverified": {
+      "message": "Non è stato possibile verificare il modello di questo inverter, quindi le sue impostazioni non possono essere modificate. L'inverter non è stato modificato."
+    },
+    "protected_setting": {
+      "message": "{setting} è un'impostazione di messa in servizio e non può essere modificata da Home Assistant. L'inverter non è stato modificato."
+    },
+    "unknown_setting": {
+      "message": "{setting} non può essere scritta su questo inverter. L'inverter non è stato modificato."
+    },
+    "separate_registers": {
+      "message": "Queste modifiche non sono memorizzate insieme in un solo registro e non possono essere fatte in un solo passaggio. L'inverter non è stato modificato."
+    },
+    "invalid_value_not_a_number": {
+      "message": "Il valore non è un numero. L'inverter non è stato modificato."
+    },
+    "invalid_value_out_of_range": {
+      "message": "Il valore è fuori dall'intervallo consentito da questa impostazione. L'inverter non è stato modificato."
+    },
+    "invalid_value_not_an_option": {
+      "message": "Il valore non è una delle opzioni offerte da questa impostazione. L'inverter non è stato modificato."
+    },
+    "invalid_value_not_a_time": {
+      "message": "Il valore non è un'ora del giorno valida. L'inverter non è stato modificato."
+    },
+    "invalid_value_not_a_clock": {
+      "message": "Il valore non è una data e un'ora valide. L'inverter non è stato modificato."
+    },
+    "invalid_value_does_not_fit": {
+      "message": "Il valore non entra nel registro in cui è memorizzato. L'inverter non è stato modificato."
+    },
+    "invalid_value_unsupported_encoding": {
+      "message": "Questa impostazione non può essere scritta da Home Assistant. L'inverter non è stato modificato."
+    },
+    "link_unavailable": {
+      "message": "L'inverter non è raggiungibile al momento, quindi non è stato inviato nulla e l'inverter non è stato modificato. Home Assistant si riconnette da solo."
+    },
+    "write_allowance": {
+      "message": "Troppe modifiche: per proteggere l'inverter non sono consentite più di {limit} scritture in {window} secondi. Non è stato inviato nulla e l'inverter non è stato modificato. Riprova tra poco."
+    },
+    "ems_timeout_too_short": {
+      "message": "Il timeout EMS dell'inverter di {timeout} secondi non è più lungo dell'heartbeat EMS di {interval} secondi, quindi l'EMS si interromperebbe tra un battito e l'altro. L'inverter non è stato modificato. Aumenta il timeout oltre l'heartbeat, oppure cambia l'heartbeat in Configura."
+    },
+    "write_rejected": {
+      "message": "L'inverter ha rifiutato la modifica con il codice di eccezione {exception_code}. L'inverter non è stato modificato."
+    },
+    "write_unconfirmed": {
+      "message": "L'inverter non ha confermato la modifica. Potrebbe essere stata applicata o no, quindi l'inverter è in uno stato sconosciuto. La modifica non è stata inviata di nuovo. Home Assistant si sta riconnettendo e leggerà di nuovo l'inverter."
+    },
+    "write_mismatch": {
+      "message": "L'inverter ha accettato la modifica ma ora contiene un valore diverso, che viene mostrato. L'inverter è stato modificato, ma non al valore richiesto."
+    },
+    "no_power_target": {
+      "message": "Non è stata impostata alcuna potenza per la funzione {function}. Imposta prima il suo obiettivo di potenza. L'inverter non è stato modificato."
+    },
+    "another_function_running": {
+      "message": "La funzione {running} è in esecuzione, e può essere in esecuzione una sola funzione di controllo della potenza alla volta. Spegnila prima. L'inverter non è stato modificato."
+    },
+    "unusable_power": {
+      "message": "La potenza deve essere un numero intero di watt da {minimum} a {maximum}. L'inverter non è stato modificato."
+    }
+  },
+  "selector": {
+    "model": {
+      "options": {
+        "automatic": "Automatico",
+        "hs3": "HS3",
+        "h2": "H2"
+      }
+    },
+    "block": {
+      "options": {
+        "network": "Interfaccia di rete",
+        "ev_data": "Dati del caricatore EV",
+        "settings": "Impostazioni",
+        "realtime": "Tempo reale",
+        "energy": "Energia",
+        "parallel": "Macchine in parallelo",
+        "ev_settings": "Impostazioni del caricatore EV",
+        "averages": "Medie di cinque minuti",
+        "ems": "EMS",
+        "identity": "Versioni",
+        "battery": "Batteria",
+        "meters": "Contatori",
+        "battery_identity": "Identità della batteria"
+      }
+    },
+    "entity_state": {
+      "options": {
+        "disabled": "{entity} (disabilitata)"
+      }
+    },
+    "equipment": {
+      "options": {
+        "battery": "Batteria",
+        "meter_a": "Contatore A",
+        "meter_b": "Contatore B",
+        "ev_charger": "Caricatore EV",
+        "parallel": "Sistema in parallelo",
+        "none": "nessuna apparecchiatura opzionale"
+      }
+    },
+    "equipment_setting": {
+      "options": {
+        "automatic": "Automatico",
+        "fitted": "Installato",
+        "not_fitted": "Non installato"
+      }
+    },
+    "power_function": {
+      "options": {
+        "battery": "Batteria",
+        "grid": "Rete",
+        "inverter": "Inverter"
+      }
+    }
+  }
+}

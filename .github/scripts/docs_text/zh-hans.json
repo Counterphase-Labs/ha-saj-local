@@ -1,0 +1,89 @@
+{
+  "generated_notice": "由 `make docs` 生成，请勿手动编辑。",
+  "areas": {
+    "inverter-and-pv": {
+      "title": "逆变器与光伏",
+      "summary": "逆变器输出、光伏组串、备用端口、电量计数器、版本和家庭负载"
+    },
+    "grid-and-meter-a": {
+      "title": "电网与电表 A",
+      "summary": "电网连接和电表 A（电网电表）"
+    },
+    "meter-b": {
+      "title": "电表 B",
+      "summary": "电表 B，测量光伏逆变器的第二块电表"
+    },
+    "battery": {
+      "title": "电池",
+      "summary": "电池整体"
+    },
+    "battery-packs": {
+      "title": "电池包",
+      "summary": "每个电池包的读数和标识"
+    },
+    "ev-charger": {
+      "title": "充电桩",
+      "summary": "充电桩及其充电控制"
+    },
+    "parallel-system": {
+      "title": "并机系统",
+      "summary": "并机系统的读数"
+    },
+    "settings": {
+      "title": "设置",
+      "summary": "更改逆变器的设置和命令"
+    },
+    "faults": {
+      "title": "故障",
+      "summary": "逆变器、电池和充电桩上报的故障"
+    },
+    "added-by-the-integration": {
+      "title": "由集成添加",
+      "summary": "集成在寄存器目录之外添加的实体"
+    }
+  },
+  "kinds": {
+    "binary_sensor": "二元传感器",
+    "button": "按钮",
+    "number": "数值输入器",
+    "select": "选择",
+    "sensor": "传感器",
+    "switch": "开关",
+    "time": "时间"
+  },
+  "summary_line": "{summary}。",
+  "area_intro": "集成功能列表在 {links} 中说明了{title}实体。",
+  "link_join": "和",
+  "sections": {
+    "Devices and entities": "设备与实体",
+    "Optional equipment": "可选设备",
+    "Changing settings": "更改设置",
+    "Device faults and repairs": "设备故障和修复问题",
+    "Power control": "功率控制"
+  },
+  "count_line": "{count} 个实体。{notice}",
+  "prefix_note": "在“配置”中设置的前缀会加在每个{title}实体 ID 中 `{entity_prefix}_` 之后，例如前缀为 `{prefix}` 时为 `{example}`。",
+  "area_header": [
+    "名称",
+    "实体 ID",
+    "类型",
+    "单位",
+    "型号",
+    "设备和数量",
+    "默认启用"
+  ],
+  "phase_note": "第 {n} 相及以上",
+  "string_note": "光伏组串 {n} 及以上",
+  "pack_note": "电池包 {n} 及以上",
+  "yes": "是",
+  "no": "否",
+  "only": "仅限 {models}",
+  "index_title": "实体",
+  "index_intro": "SAJ Local 可以创建的所有实体，每个区域一页。集成功能列表的 [{section}]({link}) 一节说明了实体类型、默认启用的实体和功率读数的正负号。",
+  "index_fit": "系统只会得到与其型号、已安装设备以及相数、光伏组串数和电池包数相符的实体。“型号”列说明哪些型号有该实体，“设备和数量”列说明需要安装什么。",
+  "index_header": [
+    "区域",
+    "实体",
+    "包含内容"
+  ]
+}

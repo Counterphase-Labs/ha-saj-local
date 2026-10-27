@@ -1,3 +1,5 @@
+en | [de](../../../de/user/cards/faults-card.md) | [nl](../../../nl/user/cards/faults-card.md) | [fr](../../../fr/user/cards/faults-card.md) | [zh](../../../zh-hans/user/cards/faults-card.md) | [es](../../../es/user/cards/faults-card.md) | [it](../../../it/user/cards/faults-card.md) | [pl](../../../pl/user/cards/faults-card.md) | [sv](../../../sv/user/cards/faults-card.md)
+
 # Faults card
 
 The Faults card page explains the faults card, which lists the active faults of each piece of equipment. The full list is in the [Faults card](../../../../frontend/docs/features.md#faults-card) section of the cards feature list. [Add an element](README.md#add-an-element) explains how to add the card and choose a system. The faults come from the [device fault entities](../faults-and-repairs.md#device-faults).

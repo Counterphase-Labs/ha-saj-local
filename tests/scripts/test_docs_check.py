@@ -75,12 +75,39 @@ def catalogue_returning(*registers):
     return catalogue_of
 
 
-def translations(**names) -> dict:
+TEXT = json.loads(
+    (Path(docs_check.__file__).parent / "docs_text" / "en-gb.json").read_text(
+        encoding="utf-8"
+    )
+)
+ENGLISH_EQUIPMENT = {
+    "battery": "Battery",
+    "meter_a": "Meter A",
+    "meter_b": "Meter B",
+    "ev_charger": "EV charger",
+    "parallel": "Parallel system",
+}
+
+
+def translations(equipment=None, **names) -> dict:
     entities: dict = {}
     for dotted, name in names.items():
         kind, key = dotted.split("__", 1)
         entities.setdefault(kind, {})[key] = {"name": name}
-    return {"entity": entities}
+    options = ENGLISH_EQUIPMENT if equipment is None else equipment
+    return {"entity": entities, "selector": {"equipment": {"options": options}}}
+
+
+def render_area(*, area, entities, translations, code="en-gb", text=TEXT) -> str:
+    return docs_check.render_area(
+        code=code, area=area, entities=entities, translations=translations, text=text
+    )
+
+
+def generated_pages(*, entities, translations, code="en-gb", text=TEXT) -> dict:
+    return docs_check.generated_pages(
+        code=code, entities=entities, translations=translations, text=text
+    )
 
 
 @pytest.mark.parametrize(
@@ -104,7 +131,7 @@ def test_an_entity_lands_on_the_first_area_it_belongs_to(changes, area):
 
 
 def test_every_area_has_a_page_and_an_index_row():
-    pages = docs_check.generated_pages(entities=(), translations=translations())
+    pages = generated_pages(entities=(), translations=translations())
 
     paths = {path.name for path in pages}
     assert paths == {f"{area.slug}.md" for area in docs_check.AREAS} | {"README.md"}
@@ -227,7 +254,7 @@ def test_shipped_entities_combine_the_catalogue_and_the_added_entities():
 
 
 def test_a_row_shows_name_id_type_unit_models_needs_and_default():
-    page = docs_check.render_area(
+    page = render_area(
         area=docs_check.AREAS[3],
         entities=[
             entity(
@@ -256,7 +283,7 @@ def test_a_row_shows_name_id_type_unit_models_needs_and_default():
 
 
 def test_an_unlisted_equipment_is_shown_by_its_own_name():
-    page = docs_check.render_area(
+    page = render_area(
         area=docs_check.AREAS[0],
         entities=[entity(equipment="heat_pump")],
         translations=translations(),
@@ -265,8 +292,18 @@ def test_an_unlisted_equipment_is_shown_by_its_own_name():
     assert "| heat_pump | Yes |" in page
 
 
+def test_the_equipment_names_come_from_the_translation_file_of_the_language():
+    page = render_area(
+        area=docs_check.AREAS[3],
+        entities=[entity(key="battery_power", equipment="battery")],
+        translations=translations(equipment={"battery": "Batterie"}),
+    )
+
+    assert "| HS3, H2 | Batterie | Yes |" in page
+
+
 def test_an_area_page_links_its_feature_list_sections_and_explains_the_prefix():
-    page = docs_check.render_area(
+    page = render_area(
         area=docs_check.AREAS[-1], entities=[], translations=translations()
     )
 
@@ -276,11 +313,51 @@ def test_an_area_page_links_its_feature_list_sections_and_explains_the_prefix():
         "#changing-settings) and [Power control]" in page
     )
     assert "A prefix set in Configure" not in page
-    assert docs_check.GENERATED_NOTICE in page
+    assert TEXT["generated_notice"] in page
+
+
+def test_the_texts_of_the_language_are_used_for_the_page():
+    text = {
+        **TEXT,
+        "areas": {
+            **TEXT["areas"],
+            "faults": {"title": "Fehler", "summary": "Meldungen"},
+        },
+        "yes": "Ja",
+        "sections": {
+            **TEXT["sections"],
+            "Device faults and repairs": "Gerätefehler",
+            "Devices and entities": "Geräte",
+        },
+    }
+
+    page = render_area(
+        area=docs_check.AREAS[8],
+        entities=[entity(kind="binary_sensor", unit=None)],
+        translations=translations(),
+        text=text,
+    )
+    index = generated_pages(
+        entities=[], translations=translations(), text=text, code="de"
+    )
+
+    assert page.splitlines()[:3] == ["# Fehler", "", "Meldungen."]
+    assert page.endswith("| - | HS3, H2 | - | Ja |\n")
+    assert "[Gerätefehler](" in page
+    assert "[Device faults and repairs](" not in page
+    assert "[Geräte](" in index[Path("docs/de/user/entities/README.md")]
+    assert (
+        "features.md#devices-and-entities)"
+        in index[Path("docs/de/user/entities/README.md")]
+    )
+    assert (
+        "| [Fehler](faults.md) | 0 | Meldungen |"
+        in index[Path("docs/de/user/entities/README.md")]
+    )
 
 
 def test_the_prefix_example_is_built_from_the_first_row_of_the_area():
-    page = docs_check.render_area(
+    page = render_area(
         area=docs_check.AREAS[-1],
         entities=[entity(key="control_allowed", kind="binary_sensor"), entity()],
         translations=translations(),
@@ -293,12 +370,12 @@ def test_the_prefix_example_is_built_from_the_first_row_of_the_area():
 
 
 def test_the_index_counts_the_entities_of_each_area_and_links_the_page():
-    pages = docs_check.generated_pages(
+    pages = generated_pages(
         entities=[entity(), entity(key="battery_power", equipment="battery")],
         translations=translations(),
     )
 
-    index = pages[docs_check.ENTITIES_INDEX]
+    index = pages[Path("docs/en-gb/user/entities/README.md")]
     assert "| [Inverter and PV](inverter-and-pv.md) | 1 |" in index
     assert "| [Battery](battery.md) | 1 |" in index
     assert "| [Faults](faults.md) | 0 |" in index
@@ -306,27 +383,22 @@ def test_the_index_counts_the_entities_of_each_area_and_links_the_page():
 
 def test_a_translated_entity_with_no_catalogue_row_is_reported_missing():
     findings = docs_check.missing_entity_findings(
+        file=Path("t/de.json"),
         entities=[entity()],
         translations=translations(sensor__pv_power="PV power", sensor__orphan="Orphan"),
     )
 
-    assert findings == [
-        (
-            f"{docs_check.TRANSLATIONS_FILE.as_posix()}: entity sensor.orphan is on "
-            "no area page"
-        )
-    ]
+    assert findings == ["t/de.json: entity sensor.orphan is on no area page"]
 
 
 def test_an_entity_with_no_translated_name_is_reported():
     findings = docs_check.missing_entity_findings(
+        file=Path("t/de.json"),
         entities=[entity(), entity(key="nameless", kind="number")],
         translations=translations(sensor__pv_power="PV power"),
     )
 
-    assert findings == [
-        f"{docs_check.TRANSLATIONS_FILE.as_posix()}: entity number.nameless has no name"
-    ]
+    assert findings == ["t/de.json: entity number.nameless has no name"]
 
 
 def test_a_missing_or_changed_generated_page_is_stale_and_a_current_one_is_not(
@@ -431,12 +503,101 @@ def test_an_image_no_document_references_is_reported_and_a_used_one_is_not(tree)
     write(tree, "docs/en-gb/user/page.md", "![shot](../../images/en-gb/used.png)\n")
 
     assert docs_check.orphan_findings(tree) == [
-        "docs/images/en-gb/unused.png: image is referenced by no document"
+        "docs/images/en-gb/unused.png: image is referenced by no page of its language"
+    ]
+
+
+def test_an_image_is_used_only_by_a_page_of_its_own_language(tree):
+    write(tree, "docs/images/de/shot.png", "x")
+    write(tree, "docs/images/de/other.png", "x")
+    write(tree, "docs/images/fr/shot.png", "x")
+    write(tree, "docs/images/loose.png", "x")
+    write(tree, "docs/de/user/page.md", "![a](../../images/de/shot.png)\n")
+    write(tree, "docs/fr/user/page.md", "![a](../../images/de/shot.png)\n")
+
+    assert docs_check.orphan_findings(tree) == [
+        f"docs/images/{name}: image is referenced by no page of its language"
+        for name in ("de/other.png", "fr/shot.png", "loose.png")
     ]
 
 
 def test_there_is_no_orphan_finding_before_any_image_exists(tree):
     assert docs_check.orphan_findings(tree) == []
+
+
+def test_every_folder_but_images_is_a_language(tree):
+    for path in ("de/a.md", "zh-hans/a.md", "images/en-gb/a.png"):
+        write(tree, f"docs/{path}", "x")
+    write(tree, "docs/stray.md", "x")
+
+    assert docs_check.language_codes(tree) == ("de", "zh-hans")
+    assert docs_check.language_codes(tree / "nowhere") == ()
+
+
+def test_every_language_is_checked_for_links_and_length(tree):
+    write(tree, "docs/de/user/page.md", "[gone](gone.md)\n")
+    write(tree, "docs/fr/user/long.md", "line\n" * (docs_check.MAX_PAGE_LINES + 1))
+    write(tree, "docs/fr/user/entities/long.md", "line\n" * 400)
+
+    assert docs_check.link_findings(tree) == [
+        "docs/de/user/page.md: missing target docs/de/user/gone.md"
+    ]
+    limit = docs_check.MAX_PAGE_LINES
+    assert docs_check.length_findings(tree) == [
+        f"docs/fr/user/long.md: {limit + 1} lines, limit is {limit}"
+    ]
+
+
+def test_the_translation_file_of_a_language_is_its_lowercase_name(tree):
+    for name in ("en", "de", "zh-Hans"):
+        write(tree, f"{docs_check.TRANSLATIONS_DIRECTORY}/{name}.json", "{}")
+
+    found = {
+        code: docs_check.translation_file(tree, code)
+        for code in ("en-gb", "de", "zh-hans", "sv")
+    }
+
+    directory = docs_check.TRANSLATIONS_DIRECTORY
+    assert found == {
+        "en-gb": directory / "en.json",
+        "de": directory / "de.json",
+        "zh-hans": directory / "zh-Hans.json",
+        "sv": None,
+    }
+
+
+def test_a_language_with_no_translation_file_or_no_texts_is_reported(tree):
+    write(tree, "docs/de/user/a.md", "x")
+    write(tree, "docs/fr/user/a.md", "x")
+    write(tree, f"{docs_check.TRANSLATIONS_DIRECTORY}/fr.json", "{}")
+    write(tree, ".github/scripts/docs_text/de.json", "{}")
+
+    pages, findings = docs_check.all_generation(root=tree, entities=[])
+
+    assert pages == {}
+    no_file = "docs/de: no translation file for the language in "
+    no_text = ".github/scripts/docs_text/fr.json: missing, the generator needs "
+    assert findings == [
+        no_file + "custom_components/saj_local/translations",
+        no_text + "the texts of fr",
+    ]
+
+
+def test_each_language_generates_its_pages_from_its_own_files(tree):
+    for code, file, name in (("en-gb", "en", "Power"), ("de", "de", "Leistung")):
+        write(tree, f"docs/{code}/user/a.md", "x")
+        write(
+            tree,
+            f"{docs_check.TRANSLATIONS_DIRECTORY}/{file}.json",
+            json.dumps(translations(sensor__pv_power=name)),
+        )
+        write(tree, f".github/scripts/docs_text/{code}.json", json.dumps(TEXT))
+
+    pages, findings = docs_check.all_generation(root=tree, entities=[entity()])
+
+    assert findings == []
+    assert "| Power |" in pages[Path("docs/en-gb/user/entities/inverter-and-pv.md")]
+    assert "| Leistung |" in pages[Path("docs/de/user/entities/inverter-and-pv.md")]
 
 
 def test_a_written_page_over_the_limit_is_reported_and_generated_pages_are_exempt(
@@ -559,10 +720,142 @@ def test_a_row_naming_an_unknown_list_section_or_page_is_reported(tree):
     )
 
 
+def test_the_coverage_table_applies_to_every_language_under_the_same_page_names(tree):
+    write(tree, "docs/en-gb/user/a.md", feature_link("user/a.md", "Alpha") + "\n")
+    write(tree, "docs/de/user/a.md", feature_link("user/a.md", "Beta") + "\n")
+    cover(tree, "| Integration | Alpha | `user/a.md`, `user/b.md` |\n")
+
+    findings = docs_check.coverage_findings(tree)
+
+    assert (
+        "docs/de/user/a.md: no link to Integration section Alpha "
+        "(custom_components/saj_local/docs/features.md#alpha)" in findings
+    )
+    assert (
+        "docs/de/user/b.md: page named in the Feature Coverage Table is missing"
+        in findings
+    )
+    assert not any(finding.startswith("docs/en-gb/user/a.md") for finding in findings)
+
+
 def test_a_missing_coverage_page_is_reported(tree):
     assert docs_check.coverage_findings(tree) == [
         "docs/en-gb/developer/documentation.md: Feature Coverage Table page is missing"
     ]
+
+
+EXPECTED_BAR = (
+    "en | [de](../../de/user/polling.md) | [nl](../../nl/user/polling.md) | "
+    "[fr](../../fr/user/polling.md) | [zh](../../zh-hans/user/polling.md) | "
+    "[es](../../es/user/polling.md) | [it](../../it/user/polling.md) | "
+    "[pl](../../pl/user/polling.md) | [sv](../../sv/user/polling.md)"
+)
+
+
+def test_the_language_bar_links_every_other_language_and_shows_the_current_as_text():
+    bar = docs_check.language_bar(Path("docs/en-gb/user/polling.md"))
+
+    assert bar == EXPECTED_BAR
+    assert docs_check.language_bar(Path("docs/de/user/entities/battery.md")).startswith(
+        "[en](../../../en-gb/user/entities/battery.md) | de | [nl]("
+    )
+
+
+def test_a_bar_is_inserted_above_the_title_and_replaced_when_already_there():
+    page = Path("docs/en-gb/user/polling.md")
+    barred = f"{EXPECTED_BAR}\n\n# Polling\n"
+
+    assert docs_check.with_language_bar(page=page, text="# Polling\n") == barred
+    assert docs_check.with_language_bar(page=page, text=barred) == barred
+    assert (
+        docs_check.with_language_bar(page=page, text="de | [en](x.md)\n# Polling\n")
+        == barred
+    )
+
+
+def test_the_generated_pages_start_with_the_bar():
+    pages = generated_pages(entities=(entity(),), translations=translations())
+
+    assert all(
+        text.startswith(docs_check.language_bar(page)) for page, text in pages.items()
+    )
+
+
+def test_a_page_with_no_bar_or_a_wrong_bar_is_reported_and_a_right_one_is_not(tree):
+    page = Path("docs/en-gb/user/polling.md")
+    write(tree, page.as_posix(), "# Polling\n")
+    write(tree, "docs/en-gb/user/wrong.md", "en | de\n\n# Wrong\n")
+    write(
+        tree,
+        "docs/en-gb/user/right.md",
+        docs_check.with_language_bar(
+            page=Path("docs/en-gb/user/right.md"), text="# Right\n"
+        ),
+    )
+
+    assert docs_check.bar_findings(tree) == [
+        "docs/en-gb/user/polling.md: first line is not the language bar, run make docs",
+        "docs/en-gb/user/wrong.md: first line is not the language bar, run make docs",
+    ]
+
+
+def test_a_bar_link_to_a_missing_page_is_reported(tree):
+    page = Path("docs/en-gb/user/polling.md")
+    write(tree, page.as_posix(), docs_check.with_language_bar(page=page, text="# P\n"))
+    write(tree, "docs/de/user/polling.md", "x\n")
+
+    assert (
+        "docs/en-gb/user/polling.md: missing target docs/nl/user/polling.md"
+        in docs_check.link_findings(tree)
+    )
+
+
+def test_the_root_readme_bar_links_each_translated_readme_and_shows_en_as_text():
+    bar = docs_check.language_bar(Path("README.md"))
+
+    assert bar.startswith("en | [de](docs/de/README.md) | [nl](docs/nl/README.md) | ")
+    assert bar.endswith(
+        "[zh](docs/zh-hans/README.md) | [es](docs/es/README.md) | "
+        "[it](docs/it/README.md) | [pl](docs/pl/README.md) | [sv](docs/sv/README.md)"
+    )
+
+
+def test_a_translated_readme_bar_links_the_root_readme_and_the_other_readmes():
+    bar = docs_check.language_bar(Path("docs/de/README.md"))
+
+    assert bar.startswith("[en](../../README.md) | de | [nl](../nl/README.md) | ")
+    assert "[zh](../zh-hans/README.md)" in bar
+
+
+def test_the_writer_barres_the_root_readme_and_existing_translated_readmes_only(tree):
+    write(tree, "README.md", "# Root\n")
+    write(tree, "docs/de/README.md", "# Wurzel\n")
+
+    docs_check.write_language_bars(tree)
+
+    assert (tree / "README.md").read_text(encoding="utf-8").startswith("en | [de]")
+    assert (tree / "docs/de/README.md").read_text(encoding="utf-8").startswith("[en](")
+    assert not (tree / "docs/nl/README.md").exists()
+
+
+def test_a_readme_with_a_wrong_bar_is_reported(tree):
+    write(tree, "README.md", "# Root\n")
+
+    assert bar_finding("README.md") in docs_check.bar_findings(tree)
+
+
+def bar_finding(page: str) -> str:
+    return f"{page}: first line is not the language bar, run make docs"
+
+
+def test_a_missing_translated_readme_is_reported_for_each_target_language(tree):
+    write(tree, "docs/de/README.md", "# Wurzel\n")
+
+    findings = docs_check.readme_findings(tree)
+
+    assert len(findings) == 7
+    assert "docs/nl/README.md: translated README is missing" in findings
+    assert not any("docs/de/" in finding for finding in findings)
 
 
 def minimal_modules():
@@ -588,9 +881,10 @@ def finished_tree(tree: Path) -> Path:
     }
     write(
         tree,
-        docs_check.TRANSLATIONS_FILE.as_posix(),
-        json.dumps({"entity": names}),
+        f"{docs_check.TRANSLATIONS_DIRECTORY}/en.json",
+        json.dumps({**translations(), "entity": names}),
     )
+    write(tree, ".github/scripts/docs_text/en-gb.json", json.dumps(TEXT))
     write(
         tree,
         docs_check.INTEGRATION_FEATURES.as_posix(),
@@ -623,11 +917,13 @@ def test_the_write_option_regenerates_pages_the_check_then_accepts(
 ):
     finished_tree(tree)
     monkeypatch.setattr(sys, "path", list(sys.path))
+    monkeypatch.setattr(docs_check, "LANGUAGE_BAR_FOLDERS", (("en", "en-gb"),))
     modules = minimal_modules()
 
     assert docs_check.main(["--write"], root=tree, import_module=modules.get) == 0
     assert docs_check.main([], root=tree, import_module=modules.get) == 0
     assert capsys.readouterr().out == ""
+    assert (tree / "docs/en-gb/user/a.md").read_text().startswith("en\n\n")
 
 
 def test_the_check_prints_each_finding_and_fails(tree, monkeypatch, capsys):

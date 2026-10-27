@@ -1,3 +1,5 @@
+en | [de](../../de/developer/architecture.md) | [nl](../../nl/developer/architecture.md) | [fr](../../fr/developer/architecture.md) | [zh](../../zh-hans/developer/architecture.md) | [es](../../es/developer/architecture.md) | [it](../../it/developer/architecture.md) | [pl](../../pl/developer/architecture.md) | [sv](../../sv/developer/architecture.md)
+
 # Architecture
 
 How the SAJ library and the integration are divided, and why the project is built the way it is.

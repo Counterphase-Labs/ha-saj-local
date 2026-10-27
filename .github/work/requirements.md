@@ -34,7 +34,9 @@ Platform stability and correctness is paramount.
 
 ## Language
 
-- Full localisation and internalisation support
+- The integration, the cards and the user and developer documentation are available in English and in every target language. The target languages are the eight languages SAJ translates its own website into that have the most Home Assistant installations: German, Dutch, French, Simplified Chinese, Spanish, Italian, Polish and Swedish.
+
+- The feature lists and the requirement documents are in English only.
 
 - English texts and keys use British spelling
 

@@ -1,3 +1,5 @@
+en | [de](../../de/developer/simulator-page.md) | [nl](../../nl/developer/simulator-page.md) | [fr](../../fr/developer/simulator-page.md) | [zh](../../zh-hans/developer/simulator-page.md) | [es](../../es/developer/simulator-page.md) | [it](../../it/developer/simulator-page.md) | [pl](../../pl/developer/simulator-page.md) | [sv](../../sv/developer/simulator-page.md)
+
 # Simulator page
 
 The control page of a simulator: views, register inspector, traffic log, link faults, fault effects, presets and saved state.
@@ -102,6 +104,7 @@ The Link view and the `link` section of a scenario set how the simulated module 
 | `offline_seconds`, `offline_period_seconds` | Offline for the first `offline_seconds` of every period, which must be at least as long |
 | `lockout_requests`, `lockout_window_seconds`, `lockout_whole_port` | A client that sends more than `lockout_requests` requests within the window has its connection closed and its address refused, or every client when `lockout_whole_port` is set, until the module is reset. A window is required when a threshold is set |
 
+<!-- jscpd:ignore-start -->
 ```yaml
 link:
   latency_ms: 800
@@ -110,6 +113,7 @@ link:
   refused_blocks:
     - {start: 0x4000, end: 0x40FF, code: 0}
 ```
+<!-- jscpd:ignore-end -->
 
 Percentages are 0 to 100. A wrong value, or a combination that cannot work, stops the simulator at start and names the key, such as `link.offline_seconds`.
 

@@ -1,0 +1,89 @@
+{
+  "generated_notice": "Erzeugt von `make docs`. Nicht von Hand bearbeiten.",
+  "areas": {
+    "inverter-and-pv": {
+      "title": "Wechselrichter und PV",
+      "summary": "Wechselrichterleistung, Solar-Strings, Notstromanschluss, Energiezähler, Versionen und die Hauslast"
+    },
+    "grid-and-meter-a": {
+      "title": "Netz und Zähler A",
+      "summary": "Der Netzanschluss und Zähler A, der Netzzähler"
+    },
+    "meter-b": {
+      "title": "Zähler B",
+      "summary": "Zähler B, der zweite Zähler, der einen Solar-Wechselrichter misst"
+    },
+    "battery": {
+      "title": "Batterie",
+      "summary": "Die Batterie als Ganzes"
+    },
+    "battery-packs": {
+      "title": "Batteriepacks",
+      "summary": "Messwerte und Identität jedes Batteriepacks"
+    },
+    "ev-charger": {
+      "title": "Wallbox",
+      "summary": "Die Wallbox und ihre Ladesteuerung"
+    },
+    "parallel-system": {
+      "title": "Parallelsystem",
+      "summary": "Die Messwerte eines Parallelsystems"
+    },
+    "settings": {
+      "title": "Einstellungen",
+      "summary": "Einstellungen und Befehle, die den Wechselrichter ändern"
+    },
+    "faults": {
+      "title": "Fehler",
+      "summary": "Fehler, die der Wechselrichter, die Batterie und die Wallbox melden"
+    },
+    "added-by-the-integration": {
+      "title": "Von der Integration hinzugefügt",
+      "summary": "Entitäten, die die Integration außerhalb des Registerkatalogs hinzufügt"
+    }
+  },
+  "kinds": {
+    "binary_sensor": "Binärsensor",
+    "button": "Schaltfläche",
+    "number": "Zahl",
+    "select": "Auswahl",
+    "sensor": "Sensor",
+    "switch": "Schalter",
+    "time": "Zeit"
+  },
+  "summary_line": "{summary}.",
+  "area_intro": "Die Funktionsliste der Integration erklärt die Entitäten ({title}) in {links}.",
+  "link_join": " und ",
+  "sections": {
+    "Devices and entities": "Geräte und Entitäten",
+    "Optional equipment": "Optionale Ausstattung",
+    "Changing settings": "Einstellungen ändern",
+    "Device faults and repairs": "Gerätefehler und Reparaturen",
+    "Power control": "Leistungssteuerung"
+  },
+  "count_line": "{count} Entitäten. {notice}",
+  "prefix_note": "Ein in Konfigurieren gesetztes Präfix steht nach `{entity_prefix}_` in der ID jeder Entität ({title}), zum Beispiel `{example}` mit dem Präfix `{prefix}`.",
+  "area_header": [
+    "Name",
+    "Entitäts-ID",
+    "Typ",
+    "Einheit",
+    "Modelle",
+    "Ausstattung und Anzahl",
+    "Standardmäßig aktiviert"
+  ],
+  "phase_note": "Phase {n} und höher",
+  "string_note": "PV-String {n} und höher",
+  "pack_note": "Batteriepack {n} und höher",
+  "yes": "Ja",
+  "no": "Nein",
+  "only": "Nur {models}",
+  "index_title": "Entitäten",
+  "index_intro": "Jede Entität, die SAJ Local erstellen kann, eine Seite je Bereich. Der Abschnitt [{section}]({link}) der Funktionsliste der Integration erklärt die Entitätstypen, welche Entitäten standardmäßig aktiviert sind und das Vorzeichen der Leistungswerte.",
+  "index_fit": "Ein System erhält nur die Entitäten, die zu seinem Modell, seiner vorhandenen Ausstattung und seiner Anzahl an Phasen, Solar-Strings und Batteriepacks passen. Die Spalte Modelle nennt, welche Modelle eine Entität haben, und die Spalte Ausstattung und Anzahl nennt, was vorhanden sein muss.",
+  "index_header": [
+    "Bereich",
+    "Entitäten",
+    "Was sie enthält"
+  ]
+}

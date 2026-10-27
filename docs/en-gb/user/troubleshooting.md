@@ -1,3 +1,5 @@
+en | [de](../../de/user/troubleshooting.md) | [nl](../../nl/user/troubleshooting.md) | [fr](../../fr/user/troubleshooting.md) | [zh](../../zh-hans/user/troubleshooting.md) | [es](../../es/user/troubleshooting.md) | [it](../../it/user/troubleshooting.md) | [pl](../../pl/user/troubleshooting.md) | [sv](../../sv/user/troubleshooting.md)
+
 # Troubleshooting
 
 The Troubleshooting page shows how to download diagnostics, turn on debug logging and read the common problems. The full list is in the [Diagnostics and debug logging](../../../custom_components/saj_local/docs/features.md#diagnostics-and-debug-logging) section of the integration feature list.

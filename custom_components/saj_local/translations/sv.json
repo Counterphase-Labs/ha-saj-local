@@ -1,0 +1,3313 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Anslut till en SAJ-växelriktare",
+        "description": "Ange den lokala Modbus TCP-slutpunkten, avfrågningsintervallet och modellen. Låt modellen stå på Automatisk om inte växelriktaren känns igen.",
+        "data": {
+          "host": "Värd",
+          "port": "Port",
+          "unit_id": "Enhets-ID",
+          "scan_interval": "Sekunder mellan uppdateringar",
+          "model": "Modell",
+          "prefix": "Prefix",
+          "allow_control": "Tillåt styrning"
+        },
+        "data_description": {
+          "prefix": "Valfritt. Lägger till ett prefix i entitets-ID:na för den här anläggningen, till exempel sensor.saj_house_pv_power i stället för sensor.saj_pv_power. Använd det när du har fler än ett SAJ-system. Endast gemener och siffror, inga understreck, högst 32 tecken, och två anläggningar kan inte dela samma prefix.",
+          "allow_control": "Av som standard. När det är på kan entitetsändringar, knappar och automationer ändra växelriktarens inställningar. Inställningar som tar växelriktaren i drift (mätare, RS485, batteriprotokoll, nätverk, länk till elbilsladdare) förblir skrivskyddade. Du ombeds bekräfta när du slår på det."
+        }
+      },
+      "confirm_model": {
+        "title": "Bekräfta modell",
+        "description": "Enheten rapporterar typen {device_type}, som inte känns igen som {model}, så den kunde inte verifieras som den modellen. De register som krävs svarade, men avläsningarna kan vara felaktiga om det är en annan modell. Använda {model} ändå?"
+      },
+      "confirm_control": {
+        "title": "Bekräfta att styrning tillåts",
+        "description": "När styrning är tillåten ändrar entitetsändringar och automationer inställningarna i din växelriktare. En felaktig inställning kan stoppa växelriktaren, ändra hur den använder batteriet eller nätet, eller kosta dig pengar.\n\nAtt aktivera EMS-funktioner stänger av växelriktarens skydd mot omvänd ström.\n\nNär Home Assistant stoppas eller den här anläggningen läses in igen försöker den stänga av de funktioner som du slagit på från Home Assistant. Det görs efter bästa förmåga, utan garanti. Om växelriktaren inte kan nås eller Home Assistant stoppas tvärt kan de förbli på. Växelriktarens egen EMS-tidsgräns kan då avsluta dem, men den har inte visat sig vara tillförlitlig.\n\nAtt tillåta styrning aktiverar också upp till {count} styrentiteter i det här systemet, till exempel tidsluckor och batterigränser, så att de kan visas och ändras på instrumentpaneler. Att läsa dem höjer belastningen från {before} till upp till {after} av {budget} förfrågningar per minut. Entiteterna visas ungefär 30 sekunder efter att du sparat. Vänta tills de visas innan du ändrar något: systemet läses in igen en gång till när de visas, och omläsningen stänger av alla effektstyrningsfunktioner som slagits på före dess.\n\nTillåta styrning?",
+        "data": {
+          "ems_heartbeat": "EMS-hjärtslag (sekunder)"
+        },
+        "data_description": {
+          "ems_heartbeat": "Hur ofta målen för de EMS-funktioner som du slår på från Home Assistant, och EMS-gränserna, läses för att hålla dem vid liv, från 30 till 3600 sekunder. Växelriktarens EMS-tidsgräns måste vara längre än detta. Visas bara för modeller med EMS."
+        }
+      }
+    },
+    "error": {
+      "already_configured": "Den här slutpunkten är redan konfigurerad.",
+      "invalid_host": "Ange ett värdnamn eller en IP-adress.",
+      "invalid_unit_id": "Ange ett heltal från 1 till 247 som enhets-ID.",
+      "cannot_connect": "Det gick inte att ansluta till eller läsa av växelriktaren. Kontrollera slutpunkten och försök igen.",
+      "unsupported_device": "Enheten rapporterar typen {device_type}, som inte känns igen automatiskt. Välj dess modell manuellt.",
+      "invalid_device_data": "Växelriktaren returnerade ogiltiga identitets- eller telemetridata.",
+      "timeout": "Växelriktaren svarade inte i tid. Kontrollera slutpunkten och försök igen.",
+      "read_rejected": "Växelriktaren nekade en nödvändig registeravläsning. Kontrollera att det är en SAJ-enhet och modell som stöds.",
+      "invalid_port": "Ange ett heltal från 1 till 65535 som port.",
+      "invalid_endpoint": "Ange en giltig port och ett giltigt enhets-ID.",
+      "invalid_scan_interval": "Ange ett avfrågningsintervall som är ett heltal på minst 10 sekunder.",
+      "model_mismatch": "Den här enheten identifierar sig som {detected_model}, inte {selected_model}. Välj {detected_model} eller Automatisk.",
+      "unknown_model": "Modellen {selection} är ingen känd modell. Välj Automatisk eller någon av de listade modellerna.",
+      "invalid_prefix": "Använd endast gemener och siffror, utan understreck, högst 32 tecken.",
+      "prefix_in_use": "En annan SAJ Local-anläggning använder redan det här prefixet. Att lämna det tomt räknas också, så bara en anläggning kan sakna prefix.",
+      "entity_id_taken": "Entitets-ID:t {entity_id} är redan upptaget i Home Assistant. Välj ett annat prefix.",
+      "prefix_shadows_entity": "Det här prefixet skulle ge entitets-ID:n som krockar med namnet på en entitet. Välj ett annat prefix.",
+      "invalid_ems_heartbeat": "Ange ett hjärtslag som är ett heltal från 30 till 3600 sekunder."
+    },
+    "abort": {
+      "already_configured": "Den här växelriktaren är redan konfigurerad.",
+      "confirmation_not_pending": "Ingen validerad ändring väntar på bekräftelse."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Anslutning och avfrågning",
+        "description": "Ange den lokala Modbus TCP-slutpunkten, avfrågningsintervallet och modellen. Inställningarna sparas när slutpunkten har validerats. Integrationen skickar högst {budget} förfrågningar per minut till växelriktaren, så att dess kommunikationsmodul inte överbelastas. Den här anläggningen använder just nu {load} av dem.",
+        "data": {
+          "host": "Värd",
+          "port": "Port",
+          "unit_id": "Enhets-ID",
+          "scan_interval": "Sekunder mellan uppdateringar",
+          "model": "Modell",
+          "prefix": "Prefix",
+          "allow_control": "Tillåt styrning",
+          "ems_heartbeat": "EMS-hjärtslag (sekunder)"
+        },
+        "data_description": {
+          "prefix": "Valfritt. Lägger till ett prefix i entitets-ID:na för den här anläggningen, till exempel sensor.saj_house_pv_power i stället för sensor.saj_pv_power. Använd det när du har fler än ett SAJ-system. Endast gemener och siffror, inga understreck, högst 32 tecken, och två anläggningar kan inte dela samma prefix. Om du ändrar det byter den här anläggningens entiteter namn efter att du bekräftat.",
+          "allow_control": "Av som standard. När det är på kan entitetsändringar, knappar och automationer ändra växelriktarens inställningar. Inställningar som tar växelriktaren i drift (mätare, RS485, batteriprotokoll, nätverk, länk till elbilsladdare) förblir skrivskyddade. Du ombeds bekräfta när du slår på det.",
+          "ems_heartbeat": "Hur ofta målen för de EMS-funktioner som du slår på från Home Assistant, och EMS-gränserna, läses för att hålla dem vid liv, från 30 till 3600 sekunder. Växelriktarens EMS-tidsgräns måste vara längre än detta. Visas bara för modeller med EMS."
+        },
+        "sections": {
+          "equipment": {
+            "name": "Utrustning",
+            "description": "Behandlas som installerad nu: {equipment_fitted}. Automatisk identifierar varje del vid varje start och varje omläsning, och behåller det som har identifierats tills du väljer Inte installerad. Installerad skapar dess entiteter utan identifiering. Inte installerad tar bort dess entiteter från Home Assistant, inklusive alla anpassningar du gjort av dem, och glömmer vad som identifierats. Entitets-ID:na förblir desamma om delen installeras igen, så historiken fortsätter.",
+            "data": {
+              "battery": "Batteri",
+              "meter_a": "Mätare A",
+              "meter_b": "Mätare B",
+              "ev_charger": "Elbilsladdare",
+              "parallel": "Parallellsystem"
+            },
+            "data_description": {
+              "battery": "Batteriets entiteter. När växelriktaren inte svarar på identifieringen antas ett batteri finnas.",
+              "meter_a": "Den första mätarens entiteter. När växelriktaren inte svarar på identifieringen antas mätaren finnas.",
+              "meter_b": "Den andra mätarens entiteter, identifierad från växelriktarens status för mätare B.",
+              "ev_charger": "Entiteterna för SAJ-elbilsladdaren, identifierade från växelriktarens inställning för aktivering av elbilsladdare.",
+              "parallel": "Entiteterna för ett parallellt maskinsystem, identifierade från växelriktarens parallellläge och antalet maskiner online."
+            }
+          }
+        }
+      },
+      "confirm_replacement": {
+        "title": "Bekräfta byte av växelriktare",
+        "description": "Ersätta hårdvaran för den här befintliga anläggningen med {model} med serienummer {serial}? Dina entiteter och deras historiska data stannar kvar hos den här anläggningen."
+      },
+      "confirm_model": {
+        "title": "Bekräfta modell",
+        "description": "Enheten rapporterar typen {device_type}, som inte känns igen som {model}, så den kunde inte verifieras som den modellen. De register som krävs svarade, men avläsningarna kan vara felaktiga om det är en annan modell. Använda {model} ändå?"
+      },
+      "confirm_prefix": {
+        "title": "Bekräfta ändring av entitets-ID",
+        "description": "Entitets-ID:na ändras från `{old_pattern}` till `{new_pattern}`, för varje entitetstyp.\n\nHistorik och långtidsstatistik flyttas till de nya entitets-ID:na.\n\nAutomationer, skript, instrumentpaneler, mallar och Energi-inställningar som använder de gamla entitets-ID:na slutar fungera tills du uppdaterar dem.\n\nEntiteter som du själv bytt namn på lämnas orörda. Ändra entitets-ID:na?"
+      },
+      "confirm_load": {
+        "title": "Bekräfta långsammare avfrågning",
+        "description": "Med det här standardintervallet skulle anläggningen behöva {after} förfrågningar per minut, upp från {before}. Integrationen skickar högst {budget} förfrågningar per minut till växelriktaren, så att dess kommunikationsmodul inte överbelastas. Eftersom det överskrider gränsen läses entiteterna långsammare än konfigurerat. Spara intervallet ändå?"
+      },
+      "confirm_control": {
+        "title": "Bekräfta att styrning tillåts",
+        "description": "När styrning är tillåten ändrar entitetsändringar och automationer inställningarna i din växelriktare. En felaktig inställning kan stoppa växelriktaren, ändra hur den använder batteriet eller nätet, eller kosta dig pengar.\n\nAtt aktivera EMS-funktioner stänger av växelriktarens skydd mot omvänd ström.\n\nNär Home Assistant stoppas eller den här anläggningen läses in igen försöker den stänga av de funktioner som du slagit på från Home Assistant. Det görs efter bästa förmåga, utan garanti. Om växelriktaren inte kan nås eller Home Assistant stoppas tvärt kan de förbli på. Växelriktarens egen EMS-tidsgräns kan då avsluta dem, men den har inte visat sig vara tillförlitlig.\n\nAtt tillåta styrning aktiverar också {count} styrentiteter i det här systemet, till exempel tidsluckor och batterigränser, så att de kan visas och ändras på instrumentpaneler. Att läsa dem höjer belastningen från {before} till {after} av {budget} förfrågningar per minut. Entiteterna visas ungefär 30 sekunder efter att du sparat. Vänta tills de visas innan du ändrar något: systemet läses in igen en gång till när de visas, och omläsningen stänger av alla effektstyrningsfunktioner som slagits på före dess.\n\nTillåta styrning?"
+      }
+    },
+    "error": {
+      "already_configured": "En annan SAJ Local-post äger redan den här slutpunkten eller växelriktarens serienummer.",
+      "invalid_host": "Ange ett värdnamn eller en IP-adress.",
+      "invalid_port": "Ange ett heltal från 1 till 65535 som port.",
+      "invalid_unit_id": "Ange ett heltal från 1 till 247 som enhets-ID.",
+      "invalid_endpoint": "Ange en giltig port och ett giltigt enhets-ID.",
+      "invalid_scan_interval": "Ange ett avfrågningsintervall som är ett heltal på minst 10 sekunder.",
+      "cannot_connect": "Det gick inte att ansluta till eller läsa av växelriktaren. Kontrollera slutpunkten och försök igen.",
+      "unsupported_device": "Enheten rapporterar typen {device_type}, som inte känns igen automatiskt. Välj dess modell manuellt.",
+      "invalid_device_data": "Växelriktaren returnerade ogiltiga identitets- eller telemetridata.",
+      "timeout": "Växelriktaren svarade inte i tid. Kontrollera slutpunkten och försök igen.",
+      "read_rejected": "Växelriktaren nekade en nödvändig registeravläsning. Kontrollera att det är en SAJ-enhet och modell som stöds.",
+      "model_mismatch": "Den här enheten identifierar sig som {detected_model}, inte {selected_model}. Välj {detected_model} eller Automatisk.",
+      "unknown_model": "Modellen {selection} är ingen känd modell. Välj Automatisk eller någon av de listade modellerna.",
+      "invalid_prefix": "Använd endast gemener och siffror, utan understreck, högst 32 tecken.",
+      "prefix_in_use": "En annan SAJ Local-anläggning använder redan det här prefixet. Att lämna det tomt räknas också, så bara en anläggning kan sakna prefix.",
+      "entity_id_taken": "Entitets-ID:t {entity_id} är redan upptaget i Home Assistant. Välj ett annat prefix.",
+      "statistics_exist": "Home Assistant har redan långtidsstatistik under {entity_id}, så den här anläggningens historik kunde inte flyttas dit. Välj ett annat prefix.",
+      "prefix_shadows_entity": "Det här prefixet skulle ge entitets-ID:n som krockar med namnet på en entitet. Välj ett annat prefix.",
+      "invalid_ems_heartbeat": "Ange ett hjärtslag som är ett heltal från 30 till 3600 sekunder.",
+      "invalid_equipment": "Välj Automatisk, Installerad eller Inte installerad för varje utrustning."
+    },
+    "abort": {
+      "changes_saved": "SAJ Local-inställningarna sparades.",
+      "already_configured": "En annan SAJ Local-post äger nu den här slutpunkten eller växelriktarens serienummer.",
+      "confirmation_not_pending": "Ingen validerad ändring väntar på bekräftelse.",
+      "prefix_unavailable": "Prefixet eller något av dess entitets-ID:n blev upptaget medan du bekräftade. Inget ändrades."
+    }
+  },
+  "config_subentries": {
+    "polling_group": {
+      "entry_type": "Avfrågningsgrupp",
+      "initiate_flow": {
+        "user": "Lägg till avfrågningsgrupp"
+      },
+      "step": {
+        "user": {
+          "title": "Lägg till avfrågningsgrupp",
+          "description": "Entiteterna i en avfrågningsgrupp läses med gruppens eget intervall. Alla andra entiteter läses med standardintervallet. Integrationen skickar högst {budget} förfrågningar per minut till växelriktaren, så att dess kommunikationsmodul inte överbelastas. Den här anläggningen använder just nu {load} av dem. Inaktiverade entiteter kan grupperas nu och kostar ingenting förrän de aktiveras.",
+          "data": {
+            "name": "Namn",
+            "scan_interval": "Sekunder mellan uppdateringar",
+            "keys": "Entiteter"
+          },
+          "data_description": {
+            "keys": "Listade i registerordning, var och en med det registerblock den läses från. Entiteter i samma block kan dela en förfrågan."
+          }
+        },
+        "reconfigure": {
+          "title": "Redigera avfrågningsgrupp",
+          "description": "Entiteterna i en avfrågningsgrupp läses med gruppens eget intervall. En entitet kan tillhöra bara en grupp. Integrationen skickar högst {budget} förfrågningar per minut till växelriktaren, så att dess kommunikationsmodul inte överbelastas. Den här anläggningen använder just nu {load} av dem. Inaktiverade entiteter kan grupperas nu och kostar ingenting förrän de aktiveras.",
+          "data": {
+            "name": "Namn",
+            "scan_interval": "Sekunder mellan uppdateringar",
+            "keys": "Entiteter"
+          },
+          "data_description": {
+            "keys": "Listade i registerordning, var och en med det registerblock den läses från. Entiteter i samma block kan dela en förfrågan."
+          }
+        },
+        "review_group": {
+          "title": "Granska förfrågningsbelastningen",
+          "description": "Förfrågningar som krävs för att läsa den här gruppen en gång: {requests}.\n\nIntegrationen skickar högst {budget} förfrågningar per minut till växelriktaren, så att dess kommunikationsmodul inte överbelastas. Den här anläggningen använder {before} av dem nu, och kommer att använda {after} när den här gruppen är sparad.",
+          "menu_options": {
+            "save_group": "Spara gruppen",
+            "change_selection": "Ändra urvalet"
+          }
+        },
+        "review_group_over_budget": {
+          "title": "Granska förfrågningsbelastningen",
+          "description": "Förfrågningar som krävs för att läsa den här gruppen en gång: {requests}.\n\nIntegrationen skickar högst {budget} förfrågningar per minut till växelriktaren, så att dess kommunikationsmodul inte överbelastas. Den här anläggningen använder {before} av dem nu, och skulle behöva {after} när den här gruppen är sparad. Eftersom det överskrider gränsen läses entiteterna långsammare än konfigurerat. Du kan ändå spara gruppen.",
+          "menu_options": {
+            "save_group": "Spara gruppen",
+            "change_selection": "Ändra urvalet"
+          }
+        }
+      },
+      "error": {
+        "invalid_scan_interval": "Ange ett avfrågningsintervall som är ett heltal på minst 10 sekunder.",
+        "no_sensors_selected": "Välj minst en entitet.",
+        "sensor_in_other_group": "En vald entitet tillhör redan en annan avfrågningsgrupp."
+      },
+      "abort": {
+        "no_sensors": "Den här anläggningen har inga entiteter ännu, så en avfrågningsgrupp kan inte skapas.",
+        "all_sensors_assigned": "Varje entitet tillhör redan en avfrågningsgrupp, så det finns ingen kvar att lägga till.",
+        "reconfigure_successful": "Avfrågningsgruppen sparades.",
+        "confirmation_not_pending": "Ingen validerad avfrågningsgrupp väntar på beslut."
+      }
+    },
+    "power_schedule": {
+      "entry_type": "Schema för effektstyrning",
+      "initiate_flow": {
+        "user": "Lägg till schema för effektstyrning"
+      },
+      "step": {
+        "user": {
+          "title": "Lägg till schema för effektstyrning",
+          "description": "Välj funktionen som ska hållas vid en inställd effekt och Home Assistant-schemahjälparen som anger när. Integrationen slår på funktionen när schemat slås på och stänger av den när schemat stängs av. Ett schemablock kan bära tilläggsdatat effekt, i hela watt, med ett negativt tal för att ladda eller importera och ett positivt för att ladda ur eller exportera; utan det används funktionens effektmål. Tillåt styrning måste vara på.",
+          "data": {
+            "function": "Funktion",
+            "schedule": "Schema"
+          },
+          "data_description": {
+            "function": "Varje funktion kan följa ett schema.",
+            "schedule": "En schemahjälpare kan användas av en funktion i det här systemet."
+          }
+        },
+        "reconfigure": {
+          "title": "Redigera schema för effektstyrning",
+          "description": "Välj funktionen som ska hållas vid en inställd effekt och Home Assistant-schemahjälparen som anger när. Integrationen slår på funktionen när schemat slås på och stänger av den när schemat stängs av. Ett schemablock kan bära tilläggsdatat effekt, i hela watt, med ett negativt tal för att ladda eller importera och ett positivt för att ladda ur eller exportera; utan det används funktionens effektmål. Tillåt styrning måste vara på.",
+          "data": {
+            "function": "Funktion",
+            "schedule": "Schema"
+          },
+          "data_description": {
+            "function": "Varje funktion kan följa ett schema.",
+            "schedule": "En schemahjälpare kan användas av en funktion i det här systemet."
+          }
+        }
+      },
+      "error": {
+        "control_not_allowed": "Tillåt styrning är av, så ett schema skulle inte kunna göra något. Slå först på Tillåt styrning i Konfigurera.",
+        "function_already_scheduled": "Den här funktionen följer redan ett schema i det här systemet.",
+        "schedule_in_use": "Den här schemahjälparen används redan av ett annat schema för effektstyrning i det här systemet.",
+        "schedule_not_registered": "Den här schemahjälparen saknar post i entitetsregistret, så schemat för effektstyrning kunde inte följa ett namnbyte av hjälparen. Välj en schemahjälpare som skapats i gränssnittet."
+      },
+      "abort": {
+        "reconfigure_successful": "Schemat för effektstyrning sparades."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "ethernet_protocol_version": {
+        "name": "Ethernet-protokollversion"
+      },
+      "ethernet_mac_address": {
+        "name": "Ethernet-MAC-adress"
+      },
+      "ev_serial_number": {
+        "name": "Elbilsladdarens serienummer"
+      },
+      "ev_model": {
+        "name": "Elbilsladdarens modell"
+      },
+      "ev_software_version": {
+        "name": "Elbilsladdarens programvaruversion"
+      },
+      "ev_hardware_version": {
+        "name": "Elbilsladdarens maskinvaruversion"
+      },
+      "ev_phase_count": {
+        "name": "Elbilsladdarens antal faser"
+      },
+      "ev_minimum_power": {
+        "name": "Elbilsladdarens minimieffekt"
+      },
+      "ev_maximum_power": {
+        "name": "Elbilsladdarens maximieffekt"
+      },
+      "ev_work_mode": {
+        "name": "Elbilsladdarens arbetsläge",
+        "state": {
+          "disabled": "Inaktiverad",
+          "standard": "Standard",
+          "time_based": "Tidsbaserat",
+          "pv_surplus": "Solöverskott",
+          "ems": "EMS"
+        }
+      },
+      "ev_status": {
+        "name": "Elbilsladdarens status",
+        "state": {
+          "idle": "Overksam",
+          "ready": "Redo",
+          "charging": "Laddar",
+          "charger_suspended": "Laddare pausad",
+          "vehicle_suspended": "Fordon pausat",
+          "complete": "Klar"
+        }
+      },
+      "ev_l1_voltage": {
+        "name": "Elbilsladdarens L1-spänning"
+      },
+      "ev_l1_current": {
+        "name": "Elbilsladdarens L1-ström"
+      },
+      "ev_l2_voltage": {
+        "name": "Elbilsladdarens L2-spänning"
+      },
+      "ev_l2_current": {
+        "name": "Elbilsladdarens L2-ström"
+      },
+      "ev_l3_voltage": {
+        "name": "Elbilsladdarens L3-spänning"
+      },
+      "ev_l3_current": {
+        "name": "Elbilsladdarens L3-ström"
+      },
+      "ev_power": {
+        "name": "Elbilsladdarens effekt"
+      },
+      "ev_charge_duration": {
+        "name": "Elbilsladdningens varaktighet"
+      },
+      "ev_session_energy": {
+        "name": "Elbilsladdarens sessionsenergi"
+      },
+      "ev_total_energy": {
+        "name": "Elbilsladdarens total energi"
+      },
+      "ev_control_pilot_voltage": {
+        "name": "Elbilsladdarens pilotsignalspänning"
+      },
+      "ev_duty_cycle": {
+        "name": "Elbilsladdarens pulskvot"
+      },
+      "ev_remote_control": {
+        "name": "Elbilsladdarens fjärrstyrning",
+        "state": {
+          "off": "Av",
+          "on": "På"
+        }
+      },
+      "ev_current_setpoint": {
+        "name": "Elbilsladdarens strömbörvärde"
+      },
+      "ev_session_start": {
+        "name": "Elbilsladdarens sessionsstart"
+      },
+      "ev_session_end": {
+        "name": "Elbilsladdarens sessionsslut"
+      },
+      "settings_protocol_version": {
+        "name": "Inställningsprotokollversion"
+      },
+      "inverter_clock": {
+        "name": "Växelriktarens klocka"
+      },
+      "operating_mode": {
+        "name": "Driftläge",
+        "state": {
+          "initialisation": "Initiering",
+          "standby": "Standby",
+          "operating": "I drift",
+          "off_grid": "Fristående",
+          "grid_connected_load_bypass": "Nätansluten last / bypass",
+          "fault": "Fel",
+          "upgrade": "Uppgradering",
+          "debugging": "Felsökning",
+          "self_check": "Självkontroll",
+          "reset": "Återställning"
+        }
+      },
+      "inverter_temperature": {
+        "name": "Växelriktartemperatur"
+      },
+      "ambient_temperature": {
+        "name": "Omgivningstemperatur"
+      },
+      "leakage_current": {
+        "name": "Läckström"
+      },
+      "pv1_insulation_resistance": {
+        "name": "PV1-isolationsresistans"
+      },
+      "pv2_insulation_resistance": {
+        "name": "PV2-isolationsresistans"
+      },
+      "grid_connection_countdown": {
+        "name": "Nedräkning till nätanslutning"
+      },
+      "inverter_discharge_power_setpoint": {
+        "name": "Börvärde urladdningseffekt växelriktare"
+      },
+      "inverter_charge_power_setpoint": {
+        "name": "Börvärde laddningseffekt växelriktare"
+      },
+      "battery_discharge_current_setpoint": {
+        "name": "Batteriurladdningsström börvärde"
+      },
+      "battery_charge_current_setpoint": {
+        "name": "Batteriladdningsström börvärde"
+      },
+      "battery_status_code": {
+        "name": "Batteristatuskod"
+      },
+      "battery_protocol_active": {
+        "name": "Batteriprotokoll (gällande)"
+      },
+      "battery_charge_limit_active": {
+        "name": "Batteriladdningsgräns (gällande)"
+      },
+      "battery_discharge_limit_active": {
+        "name": "Batteriurladdningsgräns (gällande)"
+      },
+      "battery_depth_of_discharge_active": {
+        "name": "Batteriurladdningsdjup (gällande)"
+      },
+      "backup_reserve_soc_active": {
+        "name": "Reservladdningsnivå för reservdrift (gällande)"
+      },
+      "meter_configuration_active": {
+        "name": "Mätarkonfiguration (gällande)"
+      },
+      "grid_l1_voltage": {
+        "name": "Nät L1-spänning"
+      },
+      "grid_l1_current": {
+        "name": "Nät L1-ström"
+      },
+      "grid_l1_frequency": {
+        "name": "Nät L1-frekvens"
+      },
+      "grid_l1_dc_current": {
+        "name": "Nät L1-likström"
+      },
+      "grid_l1_power": {
+        "name": "Nät L1-effekt"
+      },
+      "grid_l1_apparent_power": {
+        "name": "Nät L1 skenbar effekt"
+      },
+      "grid_l1_power_factor": {
+        "name": "Nät L1-effektfaktor"
+      },
+      "grid_l2_voltage": {
+        "name": "Nät L2-spänning"
+      },
+      "grid_l2_current": {
+        "name": "Nät L2-ström"
+      },
+      "grid_l2_frequency": {
+        "name": "Nät L2-frekvens"
+      },
+      "grid_l2_dc_current": {
+        "name": "Nät L2-likström"
+      },
+      "grid_l2_power": {
+        "name": "Nät L2-effekt"
+      },
+      "grid_l2_apparent_power": {
+        "name": "Nät L2 skenbar effekt"
+      },
+      "grid_l2_power_factor": {
+        "name": "Nät L2-effektfaktor"
+      },
+      "grid_l3_voltage": {
+        "name": "Nät L3-spänning"
+      },
+      "grid_l3_current": {
+        "name": "Nät L3-ström"
+      },
+      "grid_l3_frequency": {
+        "name": "Nät L3-frekvens"
+      },
+      "grid_l3_dc_current": {
+        "name": "Nät L3-likström"
+      },
+      "grid_l3_power": {
+        "name": "Nät L3-effekt"
+      },
+      "grid_l3_apparent_power": {
+        "name": "Nät L3 skenbar effekt"
+      },
+      "grid_l3_power_factor": {
+        "name": "Nät L3-effektfaktor"
+      },
+      "inverter_l1_voltage": {
+        "name": "Växelriktare L1-spänning"
+      },
+      "inverter_l1_current": {
+        "name": "Växelriktare L1-ström"
+      },
+      "inverter_l1_frequency": {
+        "name": "Växelriktare L1-frekvens"
+      },
+      "inverter_l1_power": {
+        "name": "Växelriktare L1-effekt"
+      },
+      "inverter_l1_apparent_power": {
+        "name": "Växelriktare L1 skenbar effekt"
+      },
+      "inverter_l2_voltage": {
+        "name": "Växelriktare L2-spänning"
+      },
+      "inverter_l2_current": {
+        "name": "Växelriktare L2-ström"
+      },
+      "inverter_l2_frequency": {
+        "name": "Växelriktare L2-frekvens"
+      },
+      "inverter_l2_power": {
+        "name": "Växelriktare L2-effekt"
+      },
+      "inverter_l2_apparent_power": {
+        "name": "Växelriktare L2 skenbar effekt"
+      },
+      "inverter_l3_voltage": {
+        "name": "Växelriktare L3-spänning"
+      },
+      "inverter_l3_current": {
+        "name": "Växelriktare L3-ström"
+      },
+      "inverter_l3_frequency": {
+        "name": "Växelriktare L3-frekvens"
+      },
+      "inverter_l3_power": {
+        "name": "Växelriktare L3-effekt"
+      },
+      "inverter_l3_apparent_power": {
+        "name": "Växelriktare L3 skenbar effekt"
+      },
+      "backup_l1_voltage": {
+        "name": "Reserv L1-spänning"
+      },
+      "backup_l1_current": {
+        "name": "Reserv L1-ström"
+      },
+      "backup_l1_frequency": {
+        "name": "Reserv L1-frekvens"
+      },
+      "backup_l1_dc_voltage": {
+        "name": "Reserv L1-likspänning"
+      },
+      "backup_l1_power": {
+        "name": "Reserv L1-effekt"
+      },
+      "backup_l1_apparent_power": {
+        "name": "Reserv L1 skenbar effekt"
+      },
+      "backup_l2_voltage": {
+        "name": "Reserv L2-spänning"
+      },
+      "backup_l2_current": {
+        "name": "Reserv L2-ström"
+      },
+      "backup_l2_frequency": {
+        "name": "Reserv L2-frekvens"
+      },
+      "backup_l2_dc_voltage": {
+        "name": "Reserv L2-likspänning"
+      },
+      "backup_l2_power": {
+        "name": "Reserv L2-effekt"
+      },
+      "backup_l2_apparent_power": {
+        "name": "Reserv L2 skenbar effekt"
+      },
+      "backup_l3_voltage": {
+        "name": "Reserv L3-spänning"
+      },
+      "backup_l3_current": {
+        "name": "Reserv L3-ström"
+      },
+      "backup_l3_frequency": {
+        "name": "Reserv L3-frekvens"
+      },
+      "backup_l3_dc_voltage": {
+        "name": "Reserv L3-likspänning"
+      },
+      "backup_l3_power": {
+        "name": "Reserv L3-effekt"
+      },
+      "backup_l3_apparent_power": {
+        "name": "Reserv L3 skenbar effekt"
+      },
+      "dc_bus_voltage": {
+        "name": "Likspänning på DC-bussen"
+      },
+      "dc_bus_slave_voltage": {
+        "name": "Likspänning på DC-bussen (slav)"
+      },
+      "battery_voltage": {
+        "name": "Batterispänning"
+      },
+      "battery_current": {
+        "name": "Batteriström"
+      },
+      "battery_port_power": {
+        "name": "Batteriportens effekt"
+      },
+      "battery_temperature": {
+        "name": "Batteritemperatur"
+      },
+      "battery_soc": {
+        "name": "Batteriladdningsnivå"
+      },
+      "pv1_voltage": {
+        "name": "PV1-spänning"
+      },
+      "pv1_current": {
+        "name": "PV1-ström"
+      },
+      "pv1_power": {
+        "name": "PV1-effekt"
+      },
+      "pv2_voltage": {
+        "name": "PV2-spänning"
+      },
+      "pv2_current": {
+        "name": "PV2-ström"
+      },
+      "pv2_power": {
+        "name": "PV2-effekt"
+      },
+      "grid_output_l1_voltage": {
+        "name": "Nätutgång L1-spänning"
+      },
+      "grid_output_l1_current": {
+        "name": "Nätutgång L1-ström"
+      },
+      "grid_output_l1_frequency": {
+        "name": "Nätutgång L1-frekvens"
+      },
+      "grid_output_l1_power": {
+        "name": "Nätutgång L1-effekt"
+      },
+      "grid_output_l2_voltage": {
+        "name": "Nätutgång L2-spänning"
+      },
+      "grid_output_l2_power": {
+        "name": "Nätutgång L2-effekt"
+      },
+      "grid_output_l3_voltage": {
+        "name": "Nätutgång L3-spänning"
+      },
+      "grid_output_l3_power": {
+        "name": "Nätutgång L3-effekt"
+      },
+      "load_power": {
+        "name": "Hushållslasteffekt"
+      },
+      "pv_power": {
+        "name": "Soleffekt"
+      },
+      "battery_power": {
+        "name": "Batterieffekt"
+      },
+      "grid_power": {
+        "name": "Näteffekt"
+      },
+      "inverter_power": {
+        "name": "Växelriktareffekt"
+      },
+      "grid_load_power": {
+        "name": "Nätlasteffekt"
+      },
+      "pv_energy_today": {
+        "name": "Solenergi idag"
+      },
+      "pv_energy_month": {
+        "name": "Solenergi denna månad"
+      },
+      "pv_energy_year": {
+        "name": "Solenergi i år"
+      },
+      "pv_energy_total": {
+        "name": "Solenergi totalt"
+      },
+      "battery_charge_energy_today": {
+        "name": "Batteriladdningsenergi idag"
+      },
+      "battery_charge_energy_month": {
+        "name": "Batteriladdningsenergi denna månad"
+      },
+      "battery_charge_energy_year": {
+        "name": "Batteriladdningsenergi i år"
+      },
+      "battery_charge_energy_total": {
+        "name": "Batteriladdningsenergi totalt"
+      },
+      "battery_discharge_energy_today": {
+        "name": "Batteriurladdningsenergi idag"
+      },
+      "battery_discharge_energy_month": {
+        "name": "Batteriurladdningsenergi denna månad"
+      },
+      "battery_discharge_energy_year": {
+        "name": "Batteriurladdningsenergi i år"
+      },
+      "battery_discharge_energy_total": {
+        "name": "Batteriurladdningsenergi totalt"
+      },
+      "load_energy_today": {
+        "name": "Hushållslastenergi idag"
+      },
+      "load_energy_month": {
+        "name": "Hushållslastenergi denna månad"
+      },
+      "load_energy_year": {
+        "name": "Hushållslastenergi i år"
+      },
+      "load_energy_total": {
+        "name": "Hushållslastenergi totalt"
+      },
+      "backup_load_energy_today": {
+        "name": "Reservlastenergi idag"
+      },
+      "backup_load_energy_month": {
+        "name": "Reservlastenergi denna månad"
+      },
+      "backup_load_energy_year": {
+        "name": "Reservlastenergi i år"
+      },
+      "backup_load_energy_total": {
+        "name": "Reservlastenergi totalt"
+      },
+      "grid_l1_export_energy_today": {
+        "name": "Nät L1-exportenergi idag"
+      },
+      "grid_l1_export_energy_month": {
+        "name": "Nät L1-exportenergi denna månad"
+      },
+      "grid_l1_export_energy_year": {
+        "name": "Nät L1-exportenergi i år"
+      },
+      "grid_l1_export_energy_total": {
+        "name": "Nät L1-exportenergi totalt"
+      },
+      "grid_l1_import_energy_today": {
+        "name": "Nät L1-importenergi idag"
+      },
+      "grid_l1_import_energy_month": {
+        "name": "Nät L1-importenergi denna månad"
+      },
+      "grid_l1_import_energy_year": {
+        "name": "Nät L1-importenergi i år"
+      },
+      "grid_l1_import_energy_total": {
+        "name": "Nät L1-importenergi totalt"
+      },
+      "grid_l2_export_energy_today": {
+        "name": "Nät L2-exportenergi idag"
+      },
+      "grid_l2_export_energy_month": {
+        "name": "Nät L2-exportenergi denna månad"
+      },
+      "grid_l2_export_energy_year": {
+        "name": "Nät L2-exportenergi i år"
+      },
+      "grid_l2_export_energy_total": {
+        "name": "Nät L2-exportenergi totalt"
+      },
+      "grid_l3_export_energy_today": {
+        "name": "Nät L3-exportenergi idag"
+      },
+      "grid_l3_export_energy_month": {
+        "name": "Nät L3-exportenergi denna månad"
+      },
+      "grid_l3_export_energy_year": {
+        "name": "Nät L3-exportenergi i år"
+      },
+      "grid_l3_export_energy_total": {
+        "name": "Nät L3-exportenergi totalt"
+      },
+      "grid_l2_import_energy_today": {
+        "name": "Nät L2-importenergi idag"
+      },
+      "grid_l2_import_energy_month": {
+        "name": "Nät L2-importenergi denna månad"
+      },
+      "grid_l2_import_energy_year": {
+        "name": "Nät L2-importenergi i år"
+      },
+      "grid_l2_import_energy_total": {
+        "name": "Nät L2-importenergi totalt"
+      },
+      "grid_l3_import_energy_today": {
+        "name": "Nät L3-importenergi idag"
+      },
+      "grid_l3_import_energy_month": {
+        "name": "Nät L3-importenergi denna månad"
+      },
+      "grid_l3_import_energy_year": {
+        "name": "Nät L3-importenergi i år"
+      },
+      "grid_l3_import_energy_total": {
+        "name": "Nät L3-importenergi totalt"
+      },
+      "grid_import_energy_today": {
+        "name": "Nätimportenergi idag"
+      },
+      "grid_import_energy_month": {
+        "name": "Nätimportenergi denna månad"
+      },
+      "grid_import_energy_year": {
+        "name": "Nätimportenergi i år"
+      },
+      "grid_import_energy_total": {
+        "name": "Nätimportenergi totalt"
+      },
+      "grid_export_energy_today": {
+        "name": "Nätexportenergi idag"
+      },
+      "grid_export_energy_month": {
+        "name": "Nätexportenergi denna månad"
+      },
+      "grid_export_energy_year": {
+        "name": "Nätexportenergi i år"
+      },
+      "grid_export_energy_total": {
+        "name": "Nätexportenergi totalt"
+      },
+      "parallel_mode": {
+        "name": "Parallelläge"
+      },
+      "parallel_id": {
+        "name": "Parallellmaskin-ID"
+      },
+      "parallel_count": {
+        "name": "Antal parallellmaskiner"
+      },
+      "parallel_online_count": {
+        "name": "Parallellmaskiner online"
+      },
+      "parallel_battery_soc": {
+        "name": "Parallellsystem batteri laddningsnivå"
+      },
+      "parallel_battery_capacity": {
+        "name": "Parallellsystem batterikapacitet"
+      },
+      "parallel_meter_b_power": {
+        "name": "Parallellsystem mätare B effekt"
+      },
+      "parallel_pv_energy_today": {
+        "name": "Parallellsystem solenergi idag"
+      },
+      "parallel_pv_energy_month": {
+        "name": "Parallellsystem solenergi denna månad"
+      },
+      "parallel_pv_energy_year": {
+        "name": "Parallellsystem solenergi i år"
+      },
+      "parallel_pv_energy_total": {
+        "name": "Parallellsystem solenergi totalt"
+      },
+      "parallel_battery_charge_energy_today": {
+        "name": "Parallellsystem batteri laddningsenergi idag"
+      },
+      "parallel_battery_charge_energy_month": {
+        "name": "Parallellsystem batteri laddningsenergi denna månad"
+      },
+      "parallel_battery_charge_energy_year": {
+        "name": "Parallellsystem batteri laddningsenergi i år"
+      },
+      "parallel_battery_charge_energy_total": {
+        "name": "Parallellsystem batteri laddningsenergi totalt"
+      },
+      "parallel_battery_discharge_energy_today": {
+        "name": "Parallellsystem batteri urladdningsenergi idag"
+      },
+      "parallel_battery_discharge_energy_month": {
+        "name": "Parallellsystem batteri urladdningsenergi denna månad"
+      },
+      "parallel_battery_discharge_energy_year": {
+        "name": "Parallellsystem batteri urladdningsenergi i år"
+      },
+      "parallel_battery_discharge_energy_total": {
+        "name": "Parallellsystem batteri urladdningsenergi totalt"
+      },
+      "parallel_grid_l1_export_energy_today": {
+        "name": "Parallellsystem nät L1-exportenergi idag"
+      },
+      "parallel_grid_l1_export_energy_month": {
+        "name": "Parallellsystem nät L1-exportenergi denna månad"
+      },
+      "parallel_grid_l1_export_energy_year": {
+        "name": "Parallellsystem nät L1-exportenergi i år"
+      },
+      "parallel_grid_l1_export_energy_total": {
+        "name": "Parallellsystem nät L1-exportenergi totalt"
+      },
+      "parallel_grid_l2_export_energy_today": {
+        "name": "Parallellsystem nät L2-exportenergi idag"
+      },
+      "parallel_grid_l2_export_energy_month": {
+        "name": "Parallellsystem nät L2-exportenergi denna månad"
+      },
+      "parallel_grid_l2_export_energy_year": {
+        "name": "Parallellsystem nät L2-exportenergi i år"
+      },
+      "parallel_grid_l2_export_energy_total": {
+        "name": "Parallellsystem nät L2-exportenergi totalt"
+      },
+      "parallel_grid_l3_export_energy_today": {
+        "name": "Parallellsystem nät L3-exportenergi idag"
+      },
+      "parallel_grid_l3_export_energy_month": {
+        "name": "Parallellsystem nät L3-exportenergi denna månad"
+      },
+      "parallel_grid_l3_export_energy_year": {
+        "name": "Parallellsystem nät L3-exportenergi i år"
+      },
+      "parallel_grid_l3_export_energy_total": {
+        "name": "Parallellsystem nät L3-exportenergi totalt"
+      },
+      "parallel_grid_l1_import_energy_today": {
+        "name": "Parallellsystem nät L1-importenergi idag"
+      },
+      "parallel_grid_l1_import_energy_month": {
+        "name": "Parallellsystem nät L1-importenergi denna månad"
+      },
+      "parallel_grid_l1_import_energy_year": {
+        "name": "Parallellsystem nät L1-importenergi i år"
+      },
+      "parallel_grid_l1_import_energy_total": {
+        "name": "Parallellsystem nät L1-importenergi totalt"
+      },
+      "parallel_grid_l2_import_energy_today": {
+        "name": "Parallellsystem nät L2-importenergi idag"
+      },
+      "parallel_grid_l2_import_energy_month": {
+        "name": "Parallellsystem nät L2-importenergi denna månad"
+      },
+      "parallel_grid_l2_import_energy_year": {
+        "name": "Parallellsystem nät L2-importenergi i år"
+      },
+      "parallel_grid_l2_import_energy_total": {
+        "name": "Parallellsystem nät L2-importenergi totalt"
+      },
+      "parallel_grid_l3_import_energy_today": {
+        "name": "Parallellsystem nät L3-importenergi idag"
+      },
+      "parallel_grid_l3_import_energy_month": {
+        "name": "Parallellsystem nät L3-importenergi denna månad"
+      },
+      "parallel_grid_l3_import_energy_year": {
+        "name": "Parallellsystem nät L3-importenergi i år"
+      },
+      "parallel_grid_l3_import_energy_total": {
+        "name": "Parallellsystem nät L3-importenergi totalt"
+      },
+      "parallel_load_energy_today": {
+        "name": "Parallellsystem hushållslast energi idag"
+      },
+      "parallel_load_energy_month": {
+        "name": "Parallellsystem hushållslast energi denna månad"
+      },
+      "parallel_load_energy_year": {
+        "name": "Parallellsystem hushållslast energi i år"
+      },
+      "parallel_load_energy_total": {
+        "name": "Parallellsystem hushållslast energi totalt"
+      },
+      "parallel_grid_import_energy_today": {
+        "name": "Parallellsystem nät importenergi idag"
+      },
+      "parallel_grid_import_energy_month": {
+        "name": "Parallellsystem nät importenergi denna månad"
+      },
+      "parallel_grid_import_energy_year": {
+        "name": "Parallellsystem nät importenergi i år"
+      },
+      "parallel_grid_import_energy_total": {
+        "name": "Parallellsystem nät importenergi totalt"
+      },
+      "parallel_grid_export_energy_today": {
+        "name": "Parallellsystem nät exportenergi idag"
+      },
+      "parallel_grid_export_energy_month": {
+        "name": "Parallellsystem nät exportenergi denna månad"
+      },
+      "parallel_grid_export_energy_year": {
+        "name": "Parallellsystem nät exportenergi i år"
+      },
+      "parallel_grid_export_energy_total": {
+        "name": "Parallellsystem nät exportenergi totalt"
+      },
+      "parallel_pv_meter_energy_today": {
+        "name": "Parallellsystem solmätare energi idag"
+      },
+      "parallel_pv_meter_energy_month": {
+        "name": "Parallellsystem solmätare energi denna månad"
+      },
+      "parallel_pv_meter_energy_year": {
+        "name": "Parallellsystem solmätare energi i år"
+      },
+      "parallel_pv_meter_energy_total": {
+        "name": "Parallellsystem solmätare energi totalt"
+      },
+      "ev_settings_protocol_version": {
+        "name": "Elbilsladdarens inställningsprotokollversion"
+      },
+      "five_minute_average_grid_power": {
+        "name": "Näteffekt (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_l1_power": {
+        "name": "Nät L1-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_l1_voltage": {
+        "name": "Nät L1-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_l1_current": {
+        "name": "Nät L1-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_l1_frequency": {
+        "name": "Nät L1-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_l2_power": {
+        "name": "Nät L2-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_l2_voltage": {
+        "name": "Nät L2-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_l2_current": {
+        "name": "Nät L2-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_l2_frequency": {
+        "name": "Nät L2-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_l3_power": {
+        "name": "Nät L3-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_l3_voltage": {
+        "name": "Nät L3-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_l3_current": {
+        "name": "Nät L3-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_l3_frequency": {
+        "name": "Nät L3-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_power": {
+        "name": "Växelriktareffekt (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_l1_power": {
+        "name": "Växelriktare L1-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_l1_voltage": {
+        "name": "Växelriktare L1-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_l1_current": {
+        "name": "Växelriktare L1-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_l1_frequency": {
+        "name": "Växelriktare L1-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_l2_power": {
+        "name": "Växelriktare L2-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_l2_voltage": {
+        "name": "Växelriktare L2-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_l2_current": {
+        "name": "Växelriktare L2-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_l2_frequency": {
+        "name": "Växelriktare L2-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_l3_power": {
+        "name": "Växelriktare L3-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_l3_voltage": {
+        "name": "Växelriktare L3-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_l3_current": {
+        "name": "Växelriktare L3-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_inverter_l3_frequency": {
+        "name": "Växelriktare L3-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_load_power": {
+        "name": "Hushållslasteffekt (medelvärde 5 min)"
+      },
+      "five_minute_average_load_l1_power": {
+        "name": "Hushållslast L1-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_load_l1_voltage": {
+        "name": "Hushållslast L1-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_load_l1_current": {
+        "name": "Hushållslast L1-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_load_l1_frequency": {
+        "name": "Hushållslast L1-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_load_l2_power": {
+        "name": "Hushållslast L2-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_load_l2_voltage": {
+        "name": "Hushållslast L2-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_load_l2_current": {
+        "name": "Hushållslast L2-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_load_l2_frequency": {
+        "name": "Hushållslast L2-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_load_l3_power": {
+        "name": "Hushållslast L3-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_load_l3_voltage": {
+        "name": "Hushållslast L3-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_load_l3_current": {
+        "name": "Hushållslast L3-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_load_l3_frequency": {
+        "name": "Hushållslast L3-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_power": {
+        "name": "Nätlasteffekt (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_l1_power": {
+        "name": "Nätlast L1-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_l1_voltage": {
+        "name": "Nätlast L1-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_l1_current": {
+        "name": "Nätlast L1-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_l1_frequency": {
+        "name": "Nätlast L1-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_l2_power": {
+        "name": "Nätlast L2-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_l2_voltage": {
+        "name": "Nätlast L2-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_l2_current": {
+        "name": "Nätlast L2-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_l2_frequency": {
+        "name": "Nätlast L2-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_l3_power": {
+        "name": "Nätlast L3-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_l3_voltage": {
+        "name": "Nätlast L3-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_l3_current": {
+        "name": "Nätlast L3-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_grid_load_l3_frequency": {
+        "name": "Nätlast L3-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_power": {
+        "name": "Reserveffekt (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_l1_power": {
+        "name": "Reserv L1-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_l1_voltage": {
+        "name": "Reserv L1-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_l1_current": {
+        "name": "Reserv L1-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_l1_frequency": {
+        "name": "Reserv L1-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_l2_power": {
+        "name": "Reserv L2-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_l2_voltage": {
+        "name": "Reserv L2-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_l2_current": {
+        "name": "Reserv L2-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_l2_frequency": {
+        "name": "Reserv L2-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_l3_power": {
+        "name": "Reserv L3-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_l3_voltage": {
+        "name": "Reserv L3-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_l3_current": {
+        "name": "Reserv L3-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_backup_l3_frequency": {
+        "name": "Reserv L3-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_pv_power": {
+        "name": "Soleffekt (medelvärde 5 min)"
+      },
+      "five_minute_average_pv1_voltage": {
+        "name": "PV1-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_pv1_current": {
+        "name": "PV1-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_pv1_power": {
+        "name": "PV1-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_pv2_voltage": {
+        "name": "PV2-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_pv2_current": {
+        "name": "PV2-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_pv2_power": {
+        "name": "PV2-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_power": {
+        "name": "Generatoreffekt (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_l1_power": {
+        "name": "Generator L1-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_l1_voltage": {
+        "name": "Generator L1-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_l1_current": {
+        "name": "Generator L1-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_l1_frequency": {
+        "name": "Generator L1-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_l2_power": {
+        "name": "Generator L2-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_l2_voltage": {
+        "name": "Generator L2-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_l2_current": {
+        "name": "Generator L2-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_l2_frequency": {
+        "name": "Generator L2-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_l3_power": {
+        "name": "Generator L3-effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_l3_voltage": {
+        "name": "Generator L3-spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_l3_current": {
+        "name": "Generator L3-ström (medelvärde 5 min)"
+      },
+      "five_minute_average_generator_l3_frequency": {
+        "name": "Generator L3-frekvens (medelvärde 5 min)"
+      },
+      "five_minute_average_battery_power": {
+        "name": "Batterieffekt (medelvärde 5 min)"
+      },
+      "five_minute_average_battery_soc": {
+        "name": "Batteriladdningsnivå (medelvärde 5 min)"
+      },
+      "five_minute_average_battery_pack1_power": {
+        "name": "Batteripack 1 effekt (medelvärde 5 min)"
+      },
+      "five_minute_average_battery_pack1_voltage": {
+        "name": "Batteripack 1 spänning (medelvärde 5 min)"
+      },
+      "five_minute_average_battery_pack1_current": {
+        "name": "Batteripack 1 ström (medelvärde 5 min)"
+      },
+      "five_minute_average_battery_pack1_soc": {
+        "name": "Batteripack 1 laddningsnivå (medelvärde 5 min)"
+      },
+      "five_minute_average_battery_pack1_temperature": {
+        "name": "Batteripack 1 temperatur (medelvärde 5 min)"
+      },
+      "product_code": {
+        "name": "Produktkod"
+      },
+      "display_software_version": {
+        "name": "Displayns programvaruversion"
+      },
+      "master_software_version": {
+        "name": "Masterns programvaruversion"
+      },
+      "slave_software_version": {
+        "name": "Slavens programvaruversion"
+      },
+      "display_hardware_version": {
+        "name": "Displayns maskinvaruversion"
+      },
+      "control_hardware_version": {
+        "name": "Styrningens maskinvaruversion"
+      },
+      "power_hardware_version": {
+        "name": "Effektdelens maskinvaruversion"
+      },
+      "battery_pack_count": {
+        "name": "Antal batteripack"
+      },
+      "battery_capacity": {
+        "name": "Batterikapacitet"
+      },
+      "battery_usable_capacity": {
+        "name": "Batteriets användbara kapacitet"
+      },
+      "battery_online_code": {
+        "name": "Batterionlinekod"
+      },
+      "battery_pack1_soc": {
+        "name": "Batteripack 1 laddningsnivå"
+      },
+      "battery_pack1_soh": {
+        "name": "Batteripack 1 hälsotillstånd"
+      },
+      "battery_pack1_voltage": {
+        "name": "Batteripack 1 spänning"
+      },
+      "battery_pack1_current": {
+        "name": "Batteripack 1 ström"
+      },
+      "battery_pack1_temperature": {
+        "name": "Batteripack 1 temperatur"
+      },
+      "battery_pack1_cycles": {
+        "name": "Batteripack 1 cykler"
+      },
+      "battery_pack1_discharged_energy": {
+        "name": "Batteripack 1 urladdad energi"
+      },
+      "battery_discharge_current_limit": {
+        "name": "Batteriurladdningsströmgräns"
+      },
+      "battery_charge_current_limit": {
+        "name": "Batteriladdningsströmgräns"
+      },
+      "meter_a_status": {
+        "name": "Mätare A status",
+        "state": {
+          "offline": "Offline",
+          "online": "Online"
+        }
+      },
+      "meter_a_l1_voltage": {
+        "name": "Mätare A L1-spänning"
+      },
+      "meter_a_l1_current": {
+        "name": "Mätare A L1-ström"
+      },
+      "meter_a_l1_power": {
+        "name": "Mätare A L1-effekt"
+      },
+      "meter_a_l1_apparent_power": {
+        "name": "Mätare A L1 skenbar effekt"
+      },
+      "meter_a_l1_power_factor": {
+        "name": "Mätare A L1-effektfaktor"
+      },
+      "meter_a_l1_frequency": {
+        "name": "Mätare A L1-frekvens"
+      },
+      "meter_a_l2_voltage": {
+        "name": "Mätare A L2-spänning"
+      },
+      "meter_a_l2_current": {
+        "name": "Mätare A L2-ström"
+      },
+      "meter_a_l2_power": {
+        "name": "Mätare A L2-effekt"
+      },
+      "meter_a_l2_apparent_power": {
+        "name": "Mätare A L2 skenbar effekt"
+      },
+      "meter_a_l2_power_factor": {
+        "name": "Mätare A L2-effektfaktor"
+      },
+      "meter_a_l2_frequency": {
+        "name": "Mätare A L2-frekvens"
+      },
+      "meter_a_l3_voltage": {
+        "name": "Mätare A L3-spänning"
+      },
+      "meter_a_l3_current": {
+        "name": "Mätare A L3-ström"
+      },
+      "meter_a_l3_power": {
+        "name": "Mätare A L3-effekt"
+      },
+      "meter_a_l3_apparent_power": {
+        "name": "Mätare A L3 skenbar effekt"
+      },
+      "meter_a_l3_power_factor": {
+        "name": "Mätare A L3-effektfaktor"
+      },
+      "meter_a_l3_frequency": {
+        "name": "Mätare A L3-frekvens"
+      },
+      "meter_b_status": {
+        "name": "Mätare B status",
+        "state": {
+          "offline": "Offline",
+          "online": "Online"
+        }
+      },
+      "meter_b_l1_voltage": {
+        "name": "Mätare B L1-spänning"
+      },
+      "meter_b_l1_current": {
+        "name": "Mätare B L1-ström"
+      },
+      "meter_b_l1_power": {
+        "name": "Mätare B L1-effekt"
+      },
+      "meter_b_l1_apparent_power": {
+        "name": "Mätare B L1 skenbar effekt"
+      },
+      "meter_b_l1_power_factor": {
+        "name": "Mätare B L1-effektfaktor"
+      },
+      "meter_b_l1_frequency": {
+        "name": "Mätare B L1-frekvens"
+      },
+      "meter_b_l2_voltage": {
+        "name": "Mätare B L2-spänning"
+      },
+      "meter_b_l2_current": {
+        "name": "Mätare B L2-ström"
+      },
+      "meter_b_l2_power": {
+        "name": "Mätare B L2-effekt"
+      },
+      "meter_b_l2_apparent_power": {
+        "name": "Mätare B L2 skenbar effekt"
+      },
+      "meter_b_l2_power_factor": {
+        "name": "Mätare B L2-effektfaktor"
+      },
+      "meter_b_l2_frequency": {
+        "name": "Mätare B L2-frekvens"
+      },
+      "meter_b_l3_voltage": {
+        "name": "Mätare B L3-spänning"
+      },
+      "meter_b_l3_current": {
+        "name": "Mätare B L3-ström"
+      },
+      "meter_b_l3_power": {
+        "name": "Mätare B L3-effekt"
+      },
+      "meter_b_l3_apparent_power": {
+        "name": "Mätare B L3 skenbar effekt"
+      },
+      "meter_b_l3_power_factor": {
+        "name": "Mätare B L3-effektfaktor"
+      },
+      "meter_b_l3_frequency": {
+        "name": "Mätare B L3-frekvens"
+      },
+      "meter_a_l1_reactive_power": {
+        "name": "Mätare A L1 reaktiv effekt"
+      },
+      "meter_a_l2_reactive_power": {
+        "name": "Mätare A L2 reaktiv effekt"
+      },
+      "meter_a_l3_reactive_power": {
+        "name": "Mätare A L3 reaktiv effekt"
+      },
+      "meter_b_l1_reactive_power": {
+        "name": "Mätare B L1 reaktiv effekt"
+      },
+      "meter_b_l2_reactive_power": {
+        "name": "Mätare B L2 reaktiv effekt"
+      },
+      "meter_b_l3_reactive_power": {
+        "name": "Mätare B L3 reaktiv effekt"
+      },
+      "meter_a_power": {
+        "name": "Mätare A effekt"
+      },
+      "meter_b_power": {
+        "name": "Mätare B effekt"
+      },
+      "parallel_backup_load_power": {
+        "name": "Parallellsystem reservlast effekt"
+      },
+      "parallel_battery_power": {
+        "name": "Parallellsystem batterieffekt"
+      },
+      "parallel_grid_load_power": {
+        "name": "Parallellsystem nätlast effekt"
+      },
+      "parallel_grid_power": {
+        "name": "Parallellsystem nät effekt"
+      },
+      "parallel_load_power": {
+        "name": "Parallellsystem hushållslast effekt"
+      },
+      "parallel_pv_power": {
+        "name": "Parallellsystem soleffekt"
+      },
+      "pv3_insulation_resistance": {
+        "name": "PV3-isolationsresistans"
+      },
+      "pv4_insulation_resistance": {
+        "name": "PV4-isolationsresistans"
+      },
+      "pv3_voltage": {
+        "name": "PV3-spänning"
+      },
+      "pv3_current": {
+        "name": "PV3-ström"
+      },
+      "pv3_power": {
+        "name": "PV3-effekt"
+      },
+      "pv4_voltage": {
+        "name": "PV4-spänning"
+      },
+      "pv4_current": {
+        "name": "PV4-ström"
+      },
+      "pv4_power": {
+        "name": "PV4-effekt"
+      },
+      "ct_grid_power": {
+        "name": "CT-näteffekt"
+      },
+      "ct_grid_apparent_power": {
+        "name": "Skenbar CT-näteffekt"
+      },
+      "ct_pv_power": {
+        "name": "CT-soleffekt"
+      },
+      "ct_pv_apparent_power": {
+        "name": "Skenbar CT-soleffekt"
+      },
+      "grid_apparent_power": {
+        "name": "Nät skenbar effekt"
+      },
+      "inverter_apparent_power": {
+        "name": "Växelriktare skenbar effekt"
+      },
+      "backup_load_power": {
+        "name": "Reservlast effekt"
+      },
+      "backup_load_apparent_power": {
+        "name": "Reservlast skenbar effekt"
+      },
+      "inverter_energy_today": {
+        "name": "Växelriktarenergi idag"
+      },
+      "inverter_energy_month": {
+        "name": "Växelriktarenergi denna månad"
+      },
+      "inverter_energy_year": {
+        "name": "Växelriktarenergi i år"
+      },
+      "inverter_energy_total": {
+        "name": "Växelriktarenergi totalt"
+      },
+      "pv2_energy_today": {
+        "name": "PV2-energi idag"
+      },
+      "pv2_energy_month": {
+        "name": "PV2-energi denna månad"
+      },
+      "pv2_energy_year": {
+        "name": "PV2-energi i år"
+      },
+      "pv2_energy_total": {
+        "name": "PV2-energi totalt"
+      },
+      "pv3_energy_today": {
+        "name": "PV3-energi idag"
+      },
+      "pv3_energy_month": {
+        "name": "PV3-energi denna månad"
+      },
+      "pv3_energy_year": {
+        "name": "PV3-energi i år"
+      },
+      "pv3_energy_total": {
+        "name": "PV3-energi totalt"
+      },
+      "identity_protocol_version": {
+        "name": "Identitetsprotokollversion"
+      },
+      "battery_pack2_soc": {
+        "name": "Batteripack 2 laddningsnivå"
+      },
+      "battery_pack2_soh": {
+        "name": "Batteripack 2 hälsotillstånd"
+      },
+      "battery_pack2_voltage": {
+        "name": "Batteripack 2 spänning"
+      },
+      "battery_pack2_current": {
+        "name": "Batteripack 2 ström"
+      },
+      "battery_pack2_temperature": {
+        "name": "Batteripack 2 temperatur"
+      },
+      "battery_pack2_cycles": {
+        "name": "Batteripack 2 cykler"
+      },
+      "battery_pack3_soc": {
+        "name": "Batteripack 3 laddningsnivå"
+      },
+      "battery_pack3_soh": {
+        "name": "Batteripack 3 hälsotillstånd"
+      },
+      "battery_pack3_voltage": {
+        "name": "Batteripack 3 spänning"
+      },
+      "battery_pack3_current": {
+        "name": "Batteripack 3 ström"
+      },
+      "battery_pack3_temperature": {
+        "name": "Batteripack 3 temperatur"
+      },
+      "battery_pack3_cycles": {
+        "name": "Batteripack 3 cykler"
+      },
+      "battery_pack4_soc": {
+        "name": "Batteripack 4 laddningsnivå"
+      },
+      "battery_pack4_soh": {
+        "name": "Batteripack 4 hälsotillstånd"
+      },
+      "battery_pack4_voltage": {
+        "name": "Batteripack 4 spänning"
+      },
+      "battery_pack4_current": {
+        "name": "Batteripack 4 ström"
+      },
+      "battery_pack4_temperature": {
+        "name": "Batteripack 4 temperatur"
+      },
+      "battery_pack4_cycles": {
+        "name": "Batteripack 4 cykler"
+      },
+      "battery_pack2_discharged_energy": {
+        "name": "Batteripack 2 urladdad energi"
+      },
+      "battery_pack3_discharged_energy": {
+        "name": "Batteripack 3 urladdad energi"
+      },
+      "battery_pack4_discharged_energy": {
+        "name": "Batteripack 4 urladdad energi"
+      },
+      "battery_voltage_high_protection": {
+        "name": "Batteriskydd mot hög spänning"
+      },
+      "battery_charge_voltage": {
+        "name": "Batteriladdningsspänning"
+      },
+      "battery_discharge_cutoff_voltage": {
+        "name": "Batteriurladdningsgränsspänning"
+      },
+      "off_grid_mode": {
+        "name": "Fristående läge",
+        "state": {
+          "off": "Av",
+          "on": "På"
+        }
+      },
+      "inverter_stop": {
+        "name": "Växelriktarstopp",
+        "state": {
+          "running": "Igång",
+          "stopped": "Stoppad"
+        }
+      },
+      "inverter_error_count": {
+        "name": "Antal växelriktarfel"
+      },
+      "drm_hardware_status": {
+        "name": "DRM maskinvarustatus"
+      },
+      "drm_software_status": {
+        "name": "DRM programvarustatus"
+      },
+      "fault_record_sequence": {
+        "name": "Felposternas ordningsnummer"
+      },
+      "application_mode_active": {
+        "name": "Applikationsläge (gällande)",
+        "state": {
+          "self_use": "Egenanvändning",
+          "time_of_use": "Tidsstyrning",
+          "backup": "Reservdrift",
+          "passive": "Passivt",
+          "legacy": "Äldre",
+          "ai_saving": "AI-besparing",
+          "peak_shaving": "Toppkapning"
+        }
+      },
+      "battery_controller_1_current": {
+        "name": "Batteristyrenhet 1 ström"
+      },
+      "battery_controller_2_current": {
+        "name": "Batteristyrenhet 2 ström"
+      },
+      "pv_generation_time_today": {
+        "name": "Soltid idag"
+      },
+      "pv_generation_time_total": {
+        "name": "Soltid totalt"
+      },
+      "battery_voltage_low_warning": {
+        "name": "Batterivarning för låg spänning"
+      },
+      "battery_pack1_bms_type": {
+        "name": "Batteripack 1 BMS-typ"
+      },
+      "battery_pack1_bms_serial_number": {
+        "name": "Batteripack 1 BMS-serienummer"
+      },
+      "battery_pack1_bms_software_version": {
+        "name": "Batteripack 1 BMS-programvaruversion"
+      },
+      "battery_pack1_bms_hardware_version": {
+        "name": "Batteripack 1 BMS-maskinvaruversion"
+      },
+      "battery_pack1_type": {
+        "name": "Batteripack 1 typ",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack1_serial_number": {
+        "name": "Batteripack 1 serienummer"
+      },
+      "battery_pack2_bms_type": {
+        "name": "Batteripack 2 BMS-typ"
+      },
+      "battery_pack2_bms_serial_number": {
+        "name": "Batteripack 2 BMS-serienummer"
+      },
+      "battery_pack2_bms_software_version": {
+        "name": "Batteripack 2 BMS-programvaruversion"
+      },
+      "battery_pack2_bms_hardware_version": {
+        "name": "Batteripack 2 BMS-maskinvaruversion"
+      },
+      "battery_pack2_type": {
+        "name": "Batteripack 2 typ",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack2_serial_number": {
+        "name": "Batteripack 2 serienummer"
+      },
+      "battery_pack3_bms_type": {
+        "name": "Batteripack 3 BMS-typ"
+      },
+      "battery_pack3_bms_serial_number": {
+        "name": "Batteripack 3 BMS-serienummer"
+      },
+      "battery_pack3_bms_software_version": {
+        "name": "Batteripack 3 BMS-programvaruversion"
+      },
+      "battery_pack3_bms_hardware_version": {
+        "name": "Batteripack 3 BMS-maskinvaruversion"
+      },
+      "battery_pack3_type": {
+        "name": "Batteripack 3 typ",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack3_serial_number": {
+        "name": "Batteripack 3 serienummer"
+      },
+      "battery_pack4_bms_type": {
+        "name": "Batteripack 4 BMS-typ"
+      },
+      "battery_pack4_bms_serial_number": {
+        "name": "Batteripack 4 BMS-serienummer"
+      },
+      "battery_pack4_bms_software_version": {
+        "name": "Batteripack 4 BMS-programvaruversion"
+      },
+      "battery_pack4_bms_hardware_version": {
+        "name": "Batteripack 4 BMS-maskinvaruversion"
+      },
+      "battery_pack4_type": {
+        "name": "Batteripack 4 typ",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack4_serial_number": {
+        "name": "Batteripack 4 serienummer"
+      },
+      "battery_pack5_bms_type": {
+        "name": "Batteripack 5 BMS-typ"
+      },
+      "battery_pack5_bms_serial_number": {
+        "name": "Batteripack 5 BMS-serienummer"
+      },
+      "battery_pack5_bms_software_version": {
+        "name": "Batteripack 5 BMS-programvaruversion"
+      },
+      "battery_pack5_bms_hardware_version": {
+        "name": "Batteripack 5 BMS-maskinvaruversion"
+      },
+      "battery_pack5_type": {
+        "name": "Batteripack 5 typ",
+        "state": {
+          "50_ah": "50 Ah",
+          "80_ah": "80 Ah",
+          "100_ah": "100 Ah"
+        }
+      },
+      "battery_pack5_serial_number": {
+        "name": "Batteripack 5 serienummer"
+      },
+      "battery_input_mode": {
+        "name": "Batteriingångsläge",
+        "state": {
+          "independent": "Oberoende",
+          "parallel": "Parallell"
+        }
+      },
+      "battery_protocol": {
+        "name": "Batteriprotokoll",
+        "state": {
+          "not_in_use": "Används inte",
+          "saj_bu3": "SAJ BU3",
+          "lead_acid": "Blysyra",
+          "dyness_h": "Dyness DYNESS-H",
+          "pylon_sc0500": "Pylon SC0500",
+          "b2_can": "B2 CAN"
+        }
+      },
+      "bms_update_id": {
+        "name": "BMS-uppdaterings-ID"
+      },
+      "bms_update_mode": {
+        "name": "BMS-uppdateringsläge"
+      },
+      "ethernet_mode": {
+        "name": "Ethernet-läge",
+        "state": {
+          "manual": "Manuellt",
+          "automatic": "Automatiskt"
+        }
+      },
+      "ev_address": {
+        "name": "Elbilsladdarens adress"
+      },
+      "ev_baud_rate": {
+        "name": "Elbilsladdarens överföringshastighet",
+        "state": {
+          "115200": "115200 baud",
+          "57600": "57600 baud",
+          "38400": "38400 baud",
+          "19200": "19200 baud",
+          "9600": "9600 baud",
+          "4800": "4800 baud",
+          "2400": "2400 baud",
+          "1200": "1200 baud"
+        }
+      },
+      "ev_charger_count": {
+        "name": "Antal elbilsladdare"
+      },
+      "ev_communication_timeout": {
+        "name": "Elbilsladdarens tidsgräns för kommunikation"
+      },
+      "ev_port_address": {
+        "name": "Elbilsladdarens portadress"
+      },
+      "ev_port_mode": {
+        "name": "Elbilsladdarens portläge",
+        "state": {
+          "invalid": "Ogiltigt",
+          "host": "Värd",
+          "modbus_slave": "Modbus-slav"
+        }
+      },
+      "fcas_frequency_hysteresis": {
+        "name": "FCAS frekvenshysteres"
+      },
+      "function_flags_1": {
+        "name": "Funktionsflaggor 1"
+      },
+      "function_flags_2": {
+        "name": "Funktionsflaggor 2"
+      },
+      "grid_type": {
+        "name": "Nättyp",
+        "state": {
+          "single_phase": "Enfas",
+          "split_phase": "Delad fas",
+          "three_phase_three_wire": "Trefas trevägs",
+          "three_phase_four_wire": "Trefas fyrtrådigt"
+        }
+      },
+      "insulation_resistance_limit": {
+        "name": "Gräns för isolationsresistans"
+      },
+      "lead_acid_capacity": {
+        "name": "Blysyrakapacitet"
+      },
+      "lead_acid_charge_current_limit": {
+        "name": "Blysyraladdningsströmgräns"
+      },
+      "lead_acid_charge_cutoff_voltage": {
+        "name": "Blysyraladdningsgränsspänning"
+      },
+      "lead_acid_discharge_current_limit": {
+        "name": "Blysyraurladdningsströmgräns"
+      },
+      "lead_acid_equalising_charge_voltage": {
+        "name": "Blysyrautjämningsladdningsspänning"
+      },
+      "lead_acid_float_charge_voltage": {
+        "name": "Blysyraunderhållsladdningsspänning"
+      },
+      "lead_acid_high_voltage_protection": {
+        "name": "Blysyraskydd mot hög spänning"
+      },
+      "lead_acid_low_voltage_warning": {
+        "name": "Blysyravarning för låg spänning"
+      },
+      "lead_acid_off_grid_discharge_cutoff_voltage": {
+        "name": "Blysyraurladdningsgränsspänning fristående"
+      },
+      "lead_acid_on_grid_discharge_cutoff_voltage": {
+        "name": "Blysyraurladdningsgränsspänning nätansluten"
+      },
+      "machine_model": {
+        "name": "Maskinmodell"
+      },
+      "max_dc_current_component": {
+        "name": "Största likströmskomponent"
+      },
+      "max_dc_voltage_component": {
+        "name": "Största likspänningskomponent"
+      },
+      "max_leakage_current": {
+        "name": "Största läckström"
+      },
+      "meter_address": {
+        "name": "Mätaradress"
+      },
+      "meter_configuration": {
+        "name": "Mätarkonfiguration",
+        "state": {
+          "no_meter_or_ct": "Ingen mätare eller CT",
+          "single_phase_meter": "Enfasmätare",
+          "three_phase_three_wire_meter": "Trefasmätare trevägs",
+          "three_phase_four_wire_meter_on_single_phase_machine": "Trefasmätare fyrtrådig på en enfasmaskin",
+          "three_phase_four_wire_meter_grid_and_pv": "Trefasmätare fyrtrådig (nät och sol)",
+          "two_three_phase_three_wire_meters": "Två trefasmätare trevägs",
+          "two_three_phase_four_wire_meters": "Två trefasmätare fyrtrådiga",
+          "two_single_phase_meters": "Två enfasmätare",
+          "single_phase_meter_with_two_ct_channels": "Enfasmätare med två CT-kanaler",
+          "one_grid_ct": "En nät-CT",
+          "grid_and_pv_cts": "Nät- och sol-CT",
+          "dual_circuit_three_phase_four_wire_meter_with_six_ct_channels": "Trefasmätare fyrtrådig med två kretsar och sex CT-kanaler"
+        }
+      },
+      "motor_enable": {
+        "name": "Motoraktivering"
+      },
+      "mppt_scan_time": {
+        "name": "MPPT-skanningstid"
+      },
+      "mppt_voltage_high": {
+        "name": "MPPT-spänning hög"
+      },
+      "mppt_voltage_low": {
+        "name": "MPPT-spänning låg"
+      },
+      "off_grid_output_frequency": {
+        "name": "Fristående utgångsfrekvens"
+      },
+      "off_grid_output_voltage": {
+        "name": "Fristående utgångsspänning"
+      },
+      "parallel_configured_mode": {
+        "name": "Konfigurerat parallelläge",
+        "state": {
+          "not_parallel": "Inte parallell",
+          "on_grid": "Nätansluten",
+          "off_grid": "Fristående",
+          "on_and_off_grid": "Nätansluten och fristående"
+        }
+      },
+      "parallel_number": {
+        "name": "Parallellnummer"
+      },
+      "parallel_role": {
+        "name": "Parallellroll"
+      },
+      "pv_input_mode": {
+        "name": "PV-ingångsläge",
+        "state": {
+          "automatic": "Automatisk",
+          "independent": "Oberoende",
+          "parallel": "Parallell"
+        }
+      },
+      "pv_shutdown_voltage": {
+        "name": "PV-avstängningsspänning"
+      },
+      "pv_start_voltage": {
+        "name": "PV-startspänning"
+      },
+      "rated_power": {
+        "name": "Märkeffekt"
+      },
+      "reverse_flow_mode": {
+        "name": "Läge för omvänt flöde",
+        "state": {
+          "off": "Av",
+          "master": "Master",
+          "slave": "Slav"
+        }
+      },
+      "rs485_address": {
+        "name": "RS485-adress"
+      },
+      "rs485_baud_rate": {
+        "name": "RS485-överföringshastighet",
+        "state": {
+          "115200": "115200 baud",
+          "57600": "57600 baud",
+          "38400": "38400 baud",
+          "19200": "19200 baud",
+          "9600": "9600 baud",
+          "4800": "4800 baud",
+          "2400": "2400 baud",
+          "1200": "1200 baud"
+        }
+      },
+      "rs485_slave_address": {
+        "name": "RS485-slavadress"
+      },
+      "rs485_slave_baud_rate": {
+        "name": "RS485-slavens överföringshastighet",
+        "state": {
+          "115200": "115200 baud",
+          "57600": "57600 baud",
+          "38400": "38400 baud",
+          "19200": "19200 baud",
+          "9600": "9600 baud",
+          "4800": "4800 baud",
+          "2400": "2400 baud",
+          "1200": "1200 baud"
+        }
+      },
+      "settings_sequence": {
+        "name": "Inställningarnas ordningsnummer"
+      },
+      "ethernet_ip_address": {
+        "name": "Ethernet-IP-adress"
+      },
+      "ethernet_subnet_mask": {
+        "name": "Ethernet-nätmask"
+      },
+      "ethernet_gateway": {
+        "name": "Ethernet-gateway"
+      },
+      "ethernet_dns_primary": {
+        "name": "Ethernet primär DNS"
+      },
+      "ethernet_dns_secondary": {
+        "name": "Ethernet sekundär DNS"
+      }
+    },
+    "binary_sensor": {
+      "control_allowed": {
+        "name": "Styrning tillåten"
+      },
+      "inverter_fault": {
+        "name": "Växelriktarfel"
+      },
+      "inverter_fault_unrecognised": {
+        "name": "Okänt växelriktarfel"
+      },
+      "inverter_fault_internal_communication": {
+        "name": "Intern kommunikation förlorad"
+      },
+      "inverter_fault_meter_communication": {
+        "name": "Kommunikation med mätare förlorad"
+      },
+      "inverter_fault_display_memory": {
+        "name": "Minnesfel på displaykortet"
+      },
+      "inverter_fault_display_clock": {
+        "name": "Klockfel på displaykortet"
+      },
+      "inverter_fault_bms_device": {
+        "name": "BMS-enhetsfel"
+      },
+      "inverter_fault_bms_communication": {
+        "name": "Kommunikation med BMS förlorad"
+      },
+      "inverter_fault_ct_device": {
+        "name": "CT-enhetsfel"
+      },
+      "inverter_fault_afci_communication": {
+        "name": "Kommunikation med ljusbågskortet förlorad"
+      },
+      "inverter_fault_slave_communication": {
+        "name": "Kommunikation med slavstyrenheten förlorad"
+      },
+      "inverter_fault_pv_meter_communication": {
+        "name": "Kommunikation med solmätaren förlorad"
+      },
+      "inverter_fault_ev_charger_communication": {
+        "name": "Kommunikation med elbilsladdaren förlorad"
+      },
+      "inverter_fault_grid_phase_r_overvoltage": {
+        "name": "Nätfas R överspänning"
+      },
+      "inverter_fault_grid_phase_r_undervoltage": {
+        "name": "Nätfas R underspänning"
+      },
+      "inverter_fault_grid_phase_s_overvoltage": {
+        "name": "Nätfas S överspänning"
+      },
+      "inverter_fault_grid_phase_s_undervoltage": {
+        "name": "Nätfas S underspänning"
+      },
+      "inverter_fault_grid_phase_t_overvoltage": {
+        "name": "Nätfas T överspänning"
+      },
+      "inverter_fault_grid_phase_t_undervoltage": {
+        "name": "Nätfas T underspänning"
+      },
+      "inverter_fault_grid_overfrequency": {
+        "name": "Nätöverfrekvens"
+      },
+      "inverter_fault_grid_underfrequency": {
+        "name": "Nätunderfrekvens"
+      },
+      "inverter_fault_dcdc_communication": {
+        "name": "Kommunikation med DC-DC-enheten förlorad"
+      },
+      "inverter_fault_dcdc_device": {
+        "name": "DC-DC-enhetsfel"
+      },
+      "inverter_fault_parallel_communication": {
+        "name": "Kommunikation i parallellsystemet förlorad"
+      },
+      "inverter_fault_grid_lost": {
+        "name": "Nätet förlorat"
+      },
+      "inverter_fault_pv_input_mode": {
+        "name": "Fel i PV-ingångsläge"
+      },
+      "inverter_fault_pv_hardware_overcurrent": {
+        "name": "PV maskinvaruöverström"
+      },
+      "inverter_fault_pv_overvoltage": {
+        "name": "PV överspänning"
+      },
+      "inverter_fault_bus_hardware_overvoltage": {
+        "name": "DC-bussmaskinvaruöverspänning"
+      },
+      "inverter_fault_bus_overvoltage": {
+        "name": "DC-bussöverspänning"
+      },
+      "inverter_fault_bus_undervoltage": {
+        "name": "DC-bussunderspänning"
+      },
+      "inverter_fault_grid_phase": {
+        "name": "Nätfasfel"
+      },
+      "inverter_fault_islanding": {
+        "name": "Ödrift"
+      },
+      "inverter_fault_arc_device": {
+        "name": "Fel på ljusbågsdetektorn"
+      },
+      "inverter_fault_pv_input": {
+        "name": "PV-ingångsfel"
+      },
+      "inverter_fault_hardware_overcurrent": {
+        "name": "Maskinvaruöverström växelriktare"
+      },
+      "inverter_fault_neutral_earth_voltage": {
+        "name": "Fel i spänning mellan nolla och jord"
+      },
+      "inverter_fault_drm0": {
+        "name": "DRM0-fel"
+      },
+      "inverter_fault_fan_1": {
+        "name": "Fläkt 1 fel"
+      },
+      "inverter_fault_fan_2": {
+        "name": "Fläkt 2 fel"
+      },
+      "inverter_fault_fan_3": {
+        "name": "Fläkt 3 fel"
+      },
+      "inverter_fault_fan_4": {
+        "name": "Fläkt 4 fel"
+      },
+      "inverter_fault_arc": {
+        "name": "Ljusbågsfel"
+      },
+      "inverter_fault_pv_software_overcurrent": {
+        "name": "PV programvaruöverström"
+      },
+      "inverter_fault_battery_overvoltage": {
+        "name": "Batteriport överspänning"
+      },
+      "inverter_fault_battery_overcurrent": {
+        "name": "Batteriport överström"
+      },
+      "inverter_fault_battery_charge_overvoltage": {
+        "name": "Batteriets laddningsspänning hög"
+      },
+      "inverter_fault_battery_overload": {
+        "name": "Batteriport överbelastning"
+      },
+      "inverter_fault_battery_soft_start": {
+        "name": "Tidsgräns för batteriets mjukstart"
+      },
+      "inverter_fault_output_overload": {
+        "name": "Utgång överbelastad"
+      },
+      "inverter_fault_battery_open_circuit": {
+        "name": "Batteri bruten krets"
+      },
+      "inverter_fault_battery_discharge_undervoltage": {
+        "name": "Batteriets urladdningsspänning låg"
+      },
+      "inverter_fault_authorisation_expired": {
+        "name": "Auktorisering utgången"
+      },
+      "inverter_fault_display_communication": {
+        "name": "Kommunikation med displaykortet förlorad"
+      },
+      "inverter_fault_relay": {
+        "name": "Reläfel"
+      },
+      "inverter_fault_controller_memory": {
+        "name": "Minnesfel i styrenheten"
+      },
+      "inverter_fault_over_temperature": {
+        "name": "Övertemperatur"
+      },
+      "inverter_fault_under_temperature": {
+        "name": "Undertemperatur"
+      },
+      "inverter_fault_leakage_current_device": {
+        "name": "Fel på läckströmssensorn"
+      },
+      "inverter_fault_dc_injection_device": {
+        "name": "Fel på sensorn för likströmsinmatning"
+      },
+      "inverter_fault_current_sensor": {
+        "name": "Strömsensorfel"
+      },
+      "inverter_fault_grid_average_overvoltage": {
+        "name": "Nät 10-minuters medelvärde överspänning"
+      },
+      "inverter_fault_off_grid_undervoltage": {
+        "name": "Fristående utgång underspänning"
+      },
+      "inverter_fault_grid_phase_r_dc_voltage": {
+        "name": "Nätfas R likspänning hög"
+      },
+      "inverter_fault_grid_phase_s_dc_voltage": {
+        "name": "Nätfas S likspänning hög"
+      },
+      "inverter_fault_grid_phase_t_dc_voltage": {
+        "name": "Nätfas T likspänning hög"
+      },
+      "inverter_fault_leakage_current": {
+        "name": "Läckströmsfel"
+      },
+      "inverter_fault_grid_phase_r_dc_injection": {
+        "name": "Nätfas R likströmsinmatning hög"
+      },
+      "inverter_fault_grid_phase_s_dc_injection": {
+        "name": "Nätfas S likströmsinmatning hög"
+      },
+      "inverter_fault_grid_phase_t_dc_injection": {
+        "name": "Nätfas T likströmsinmatning hög"
+      },
+      "inverter_fault_insulation": {
+        "name": "Isolationsfel"
+      },
+      "inverter_fault_bus_imbalance": {
+        "name": "Obalans i DC-busspänning"
+      },
+      "battery_fault": {
+        "name": "Batterifel"
+      },
+      "battery_fault_unrecognised": {
+        "name": "Okänt batterifel"
+      },
+      "battery_fault_internal_communication": {
+        "name": "Batteriets interna BMS-kommunikation förlorad"
+      },
+      "battery_fault_pack_sequence": {
+        "name": "Fel i batteripackets adressering"
+      },
+      "battery_fault_discharge_overcurrent": {
+        "name": "Batteriurladdningsöverström"
+      },
+      "battery_fault_charge_overcurrent": {
+        "name": "Batteriladdningsöverström"
+      },
+      "battery_fault_total_undervoltage": {
+        "name": "Batteriets totalspänning låg"
+      },
+      "battery_fault_total_overvoltage": {
+        "name": "Batteriets totalspänning hög"
+      },
+      "battery_fault_cell_undervoltage": {
+        "name": "Battericell underspänning"
+      },
+      "battery_fault_cell_overvoltage": {
+        "name": "Battericell överspänning"
+      },
+      "battery_fault_hardware": {
+        "name": "Batteriets BMS maskinvarufel"
+      },
+      "battery_fault_charge_cold": {
+        "name": "Batteriet för kallt för laddning"
+      },
+      "battery_fault_charge_hot": {
+        "name": "Batteriet för varmt för laddning"
+      },
+      "battery_fault_discharge_cold": {
+        "name": "Batteriet för kallt för urladdning"
+      },
+      "battery_fault_discharge_hot": {
+        "name": "Batteriet för varmt för urladdning"
+      },
+      "battery_fault_relay": {
+        "name": "Batteriets BMS reläfel"
+      },
+      "battery_fault_precharge": {
+        "name": "Fel i batteriets förladdning"
+      },
+      "battery_fault_insulation": {
+        "name": "Batteriets BMS isolationsfel"
+      },
+      "battery_fault_bms_incompatible": {
+        "name": "Batteriets BMS-tillverkare inkompatibel"
+      },
+      "battery_fault_cell_supplier_incompatible": {
+        "name": "Batteriets celltillverkare stämmer inte"
+      },
+      "battery_fault_cell_incompatible": {
+        "name": "Batteriets celler stämmer inte"
+      },
+      "battery_fault_voltage_level_mismatch": {
+        "name": "Batteriets spänningsnivå stämmer inte"
+      },
+      "battery_fault_breaker_open": {
+        "name": "Batteriets kretsbrytare öppen"
+      },
+      "battery_fault_cell_temperature_difference": {
+        "name": "Batteriets celltemperaturskillnad för stor"
+      },
+      "battery_fault_cell_voltage_difference_2": {
+        "name": "Batteriets cellspänningsskillnad för stor, nivå 2"
+      },
+      "battery_fault_cell_voltage_difference_1": {
+        "name": "Batteriets cellspänningsskillnad för stor, nivå 1"
+      },
+      "battery_fault_cell_over_temperature": {
+        "name": "Battericell övertemperatur"
+      },
+      "battery_fault_short_circuit": {
+        "name": "Batterikortslutning"
+      },
+      "battery_fault_total_voltage_matching": {
+        "name": "Batteriets totalspänning kunde inte matchas"
+      },
+      "battery_fault_system_locked": {
+        "name": "Batterisystem låst"
+      },
+      "battery_fault_fuse": {
+        "name": "Batterisäkringsfel"
+      },
+      "battery_fault_charging_port_overvoltage": {
+        "name": "Batteriets laddningsport överspänning"
+      },
+      "battery_pack1_fault": {
+        "name": "Batteripack 1 fel"
+      },
+      "battery_pack1_warning": {
+        "name": "Batteripack 1 varning"
+      },
+      "battery_pack2_fault": {
+        "name": "Batteripack 2 fel"
+      },
+      "battery_pack2_warning": {
+        "name": "Batteripack 2 varning"
+      },
+      "battery_pack3_fault": {
+        "name": "Batteripack 3 fel"
+      },
+      "battery_pack3_warning": {
+        "name": "Batteripack 3 varning"
+      },
+      "battery_pack4_fault": {
+        "name": "Batteripack 4 fel"
+      },
+      "battery_pack4_warning": {
+        "name": "Batteripack 4 varning"
+      },
+      "ev_fault": {
+        "name": "Elbilsladdarfel"
+      },
+      "ev_fault_unrecognised": {
+        "name": "Okänt elbilsladdarfel"
+      },
+      "ev_fault_relay_over_temperature": {
+        "name": "Elbilsladdarens relä övertemperatur"
+      },
+      "ev_fault_overload": {
+        "name": "Elbilsladdarens överbelastning"
+      },
+      "ev_fault_ac_overvoltage": {
+        "name": "Elbilsladdarens AC-överspänning"
+      },
+      "ev_fault_ac_undervoltage": {
+        "name": "Elbilsladdarens AC-underspänning"
+      },
+      "ev_fault_ac_overcurrent": {
+        "name": "Elbilsladdarens AC-överström"
+      },
+      "ev_fault_ac_overfrequency": {
+        "name": "Elbilsladdarens AC-överfrekvens"
+      },
+      "ev_fault_ac_underfrequency": {
+        "name": "Elbilsladdarens AC-underfrekvens"
+      },
+      "ev_fault_dc_residual_current_a": {
+        "name": "Elbilsladdarens DC-restströmsfel A"
+      },
+      "ev_fault_emergency_stop": {
+        "name": "Elbilsladdarens nödstopp"
+      },
+      "ev_fault_under_temperature": {
+        "name": "Elbilsladdarens undertemperatur"
+      },
+      "ev_fault_ac_residual_current": {
+        "name": "Elbilsladdarens AC-restström"
+      },
+      "ev_fault_input_terminal_over_temperature": {
+        "name": "Elbilsladdarens ingångsplint övertemperatur"
+      },
+      "ev_fault_bluetooth": {
+        "name": "Elbilsladdarens Bluetooth-fel"
+      },
+      "ev_fault_dc_residual_current_b": {
+        "name": "Elbilsladdarens DC-restströmsfel B"
+      },
+      "ev_fault_relay": {
+        "name": "Elbilsladdarens reläfel"
+      },
+      "ev_fault_grounding": {
+        "name": "Elbilsladdarens jordningsfel"
+      },
+      "ev_fault_phase_sequence": {
+        "name": "Elbilsladdarens fasföljdsfel"
+      },
+      "ev_fault_rcd_circuit": {
+        "name": "Elbilsladdarens fel i jordfelsbrytarkretsen"
+      },
+      "ev_fault_rs485_timeout": {
+        "name": "Elbilsladdarens tidsgräns för RS485-kommunikation"
+      },
+      "ev_fault_supply": {
+        "name": "Elbilsladdarens fel i elförsörjningen"
+      },
+      "ev_fault_meter": {
+        "name": "Elbilsladdarens mätarfel"
+      },
+      "ev_fault_control_pilot": {
+        "name": "Elbilsladdarens pilotsignalfel (under 2 V)"
+      },
+      "ev_fault_connector_lock": {
+        "name": "Elbilsladdarens fel i kontaktlåset"
+      },
+      "ev_fault_connector_current": {
+        "name": "Elbilsladdarens fel i kontaktströmmen"
+      },
+      "ev_fault_dc_residual_current_c": {
+        "name": "Elbilsladdarens DC-restströmsfel C"
+      }
+    },
+    "number": {
+      "charge_slot_1_power": {
+        "name": "Laddningstidslucka 1 effekt"
+      },
+      "charge_slot_1_days": {
+        "name": "Laddningstidslucka 1 veckodagar"
+      },
+      "charge_slot_2_power": {
+        "name": "Laddningstidslucka 2 effekt"
+      },
+      "charge_slot_2_days": {
+        "name": "Laddningstidslucka 2 veckodagar"
+      },
+      "charge_slot_3_power": {
+        "name": "Laddningstidslucka 3 effekt"
+      },
+      "charge_slot_3_days": {
+        "name": "Laddningstidslucka 3 veckodagar"
+      },
+      "charge_slot_4_power": {
+        "name": "Laddningstidslucka 4 effekt"
+      },
+      "charge_slot_4_days": {
+        "name": "Laddningstidslucka 4 veckodagar"
+      },
+      "charge_slot_5_power": {
+        "name": "Laddningstidslucka 5 effekt"
+      },
+      "charge_slot_5_days": {
+        "name": "Laddningstidslucka 5 veckodagar"
+      },
+      "charge_slot_6_power": {
+        "name": "Laddningstidslucka 6 effekt"
+      },
+      "charge_slot_6_days": {
+        "name": "Laddningstidslucka 6 veckodagar"
+      },
+      "charge_slot_7_power": {
+        "name": "Laddningstidslucka 7 effekt"
+      },
+      "charge_slot_7_days": {
+        "name": "Laddningstidslucka 7 veckodagar"
+      },
+      "discharge_slot_1_power": {
+        "name": "Urladdningstidslucka 1 effekt"
+      },
+      "discharge_slot_1_days": {
+        "name": "Urladdningstidslucka 1 veckodagar"
+      },
+      "discharge_slot_2_power": {
+        "name": "Urladdningstidslucka 2 effekt"
+      },
+      "discharge_slot_2_days": {
+        "name": "Urladdningstidslucka 2 veckodagar"
+      },
+      "discharge_slot_3_power": {
+        "name": "Urladdningstidslucka 3 effekt"
+      },
+      "discharge_slot_3_days": {
+        "name": "Urladdningstidslucka 3 veckodagar"
+      },
+      "discharge_slot_4_power": {
+        "name": "Urladdningstidslucka 4 effekt"
+      },
+      "discharge_slot_4_days": {
+        "name": "Urladdningstidslucka 4 veckodagar"
+      },
+      "discharge_slot_5_power": {
+        "name": "Urladdningstidslucka 5 effekt"
+      },
+      "discharge_slot_5_days": {
+        "name": "Urladdningstidslucka 5 veckodagar"
+      },
+      "discharge_slot_6_power": {
+        "name": "Urladdningstidslucka 6 effekt"
+      },
+      "discharge_slot_6_days": {
+        "name": "Urladdningstidslucka 6 veckodagar"
+      },
+      "discharge_slot_7_power": {
+        "name": "Urladdningstidslucka 7 effekt"
+      },
+      "discharge_slot_7_days": {
+        "name": "Urladdningstidslucka 7 veckodagar"
+      },
+      "passive_mode": {
+        "name": "Passivt läge"
+      },
+      "passive_grid_charge_power": {
+        "name": "Passiv nätladdningseffekt"
+      },
+      "passive_grid_discharge_power": {
+        "name": "Passiv näturladdningseffekt"
+      },
+      "passive_battery_charge_power": {
+        "name": "Passiv batteriladdningseffekt"
+      },
+      "passive_battery_discharge_power": {
+        "name": "Passiv batteriurladdningseffekt"
+      },
+      "battery_discharge_soc_limit_on_grid": {
+        "name": "Batteriurladdningsgräns (laddningsnivå, nätansluten)"
+      },
+      "battery_discharge_soc_limit_off_grid": {
+        "name": "Batteriurladdningsgräns (laddningsnivå, fristående)"
+      },
+      "battery_charge_soc_limit": {
+        "name": "Batteriladdningsgräns (laddningsnivå)"
+      },
+      "battery_charge_power_limit": {
+        "name": "Batteriladdningseffektgräns"
+      },
+      "battery_discharge_power_limit": {
+        "name": "Batteriurladdningseffektgräns"
+      },
+      "grid_import_power_limit": {
+        "name": "Nätimporteffektgräns"
+      },
+      "grid_export_power_limit": {
+        "name": "Nätexporteffektgräns"
+      },
+      "backup_reserve_soc": {
+        "name": "Reservladdningsnivå för reservdrift"
+      },
+      "export_limit_power": {
+        "name": "Exporteffektgräns"
+      },
+      "export_limit_current": {
+        "name": "Exportströmgräns"
+      },
+      "ev_charge_power": {
+        "name": "Elbilsladdningseffekt"
+      },
+      "ev_ems_charge_current": {
+        "name": "Elbilsladdarens EMS-laddningsström"
+      },
+      "ev_slot_1_days": {
+        "name": "Elbilsladdartidslucka 1 veckodagar"
+      },
+      "ev_slot_1_power": {
+        "name": "Elbilsladdartidslucka 1 effekt"
+      },
+      "ev_slot_2_days": {
+        "name": "Elbilsladdartidslucka 2 veckodagar"
+      },
+      "ev_slot_2_power": {
+        "name": "Elbilsladdartidslucka 2 effekt"
+      },
+      "ev_slot_3_days": {
+        "name": "Elbilsladdartidslucka 3 veckodagar"
+      },
+      "ev_slot_3_power": {
+        "name": "Elbilsladdartidslucka 3 effekt"
+      },
+      "ev_slot_4_days": {
+        "name": "Elbilsladdartidslucka 4 veckodagar"
+      },
+      "ev_slot_4_power": {
+        "name": "Elbilsladdartidslucka 4 effekt"
+      },
+      "ev_slot_5_days": {
+        "name": "Elbilsladdartidslucka 5 veckodagar"
+      },
+      "ev_slot_5_power": {
+        "name": "Elbilsladdartidslucka 5 effekt"
+      },
+      "ev_slot_6_days": {
+        "name": "Elbilsladdartidslucka 6 veckodagar"
+      },
+      "ev_slot_6_power": {
+        "name": "Elbilsladdartidslucka 6 effekt"
+      },
+      "ev_slot_7_days": {
+        "name": "Elbilsladdartidslucka 7 veckodagar"
+      },
+      "ev_slot_7_power": {
+        "name": "Elbilsladdartidslucka 7 effekt"
+      },
+      "ems_timeout": {
+        "name": "EMS-tidsgräns"
+      },
+      "ems_battery_charge_current_limit": {
+        "name": "EMS-batteriladdningsströmgräns"
+      },
+      "ems_battery_discharge_current_limit": {
+        "name": "EMS-batteriurladdningsströmgräns"
+      },
+      "ems_inverter_import_power_limit": {
+        "name": "EMS-importeffektgräns växelriktare"
+      },
+      "ems_inverter_export_power_limit": {
+        "name": "EMS-exporteffektgräns växelriktare"
+      },
+      "ems_pv_power_limit": {
+        "name": "EMS-soleffektgräns"
+      },
+      "battery_power_target": {
+        "name": "Batterieffektmål"
+      },
+      "grid_power_target": {
+        "name": "Näteffektmål"
+      },
+      "inverter_power_target": {
+        "name": "Växelriktareffektmål"
+      },
+      "battery_forced_charge_power_limit": {
+        "name": "Batteritvångsladdningseffektgräns"
+      }
+    },
+    "select": {
+      "application_mode": {
+        "name": "Applikationsläge",
+        "state": {
+          "self_use": "Egenanvändning",
+          "time_of_use": "Tidsstyrning",
+          "backup": "Reservdrift",
+          "ems": "EMS",
+          "passive": "Passivt",
+          "legacy": "Äldre",
+          "time_of_use_bms": "Tidsstyrning (BMS)",
+          "ai_saving": "AI-besparing",
+          "peak_shaving": "Toppkapning"
+        }
+      },
+      "export_limit_mode": {
+        "name": "Exportgränsläge",
+        "state": {
+          "off": "Av",
+          "total_power": "Totaleffekt",
+          "phase_current": "Fasström",
+          "phase_power": "Faseffekt"
+        }
+      },
+      "time_of_use_idle_mode": {
+        "name": "Tidsstyrning viloläge",
+        "state": {
+          "standby": "Standby",
+          "self_use": "Egenanvändning"
+        }
+      },
+      "led_mode": {
+        "name": "LED-läge",
+        "state": {
+          "all_off": "Alla av",
+          "outer_ring_on": "Yttre ring på",
+          "inner_ring_on": "Inre ring på",
+          "all_on": "Alla på"
+        }
+      },
+      "ev_ems_phase_mode": {
+        "name": "Elbilsladdarens EMS-fasläge",
+        "state": {
+          "three_phase": "Trefas",
+          "single_phase": "Enfas"
+        }
+      },
+      "ev_mode": {
+        "name": "Elbilsladdarens läge",
+        "state": {
+          "disabled": "Inaktiverad",
+          "standard": "Standard",
+          "time_based": "Tidsbaserat",
+          "pv_surplus": "Solöverskott",
+          "ems": "EMS"
+        }
+      },
+      "ev_slot_1_mode": {
+        "name": "Elbilsladdartidslucka 1 läge",
+        "state": {
+          "not_set": "Inte inställd",
+          "standard": "Standard",
+          "pv_surplus": "Solöverskott"
+        }
+      },
+      "ev_slot_2_mode": {
+        "name": "Elbilsladdartidslucka 2 läge",
+        "state": {
+          "not_set": "Inte inställd",
+          "standard": "Standard",
+          "pv_surplus": "Solöverskott"
+        }
+      },
+      "ev_slot_3_mode": {
+        "name": "Elbilsladdartidslucka 3 läge",
+        "state": {
+          "not_set": "Inte inställd",
+          "standard": "Standard",
+          "pv_surplus": "Solöverskott"
+        }
+      },
+      "ev_slot_4_mode": {
+        "name": "Elbilsladdartidslucka 4 läge",
+        "state": {
+          "not_set": "Inte inställd",
+          "standard": "Standard",
+          "pv_surplus": "Solöverskott"
+        }
+      },
+      "ev_slot_5_mode": {
+        "name": "Elbilsladdartidslucka 5 läge",
+        "state": {
+          "not_set": "Inte inställd",
+          "standard": "Standard",
+          "pv_surplus": "Solöverskott"
+        }
+      },
+      "ev_slot_6_mode": {
+        "name": "Elbilsladdartidslucka 6 läge",
+        "state": {
+          "not_set": "Inte inställd",
+          "standard": "Standard",
+          "pv_surplus": "Solöverskott"
+        }
+      },
+      "ev_slot_7_mode": {
+        "name": "Elbilsladdartidslucka 7 läge",
+        "state": {
+          "not_set": "Inte inställd",
+          "standard": "Standard",
+          "pv_surplus": "Solöverskott"
+        }
+      }
+    },
+    "switch": {
+      "charge_slot_1_enabled": {
+        "name": "Laddningstidslucka 1 aktiverad"
+      },
+      "charge_slot_2_enabled": {
+        "name": "Laddningstidslucka 2 aktiverad"
+      },
+      "charge_slot_3_enabled": {
+        "name": "Laddningstidslucka 3 aktiverad"
+      },
+      "charge_slot_4_enabled": {
+        "name": "Laddningstidslucka 4 aktiverad"
+      },
+      "charge_slot_5_enabled": {
+        "name": "Laddningstidslucka 5 aktiverad"
+      },
+      "charge_slot_6_enabled": {
+        "name": "Laddningstidslucka 6 aktiverad"
+      },
+      "charge_slot_7_enabled": {
+        "name": "Laddningstidslucka 7 aktiverad"
+      },
+      "discharge_slot_1_enabled": {
+        "name": "Urladdningstidslucka 1 aktiverad"
+      },
+      "discharge_slot_2_enabled": {
+        "name": "Urladdningstidslucka 2 aktiverad"
+      },
+      "discharge_slot_3_enabled": {
+        "name": "Urladdningstidslucka 3 aktiverad"
+      },
+      "discharge_slot_4_enabled": {
+        "name": "Urladdningstidslucka 4 aktiverad"
+      },
+      "discharge_slot_5_enabled": {
+        "name": "Urladdningstidslucka 5 aktiverad"
+      },
+      "discharge_slot_6_enabled": {
+        "name": "Urladdningstidslucka 6 aktiverad"
+      },
+      "discharge_slot_7_enabled": {
+        "name": "Urladdningstidslucka 7 aktiverad"
+      },
+      "battery_auto_wake": {
+        "name": "Batteri automatisk väckning"
+      },
+      "time_of_use_grid_discharge": {
+        "name": "Tidsstyrning urladdning till nätet"
+      },
+      "ev_enabled": {
+        "name": "Elbilsladdare är aktiverad"
+      },
+      "ev_slot_1_grid_charging": {
+        "name": "Elbilsladdartidslucka 1 nätladdning"
+      },
+      "ev_slot_1_battery_discharge": {
+        "name": "Elbilsladdartidslucka 1 batteriurladdning"
+      },
+      "ev_slot_2_grid_charging": {
+        "name": "Elbilsladdartidslucka 2 nätladdning"
+      },
+      "ev_slot_2_battery_discharge": {
+        "name": "Elbilsladdartidslucka 2 batteriurladdning"
+      },
+      "ev_slot_3_grid_charging": {
+        "name": "Elbilsladdartidslucka 3 nätladdning"
+      },
+      "ev_slot_3_battery_discharge": {
+        "name": "Elbilsladdartidslucka 3 batteriurladdning"
+      },
+      "ev_slot_4_grid_charging": {
+        "name": "Elbilsladdartidslucka 4 nätladdning"
+      },
+      "ev_slot_4_battery_discharge": {
+        "name": "Elbilsladdartidslucka 4 batteriurladdning"
+      },
+      "ev_slot_5_grid_charging": {
+        "name": "Elbilsladdartidslucka 5 nätladdning"
+      },
+      "ev_slot_5_battery_discharge": {
+        "name": "Elbilsladdartidslucka 5 batteriurladdning"
+      },
+      "ev_slot_6_grid_charging": {
+        "name": "Elbilsladdartidslucka 6 nätladdning"
+      },
+      "ev_slot_6_battery_discharge": {
+        "name": "Elbilsladdartidslucka 6 batteriurladdning"
+      },
+      "ev_slot_7_grid_charging": {
+        "name": "Elbilsladdartidslucka 7 nätladdning"
+      },
+      "ev_slot_7_battery_discharge": {
+        "name": "Elbilsladdartidslucka 7 batteriurladdning"
+      },
+      "ev_minimum_current_charging": {
+        "name": "Elbilsladdarens laddning med minimiström"
+      },
+      "ev_ems_charging": {
+        "name": "Elbilsladdarens EMS-laddning"
+      },
+      "battery_power_control": {
+        "name": "Batterieffektstyrning"
+      },
+      "grid_power_control": {
+        "name": "Näteffektstyrning"
+      },
+      "inverter_power_control": {
+        "name": "Växelriktareffektstyrning"
+      },
+      "buzzer": {
+        "name": "Summer"
+      }
+    },
+    "time": {
+      "charge_slot_1_start": {
+        "name": "Laddningstidslucka 1 starttid"
+      },
+      "charge_slot_1_end": {
+        "name": "Laddningstidslucka 1 sluttid"
+      },
+      "charge_slot_2_start": {
+        "name": "Laddningstidslucka 2 starttid"
+      },
+      "charge_slot_2_end": {
+        "name": "Laddningstidslucka 2 sluttid"
+      },
+      "charge_slot_3_start": {
+        "name": "Laddningstidslucka 3 starttid"
+      },
+      "charge_slot_3_end": {
+        "name": "Laddningstidslucka 3 sluttid"
+      },
+      "charge_slot_4_start": {
+        "name": "Laddningstidslucka 4 starttid"
+      },
+      "charge_slot_4_end": {
+        "name": "Laddningstidslucka 4 sluttid"
+      },
+      "charge_slot_5_start": {
+        "name": "Laddningstidslucka 5 starttid"
+      },
+      "charge_slot_5_end": {
+        "name": "Laddningstidslucka 5 sluttid"
+      },
+      "charge_slot_6_start": {
+        "name": "Laddningstidslucka 6 starttid"
+      },
+      "charge_slot_6_end": {
+        "name": "Laddningstidslucka 6 sluttid"
+      },
+      "charge_slot_7_start": {
+        "name": "Laddningstidslucka 7 starttid"
+      },
+      "charge_slot_7_end": {
+        "name": "Laddningstidslucka 7 sluttid"
+      },
+      "discharge_slot_1_start": {
+        "name": "Urladdningstidslucka 1 starttid"
+      },
+      "discharge_slot_1_end": {
+        "name": "Urladdningstidslucka 1 sluttid"
+      },
+      "discharge_slot_2_start": {
+        "name": "Urladdningstidslucka 2 starttid"
+      },
+      "discharge_slot_2_end": {
+        "name": "Urladdningstidslucka 2 sluttid"
+      },
+      "discharge_slot_3_start": {
+        "name": "Urladdningstidslucka 3 starttid"
+      },
+      "discharge_slot_3_end": {
+        "name": "Urladdningstidslucka 3 sluttid"
+      },
+      "discharge_slot_4_start": {
+        "name": "Urladdningstidslucka 4 starttid"
+      },
+      "discharge_slot_4_end": {
+        "name": "Urladdningstidslucka 4 sluttid"
+      },
+      "discharge_slot_5_start": {
+        "name": "Urladdningstidslucka 5 starttid"
+      },
+      "discharge_slot_5_end": {
+        "name": "Urladdningstidslucka 5 sluttid"
+      },
+      "discharge_slot_6_start": {
+        "name": "Urladdningstidslucka 6 starttid"
+      },
+      "discharge_slot_6_end": {
+        "name": "Urladdningstidslucka 6 sluttid"
+      },
+      "discharge_slot_7_start": {
+        "name": "Urladdningstidslucka 7 starttid"
+      },
+      "discharge_slot_7_end": {
+        "name": "Urladdningstidslucka 7 sluttid"
+      },
+      "ev_slot_1_start": {
+        "name": "Elbilsladdartidslucka 1 starttid"
+      },
+      "ev_slot_1_end": {
+        "name": "Elbilsladdartidslucka 1 sluttid"
+      },
+      "ev_slot_2_start": {
+        "name": "Elbilsladdartidslucka 2 starttid"
+      },
+      "ev_slot_2_end": {
+        "name": "Elbilsladdartidslucka 2 sluttid"
+      },
+      "ev_slot_3_start": {
+        "name": "Elbilsladdartidslucka 3 starttid"
+      },
+      "ev_slot_3_end": {
+        "name": "Elbilsladdartidslucka 3 sluttid"
+      },
+      "ev_slot_4_start": {
+        "name": "Elbilsladdartidslucka 4 starttid"
+      },
+      "ev_slot_4_end": {
+        "name": "Elbilsladdartidslucka 4 sluttid"
+      },
+      "ev_slot_5_start": {
+        "name": "Elbilsladdartidslucka 5 starttid"
+      },
+      "ev_slot_5_end": {
+        "name": "Elbilsladdartidslucka 5 sluttid"
+      },
+      "ev_slot_6_start": {
+        "name": "Elbilsladdartidslucka 6 starttid"
+      },
+      "ev_slot_6_end": {
+        "name": "Elbilsladdartidslucka 6 sluttid"
+      },
+      "ev_slot_7_start": {
+        "name": "Elbilsladdartidslucka 7 starttid"
+      },
+      "ev_slot_7_end": {
+        "name": "Elbilsladdartidslucka 7 sluttid"
+      }
+    },
+    "button": {
+      "clear_current_fault": {
+        "name": "Rensa aktuellt fel"
+      },
+      "restart_inverter": {
+        "name": "Starta om växelriktaren"
+      },
+      "synchronise_clock": {
+        "name": "Synkronisera klockan"
+      },
+      "ems_pv_power_limit_remove": {
+        "name": "Ta bort EMS-soleffektgräns"
+      }
+    }
+  },
+  "issues": {
+    "equipment_not_detected": {
+      "title": "{equipment} identifieras inte längre",
+      "description": "{installation} konfigurerades med {equipment}, men växelriktaren rapporterar nu att utrustningen inte finns. Entiteterna för {equipment} finns kvar och visar det som växelriktaren svarar. Kontrollera {equipment}, eller ställ in den som Inte installerad i Konfigurera för att ta bort dess entiteter."
+    },
+    "model_mismatch": {
+      "title": "{installation} är inställd på fel modell",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Anta den identifierade växelriktaren",
+            "description": "{installation} är inställd på {selected_model}, men enheten på dess adress identifierar sig som {model} med serienummer {serial}, så den lästes inte in. Anta {model}? Dina entiteter, deras ID:n och deras historiska data stannar kvar hos den här anläggningen, och enhetsuppgifterna ändras. Tillåt styrning och alla andra inställningar förblir som de är. Om du i stället vill behålla {selected_model}, kontrollera adressen i Konfigurera."
+          }
+        },
+        "error": {
+          "cannot_connect": "Växelriktaren kunde inte nås. Kontrollera att den är på och att inget annat håller anslutningen, och försök sedan igen.",
+          "timeout": "Växelriktaren svarade inte i tid. Försök igen.",
+          "read_rejected": "Växelriktaren nekade en nödvändig avläsning. Försök igen.",
+          "invalid_device_data": "Växelriktaren svarade med data som inte kunde läsas. Försök igen.",
+          "unsupported_device": "Enheten på adressen är ingen modell som känns igen, så det finns inget att anta. Välj dess modell i Konfigurera.",
+          "already_configured": "En annan anläggning använder redan den här växelriktaren, så den kan inte antas här.",
+          "device_changed": "Enheten rapporterar nu {model} med serienummer {serial}, vilket inte är vad du fick se tidigare. Bekräfta igen för att anta det som visas nu."
+        },
+        "abort": {
+          "entry_removed": "Den här anläggningen finns inte längre.",
+          "already_configured": "En annan anläggning använder redan den här växelriktaren, så den kan inte antas här.",
+          "prefix_unavailable": "Den här anläggningens prefix för entitets-ID är inte längre tillgängligt."
+        }
+      }
+    },
+    "identity_mismatch": {
+      "title": "{installation} når nu en annan växelriktare",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Anta den identifierade växelriktaren",
+            "description": "{installation} konfigurerades med växelriktaren med serienummer {approved_serial}, men enheten på dess adress har serienummer {serial} och identifierar sig som {model}. Anta den nya växelriktaren? Dina entiteter, deras ID:n och deras historiska data stannar kvar hos den här anläggningen, och enhetsuppgifterna ändras. Tillåt styrning och alla andra inställningar förblir som de är. Om du i stället vill behålla den ursprungliga växelriktaren, kontrollera adressen i Konfigurera."
+          }
+        },
+        "error": {
+          "cannot_connect": "Växelriktaren på den här adressen kunde inte nås, så dess serienummer kunde inte kontrolleras. Se till att den har ström och inte hålls av en annan Modbus-klient, och bekräfta sedan igen.",
+          "timeout": "Växelriktaren tog för lång tid på sig att ge sitt serienummer. Bekräfta igen om en stund.",
+          "read_rejected": "Växelriktaren nekade en avläsning som behövs för att kontrollera dess serienummer. Bekräfta igen om en stund.",
+          "invalid_device_data": "Växelriktaren gav ett serienummer som inte kunde läsas. Bekräfta igen om en stund.",
+          "unsupported_device": "Enheten som nu finns på den här adressen är ingen modell som känns igen, så dess serienummer kan inte antas. Välj dess modell i Konfigurera.",
+          "already_configured": "Växelriktaren som nu finns på den här adressen tillhör redan en annan anläggning, så den kan inte antas här.",
+          "device_changed": "Växelriktaren på den här adressen har nu serienummer {serial} och rapporterar {model}, vilket skiljer sig från det du fick se. Bekräfta igen för att anta exakt det som listas nu."
+        },
+        "abort": {
+          "entry_removed": "Den här anläggningen har tagits bort, så det finns ingenting att anta växelriktaren i.",
+          "already_configured": "Växelriktaren som nu finns på den här adressen tillhör redan en annan anläggning, så den kan inte antas här.",
+          "prefix_unavailable": "Den här anläggningens prefix för entitets-ID kan inte längre användas, så växelriktaren antogs inte."
+        }
+      }
+    },
+    "unsupported_device": {
+      "title": "{installation} når en enhet som inte känns igen",
+      "description": "Enheten på adressen för {installation} rapporterar typen {device_type}, som inte är en modell som känns igen. Den lästes inte in. En modell kan väljas i Konfigurera, där den används overifierad."
+    },
+    "registers_refused": {
+      "title": "{installation} har avläsningar som växelriktaren nekar",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Inaktivera de nekade entiteterna",
+            "description": "Växelriktaren fortsätter att neka de här avläsningarna för {installation}, så de läses inte längre: {entities}. De prövas igen en gång om dagen och varje gång integrationen läses in, och det här reparationsärendet försvinner av sig självt när de svarar igen. Inaktivera dem så att de slutar läsas för gott? Du kan aktivera dem igen från entitetsinställningarna."
+          }
+        }
+      }
+    },
+    "endpoint_unreachable": {
+      "title": "{installation} har slutat svara",
+      "description": "{installation} har inte svarat på {host}:{port} på 15 minuter. Kontrollera att växelriktaren och dess kommunikationsmodul har ström, att nätverket mellan Home Assistant och växelriktaren fungerar och att ingen annan Modbus-klient håller anslutningen. Det här reparationsärendet försvinner vid den första lyckade avläsningen."
+    }
+  },
+  "exceptions": {
+    "unsupported_device": {
+      "message": "Den anslutna enheten rapporterar typen {device_type}, som inte känns igen. Välj dess modell i Konfigurera."
+    },
+    "invalid_device_data": {
+      "message": "Växelriktaren returnerade ogiltiga identitets- eller telemetridata."
+    },
+    "cannot_connect": {
+      "message": "Kommunikationen med växelriktaren misslyckades. Kontrollera slutpunkten, enhets-ID och anslutningen."
+    },
+    "timeout": {
+      "message": "Växelriktaren svarade inte innan förfrågan fick tidsgränsen överskriden. Kontrollera dess ström, nätverk och enhets-ID."
+    },
+    "read_rejected": {
+      "message": "Växelriktaren nekade en nödvändig registeravläsning. Kontrollera vald enhetstyp och registeråtkomst."
+    },
+    "identity_mismatch": {
+      "message": "Slutpunkten identifierar nu en annan växelriktare. Kontrollera den konfigurerade slutpunkten."
+    },
+    "model_mismatch": {
+      "message": "Den anslutna enheten identifierar sig som {detected_model}, inte {selected_model}. Välj {detected_model} eller Automatisk i Konfigurera."
+    },
+    "unknown_model": {
+      "message": "Den sparade modellen {selection} är ingen känd modell. Välj Automatisk eller en listad modell i Konfigurera."
+    },
+    "backing_off": {
+      "message": "Växelriktarens slutpunkt väntar efter upprepade fel, så ingen anslutning försöktes. Home Assistant försöker igen automatiskt."
+    },
+    "control_not_enabled": {
+      "message": "Styrning är inte aktiverad för den här anläggningen, så växelriktaren ändrades inte. För att tillåta ändringar, öppna Inställningar, Enheter och tjänster, SAJ Local, Konfigurera och slå på Tillåt styrning."
+    },
+    "model_unverified": {
+      "message": "Den här växelriktarens modell kunde inte verifieras, så dess inställningar kan inte ändras. Växelriktaren ändrades inte."
+    },
+    "protected_setting": {
+      "message": "{setting} är en driftsättningsinställning och kan inte ändras från Home Assistant. Växelriktaren ändrades inte."
+    },
+    "unknown_setting": {
+      "message": "{setting} kan inte skrivas på den här växelriktaren. Växelriktaren ändrades inte."
+    },
+    "separate_registers": {
+      "message": "De här ändringarna lagras inte tillsammans i ett register och kan inte göras i ett steg. Växelriktaren ändrades inte."
+    },
+    "invalid_value_not_a_number": {
+      "message": "Värdet är inte ett tal. Växelriktaren ändrades inte."
+    },
+    "invalid_value_out_of_range": {
+      "message": "Värdet ligger utanför intervallet som den här inställningen tillåter. Växelriktaren ändrades inte."
+    },
+    "invalid_value_not_an_option": {
+      "message": "Värdet är inte ett av alternativen som den här inställningen erbjuder. Växelriktaren ändrades inte."
+    },
+    "invalid_value_not_a_time": {
+      "message": "Värdet är inte en giltig tid på dygnet. Växelriktaren ändrades inte."
+    },
+    "invalid_value_not_a_clock": {
+      "message": "Värdet är inte ett giltigt datum och en giltig tid. Växelriktaren ändrades inte."
+    },
+    "invalid_value_does_not_fit": {
+      "message": "Värdet ryms inte i registret som det lagras i. Växelriktaren ändrades inte."
+    },
+    "invalid_value_unsupported_encoding": {
+      "message": "Den här inställningen kan inte skrivas från Home Assistant. Växelriktaren ändrades inte."
+    },
+    "link_unavailable": {
+      "message": "Växelriktaren kan inte nås just nu, så ingenting skickades och växelriktaren ändrades inte. Home Assistant återansluter av sig själv."
+    },
+    "write_allowance": {
+      "message": "För många ändringar: högst {limit} skrivningar tillåts på {window} sekunder, för att skydda växelriktaren. Ingenting skickades och växelriktaren ändrades inte. Försök igen om en stund."
+    },
+    "ems_timeout_too_short": {
+      "message": "Växelriktarens EMS-tidsgräns på {timeout} sekunder är inte längre än EMS-hjärtslaget på {interval} sekunder, så EMS skulle falla bort mellan slagen. Växelriktaren ändrades inte. Höj tidsgränsen över hjärtslaget, eller ändra hjärtslaget i Konfigurera."
+    },
+    "write_rejected": {
+      "message": "Växelriktaren avvisade ändringen med undantagskoden {exception_code}. Växelriktaren ändrades inte."
+    },
+    "write_unconfirmed": {
+      "message": "Växelriktaren bekräftade inte ändringen. Den kan ha tillämpats eller inte, så växelriktaren är i ett okänt tillstånd. Ändringen skickades inte igen. Home Assistant återansluter och läser av växelriktaren igen."
+    },
+    "write_mismatch": {
+      "message": "Växelriktaren accepterade ändringen men håller nu ett annat värde, som visas. Växelriktaren ändrades, men inte till det värde du bad om."
+    },
+    "no_power_target": {
+      "message": "Ingen effekt har angetts för funktionen {function}. Ange först dess effektmål. Växelriktaren ändrades inte."
+    },
+    "another_function_running": {
+      "message": "Funktionen {running} körs, och bara en effektstyrningsfunktion kan köras åt gången. Stäng först av den. Växelriktaren ändrades inte."
+    },
+    "unusable_power": {
+      "message": "Effekten måste vara ett helt antal watt från {minimum} till {maximum}. Växelriktaren ändrades inte."
+    }
+  },
+  "selector": {
+    "model": {
+      "options": {
+        "automatic": "Automatisk",
+        "hs3": "HS3",
+        "h2": "H2"
+      }
+    },
+    "block": {
+      "options": {
+        "network": "Nätverk",
+        "ev_data": "Elbilsladdardata",
+        "settings": "Inställningar",
+        "realtime": "Realtid",
+        "energy": "Energi",
+        "parallel": "Parallellmaskiner",
+        "ev_settings": "Elbilsladdarinställningar",
+        "averages": "Femminutersmedelvärden",
+        "ems": "EMS",
+        "identity": "Versioner",
+        "battery": "Batteri",
+        "meters": "Mätare",
+        "battery_identity": "Batteriidentitet"
+      }
+    },
+    "entity_state": {
+      "options": {
+        "disabled": "{entity} (inaktiverad)"
+      }
+    },
+    "equipment": {
+      "options": {
+        "battery": "Batteri",
+        "meter_a": "Mätare A",
+        "meter_b": "Mätare B",
+        "ev_charger": "Elbilsladdare",
+        "parallel": "Parallellsystem",
+        "none": "ingen valfri utrustning"
+      }
+    },
+    "equipment_setting": {
+      "options": {
+        "automatic": "Automatisk",
+        "fitted": "Installerad",
+        "not_fitted": "Inte installerad"
+      }
+    },
+    "power_function": {
+      "options": {
+        "battery": "Batteri",
+        "grid": "Nät",
+        "inverter": "Växelriktare"
+      }
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "generated_notice": "Généré par `make docs`. Ne pas modifier à la main.",
+  "areas": {
+    "inverter-and-pv": {
+      "title": "Onduleur et solaire",
+      "summary": "Sortie de l'onduleur, chaînes solaires, port de secours, compteurs d'énergie, versions et charge domestique"
+    },
+    "grid-and-meter-a": {
+      "title": "Réseau et compteur A",
+      "summary": "Le raccordement au réseau et le compteur A, le compteur du réseau"
+    },
+    "meter-b": {
+      "title": "Compteur B",
+      "summary": "Le compteur B, le second compteur qui mesure un onduleur solaire"
+    },
+    "battery": {
+      "title": "Batterie",
+      "summary": "La batterie dans son ensemble"
+    },
+    "battery-packs": {
+      "title": "Modules de batterie",
+      "summary": "Mesures et identité de chaque module de batterie"
+    },
+    "ev-charger": {
+      "title": "Chargeur de VE",
+      "summary": "Le chargeur de VE et ses commandes de charge"
+    },
+    "parallel-system": {
+      "title": "Système en parallèle",
+      "summary": "Les mesures d'un système de machines en parallèle"
+    },
+    "settings": {
+      "title": "Réglages",
+      "summary": "Réglages et commandes qui modifient l'onduleur"
+    },
+    "faults": {
+      "title": "Défauts",
+      "summary": "Défauts que l'onduleur, la batterie et le chargeur de VE signalent"
+    },
+    "added-by-the-integration": {
+      "title": "Ajoutées par l'intégration",
+      "summary": "Entités que l'intégration ajoute en dehors du catalogue de registres"
+    }
+  },
+  "kinds": {
+    "binary_sensor": "Capteur binaire",
+    "button": "Bouton",
+    "number": "Nombre",
+    "select": "Sélection",
+    "sensor": "Capteur",
+    "switch": "Interrupteur",
+    "time": "Heure"
+  },
+  "summary_line": "{summary}.",
+  "area_intro": "La liste des fonctionnalités de l'intégration explique les entités de {title} dans {links}.",
+  "link_join": " et ",
+  "sections": {
+    "Devices and entities": "Appareils et entités",
+    "Optional equipment": "Équipement optionnel",
+    "Changing settings": "Modification des réglages",
+    "Device faults and repairs": "Défauts de l'équipement et réparations",
+    "Power control": "Pilotage de puissance"
+  },
+  "count_line": "{count} entités. {notice}",
+  "prefix_note": "Un préfixe défini dans Configurer se place après `{entity_prefix}_` dans l'ID de chaque entité de {title}, par exemple `{example}` avec le préfixe `{prefix}`.",
+  "area_header": [
+    "Nom",
+    "ID d'entité",
+    "Type",
+    "Unité",
+    "Modèles",
+    "Équipement et nombres",
+    "Activée par défaut"
+  ],
+  "phase_note": "Phase {n} et suivantes",
+  "string_note": "Chaîne solaire {n} et suivantes",
+  "pack_note": "Module de batterie {n} et suivants",
+  "yes": "Oui",
+  "no": "Non",
+  "only": "{models} uniquement",
+  "index_title": "Entités",
+  "index_intro": "Toutes les entités que SAJ Local peut créer, une page par zone. La section [{section}]({link}) de la liste des fonctionnalités de l'intégration explique les types d'entités, les entités activées par défaut et le signe des mesures de puissance.",
+  "index_fit": "Un système n'obtient que les entités qui correspondent à son modèle, à son équipement installé et à son nombre de phases, de chaînes solaires et de modules de batterie. La colonne Modèles indique quels modèles ont une entité, et la colonne Équipement et nombres indique ce qui doit être installé.",
+  "index_header": [
+    "Zone",
+    "Entités",
+    "Contenu"
+  ]
+}

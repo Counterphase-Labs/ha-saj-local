@@ -1,0 +1,89 @@
+{
+  "generated_notice": "Wygenerowano poleceniem `make docs`. Nie edytuj ręcznie.",
+  "areas": {
+    "inverter-and-pv": {
+      "title": "Falownik i PV",
+      "summary": "Wyjście falownika, ciągi paneli, port awaryjny, liczniki energii, wersje i obciążenie gospodarstwa domowego"
+    },
+    "grid-and-meter-a": {
+      "title": "Sieć i Licznik A",
+      "summary": "Przyłącze sieciowe i Licznik A, licznik sieci"
+    },
+    "meter-b": {
+      "title": "Licznik B",
+      "summary": "Licznik B, drugi licznik, który mierzy falownik fotowoltaiczny"
+    },
+    "battery": {
+      "title": "Bateria",
+      "summary": "Bateria jako całość"
+    },
+    "battery-packs": {
+      "title": "Moduły baterii",
+      "summary": "Odczyty i tożsamość każdego modułu baterii"
+    },
+    "ev-charger": {
+      "title": "Ładowarka EV",
+      "summary": "Ładowarka EV i jej elementy sterowania ładowaniem"
+    },
+    "parallel-system": {
+      "title": "System równoległy",
+      "summary": "Odczyty równoległego systemu maszyn"
+    },
+    "settings": {
+      "title": "Ustawienia",
+      "summary": "Ustawienia i polecenia, które zmieniają falownik"
+    },
+    "faults": {
+      "title": "Usterki",
+      "summary": "Usterki zgłaszane przez falownik, baterię i ładowarkę EV"
+    },
+    "added-by-the-integration": {
+      "title": "Dodane przez integrację",
+      "summary": "Encje, które integracja dodaje poza katalogiem rejestrów"
+    }
+  },
+  "kinds": {
+    "binary_sensor": "Sensor binarny",
+    "button": "Przycisk",
+    "number": "Liczba",
+    "select": "Selektor",
+    "sensor": "Sensor",
+    "switch": "Przełącznik",
+    "time": "Czas"
+  },
+  "summary_line": "{summary}.",
+  "area_intro": "Lista funkcji integracji wyjaśnia encje obszaru {title} w {links}.",
+  "link_join": " i ",
+  "sections": {
+    "Devices and entities": "Urządzenia i encje",
+    "Optional equipment": "Wyposażenie opcjonalne",
+    "Changing settings": "Zmiana ustawień",
+    "Device faults and repairs": "Usterki urządzeń i naprawy",
+    "Power control": "Sterowanie mocą"
+  },
+  "count_line": "Liczba encji: {count}. {notice}",
+  "prefix_note": "Prefiks ustawiony w Skonfiguruj trafia po `{entity_prefix}_` w ID każdej encji: {title}, na przykład `{example}` z prefiksem `{prefix}`.",
+  "area_header": [
+    "Nazwa",
+    "ID encji",
+    "Typ",
+    "Jednostka",
+    "Modele",
+    "Wyposażenie i liczba",
+    "Włączona domyślnie"
+  ],
+  "phase_note": "Faza {n} i wyższe",
+  "string_note": "Ciąg paneli PV {n} i wyższe",
+  "pack_note": "Moduł baterii {n} i wyższe",
+  "yes": "Tak",
+  "no": "Nie",
+  "only": "Tylko {models}",
+  "index_title": "Encje",
+  "index_intro": "Każda encja, którą SAJ Local może utworzyć, po jednej stronie dla każdego obszaru. Sekcja [{section}]({link}) listy funkcji integracji wyjaśnia typy encji, które encje są włączone domyślnie i znak odczytów mocy.",
+  "index_fit": "System dostaje tylko encje pasujące do jego modelu, zainstalowanego wyposażenia oraz liczby faz, ciągów paneli i modułów baterii. Kolumna Modele mówi, które modele mają daną encję, a kolumna Wyposażenie i liczba mówi, co musi być zainstalowane.",
+  "index_header": [
+    "Obszar",
+    "Encje",
+    "Co zawiera"
+  ]
+}

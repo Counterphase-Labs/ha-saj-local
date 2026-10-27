@@ -15,9 +15,6 @@ const imageDirectory = resolve(
     "../../../../docs/images",
     locale.toLowerCase(),
 );
-// The Home Assistant user language is chosen on the profile page, so the
-// browser itself starts from a language that is not the one being documented.
-const languageLabels: Record<string, string> = { "en-GB": "English (GB)" };
 // A step that validates the endpoint reads the inverter first.
 const FLOW_STEP_TIMEOUT_MS = 60_000;
 const READING_TIMEOUT_MS = 120_000;
@@ -57,7 +54,11 @@ interface HassConnection {
     ): Promise<unknown>;
     callWS(message: Record<string, unknown>): Promise<unknown>;
     language: string;
-    states: Record<string, { state: string } | undefined>;
+    localize(key: string): string;
+    states: Record<
+        string,
+        { state: string; attributes: Record<string, unknown> } | undefined
+    >;
 }
 
 interface RegistryEntity {
@@ -140,6 +141,64 @@ const hassLanguage = (page: Page): Promise<string> =>
             ).hass.language,
     );
 
+// The text of a Home Assistant control that has only its text, read from the
+// running Home Assistant in the user's language. A renamed key is fixed here.
+const localized = async (page: Page, key: string): Promise<string> => {
+    const read = (): Promise<string> =>
+        page.evaluate(
+            (textKey) =>
+                (
+                    document.querySelector("home-assistant") as unknown as {
+                        hass: HassConnection;
+                    }
+                ).hass.localize(textKey),
+            key,
+        );
+    // A page loads the texts of its panel after it has started.
+    await expect
+        .poll(read, { message: `Home Assistant has no text for ${key}` })
+        .toBeTruthy();
+    return read();
+};
+
+// SAJ Local's own text, read from the integration's translations that Home
+// Assistant serves. The third part of the key is the translation category.
+const integrationText = async (page: Page, key: string): Promise<string> => {
+    const { resources } = (await hassWebSocket(page, {
+        type: "frontend/get_translations",
+        language: await hassLanguage(page),
+        category: key.split(".")[2],
+        integration: ["saj_local"],
+    })) as { resources: Record<string, string | undefined> };
+    const text = resources[key];
+    expect(text, `SAJ Local has no text for ${key}`).toBeTruthy();
+    return text ?? "";
+};
+
+// Home Assistant names an entity in its server language when the entity is
+// created, so a name in another language means the server language was set
+// too late or not at all.
+const expectEntityNamesInLanguage = async (page: Page): Promise<void> => {
+    const expected = await integrationText(
+        page,
+        "component.saj_local.entity.sensor.battery_power.name",
+    );
+    const id = entityId("sensor", "battery_power");
+    const name = await page.evaluate(
+        (stateId) =>
+            (
+                document.querySelector("home-assistant") as unknown as {
+                    hass: HassConnection;
+                }
+            ).hass.states[stateId]?.attributes.friendly_name,
+        id,
+    );
+    expect(
+        typeof name === "string" && name.endsWith(expected),
+        `${id} is named "${String(name)}", not in ${locale} ("${expected}"): the server language was not applied before SAJ Local was set up`,
+    ).toBe(true);
+};
+
 const VIEWPORT = { width: 1280, height: 800 } as const;
 // A tall dialog or card is taller than the viewport, and Home Assistant's fixed
 // header would cover its top, so such an element is taken in a taller window.
@@ -220,23 +279,38 @@ const completeOnboarding = async (
 
 const logIn = async (page: Page): Promise<void> => {
     await page.goto("/");
+    // The sign-in form is Home Assistant's own, found by input name and element.
     await page
-        .getByRole("textbox", { name: "Username" })
+        .locator('ha-auth-flow input[name="username"]')
         .fill(account.username);
-    await page
-        .getByRole("textbox", { name: "Password" })
-        .fill(account.password);
-    await page.getByRole("button", { name: /log in/i }).click();
-    await expect(page.getByText("Settings", { exact: true })).toBeVisible();
+    // Enter in the password field submits the form, whatever the button text.
+    const password = page.locator('ha-auth-flow input[name="password"]');
+    await password.fill(account.password);
+    await password.press("Enter");
+    await expect(page.locator("ha-sidebar")).toBeVisible();
 };
 
+// The language is stored the way the profile page stores it, in the user's
+// frontend data and in the browser, so the code is set without the picker.
 const selectUserLanguage = async (page: Page): Promise<void> => {
-    await page.goto("/profile/general");
-    await page.locator("ha-language-picker").click();
-    await page
-        .getByText(languageLabels[locale] ?? locale, { exact: true })
-        .click();
+    await hassWebSocket(page, {
+        type: "frontend/set_user_data",
+        key: "language",
+        value: {
+            language: locale,
+            number_format: "language",
+            time_format: "language",
+            date_format: "language",
+            time_zone: "local",
+            first_weekday: "language",
+        },
+    });
+    await page.evaluate((code) => {
+        window.localStorage.setItem("selectedLanguage", JSON.stringify(code));
+    }, locale);
+    await page.reload();
     await expect.poll(() => hassLanguage(page)).toBe(locale);
+    await expect(page.locator("ha-sidebar")).toBeVisible();
 };
 
 const flowDialog = (page: Page): Locator => page.getByRole("dialog").last();
@@ -245,37 +319,43 @@ const flowDialog = (page: Page): Locator => page.getByRole("dialog").last();
 const flowForm = (page: Page): Locator =>
     page.locator("dialog-data-entry-flow");
 
+// Home Assistant gives each field of a form the name of its schema key.
+const flowField = (page: Page, key: string): Locator =>
+    flowForm(page).locator(`input[name="${key}"]`);
+
+// The button of the flow dialog that goes on: Submit, Finish and the like.
+const flowPrimaryButton = (page: Page): Locator =>
+    flowForm(page).locator('ha-button[slot="primaryAction"]:not([href])');
+
 const closeFlowDialog = async (page: Page): Promise<void> => {
     // Closing the dialog aborts the flow, so nothing is saved.
-    await page
-        .locator("dialog-data-entry-flow")
-        .getByRole("button", { name: "Close" })
-        .click();
+    await flowForm(page).locator('[data-dialog="close"]').first().click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
 };
 
 const addHs3 = async (page: Page): Promise<void> => {
-    await page.goto("/config/integrations/dashboard");
-    await page.getByRole("button", { name: /add integration/i }).click();
-    await page.getByPlaceholder("Search for a brand name").fill("SAJ Local");
-    await page.getByRole("button", { name: "SAJ Local" }).click();
-    await page.getByRole("textbox", { name: "Host*" }).fill(HS3_HOST);
-    await page.getByRole("spinbutton", { name: "Port*" }).fill("502");
-    await page.getByRole("spinbutton", { name: "Unit ID*" }).fill("1");
+    // Home Assistant's own route that starts the flow of one integration.
+    await page.goto("/config/integrations/dashboard/add?domain=saj_local");
+    // Home Assistant first asks to confirm the setup; OK is the primary action.
+    await page.locator('[slot="primaryAction"]').click();
+    // The port and the unit ID keep their defaults, 502 and 1.
+    await flowField(page, "host").fill(HS3_HOST);
     await capture("getting-started-add-system", flowDialog(page), {
         tall: true,
     });
     // The model picker is the only list item of the form.
     await flowForm(page).getByRole("listitem").click();
-    const automatic = page.getByRole("menuitem", {
-        name: "Automatic",
-        exact: true,
-    });
+    // Automatic is the first model on offer.
+    const automatic = page.getByRole("menuitem").first();
     await expect(automatic).toBeVisible();
     await capture("getting-started-manual-model", page.locator("body"));
     await automatic.click();
-    await page.getByRole("button", { name: /submit/i }).click();
-    await page.getByRole("button", { name: "Finish" }).click();
+    await flowPrimaryButton(page).click();
+    await expect(flowField(page, "host")).toHaveCount(0, {
+        timeout: FLOW_STEP_TIMEOUT_MS,
+    });
+    // The last step of the flow ends it with its primary button.
+    await flowPrimaryButton(page).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
 };
 
@@ -415,13 +495,14 @@ const openConfigure = async (page: Page): Promise<void> => {
     await page
         .locator("ha-config-entry-row")
         .filter({ hasText: HS3_TITLE })
-        .getByRole("button", { name: "Configure" })
+        .getByRole("button", {
+            name: await localized(
+                page,
+                "ui.panel.config.integrations.config_entry.configure",
+            ),
+        })
         .click();
-    await expect(
-        page
-            .locator("dialog-data-entry-flow")
-            .getByText("Connection and polling"),
-    ).toBeVisible();
+    await expect(flowField(page, "host")).toBeVisible();
 };
 
 const toggleAllowControl = async (page: Page): Promise<void> => {
@@ -432,22 +513,25 @@ const toggleAllowControl = async (page: Page): Promise<void> => {
 };
 
 const submitFlow = async (page: Page): Promise<void> => {
-    await page
-        .locator("dialog-data-entry-flow")
-        .getByRole("button", { name: /^submit$/i })
-        .click();
+    await flowPrimaryButton(page).click();
 };
 
 const captureConfigureForms = async (page: Page): Promise<void> => {
     await openConfigure(page);
-    await flowForm(page).getByText("Equipment", { exact: true }).click();
+    // The equipment section is the only collapsible section of the form.
+    await flowForm(page).locator("ha-expansion-panel").first().click();
     await capture("optional-equipment-equipment-section", flowDialog(page), {
         tall: true,
     });
-    await flowForm(page).getByRole("textbox", { name: "Prefix" }).fill("house");
+    await flowField(page, "prefix").fill("house");
     await submitFlow(page);
     await expect(
-        flowForm(page).getByText("Confirm entity ID change"),
+        flowForm(page).getByText(
+            await integrationText(
+                page,
+                "component.saj_local.options.step.confirm_prefix.title",
+            ),
+        ),
     ).toBeVisible();
     await capture(
         "entities-and-prefix-prefix-change-warning",
@@ -459,10 +543,17 @@ const captureConfigureForms = async (page: Page): Promise<void> => {
 
 const capturePollingGroup = async (page: Page): Promise<void> => {
     await optionsEntryPage(page);
-    await page.getByRole("button", { name: "Add polling group" }).click();
+    await page
+        .getByRole("button", {
+            name: await integrationText(
+                page,
+                "component.saj_local.config_subentries.polling_group.initiate_flow.user",
+            ),
+        })
+        .click();
     // The picker is the last element on the page, after the hub row of the same title.
     await page.getByText(HS3_TITLE, { exact: true }).last().click();
-    await flowForm(page).getByRole("textbox", { name: "Name" }).fill("Fast");
+    await flowField(page, "name").fill("Fast");
     await capture("polling-polling-group", flowDialog(page), { tall: true });
     await closeFlowDialog(page);
 };
@@ -472,14 +563,18 @@ const allowControlThroughForm = async (page: Page): Promise<void> => {
     await toggleAllowControl(page);
     await submitFlow(page);
     await expect(
-        flowForm(page).getByText("Confirm that control is allowed"),
+        flowForm(page).getByText(
+            await integrationText(
+                page,
+                "component.saj_local.options.step.confirm_control.title",
+            ),
+        ),
     ).toBeVisible({ timeout: FLOW_STEP_TIMEOUT_MS });
     await capture("changing-settings-allow-control-warning", flowDialog(page), {
         tall: true,
     });
     await submitFlow(page);
-    await flowForm(page).getByRole("button", { name: "Close" }).last().click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await closeFlowDialog(page);
 };
 
 const changeOptionsThroughApi = async (
@@ -576,14 +671,19 @@ const capturePowerSchedule = async (page: Page): Promise<void> => {
     });
     await optionsEntryPage(page);
     await page
-        .getByRole("button", { name: "Add power control schedule" })
+        .getByRole("button", {
+            name: await integrationText(
+                page,
+                "component.saj_local.config_subentries.power_schedule.initiate_flow.user",
+            ),
+        })
         .click();
     // The picker is the last element on the page, after the hub row of the same title.
     await page.getByText(HS3_TITLE, { exact: true }).last().click();
     const dialog = flowDialog(page);
     const form = flowForm(page);
     // Battery is the first function, so it is already chosen.
-    await form.getByText("Select an entity").click();
+    await form.locator("ha-entity-picker").click();
     await page.getByText("Night charging", { exact: true }).last().click();
     // The entity picker is a second dialog until it has closed.
     await expect(page.getByRole("dialog")).toHaveCount(1);
@@ -601,7 +701,12 @@ const captureDiagnostics = async (page: Page): Promise<void> => {
         .first()
         .locator("ha-icon-button")
         .click();
-    const item = page.getByRole("menuitem", { name: "Download diagnostics" });
+    const item = page.getByRole("menuitem", {
+        name: await localized(
+            page,
+            "ui.panel.config.integrations.config_entry.download_diagnostics",
+        ),
+    });
     await expect(item.first()).toBeVisible();
     await capture("troubleshooting-diagnostics-download", page.locator("body"));
     await page.keyboard.press("Escape");
@@ -691,23 +796,24 @@ const captureRepair = async (
     await page.goto("/config/repairs");
     await capture(
         "faults-and-repairs-repair-issue",
-        page
-            .getByRole("listitem")
-            .filter({ hasText: "readings the inverter refuses" }),
+        // The title of the issue names the installation.
+        page.getByRole("listitem").filter({ hasText: HS3_TITLE }),
     );
 };
 
 const SIMULATOR_PREFIX = "developer-simulator-page";
 const H2_PANEL = "http://mock-h2:8080";
 const SIMULATOR_FAULT = "Fan 1 fault";
+// The simulator page names each view by the key of its tab link.
 const SIMULATOR_VIEWS = [
-    "Faults",
-    "Settings",
-    "Registers",
-    "Traffic",
-    "Link",
-    "Scenario",
+    "faults",
+    "settings",
+    "registers",
+    "traffic",
+    "link",
+    "scenario",
 ] as const;
+const FAULT_SEARCH = "section.view:visible input[type=search]";
 
 const capturePageView = async (
     page: Page,
@@ -724,13 +830,11 @@ const capturePageView = async (
 };
 
 const openSimulatorView = async (page: Page, view: string): Promise<void> => {
-    await page
-        .locator("nav.tabs")
-        .getByRole("link", { name: view, exact: true })
-        .click();
+    await page.locator(`nav.tabs a[href="#${view}"]`).click();
     await expect(
-        page.getByRole("heading", { level: 2, name: view, exact: true }),
+        page.locator(`nav.tabs a[href="#${view}"][aria-current="page"]`),
     ).toBeVisible();
+    await expect(page.locator("section.view:visible h2").first()).toBeVisible();
 };
 
 const waitForOverview = async (page: Page): Promise<void> => {
@@ -745,15 +849,15 @@ const captureSimulatorPages = async (page: Page): Promise<void> => {
 
     await page.goto(`${SIMULATOR_PANEL}/`);
     await waitForOverview(page);
-    await openSimulatorView(page, "Faults");
-    await page.getByRole("searchbox", { name: "Search faults" }).fill("Fan 1");
+    await openSimulatorView(page, "faults");
+    await page.locator(FAULT_SEARCH).fill("Fan 1");
     const fault = page.getByRole("switch", { name: SIMULATOR_FAULT });
     await fault.check({ force: true });
     await expect(fault).toBeChecked();
-    await page.getByRole("searchbox", { name: "Search faults" }).fill("");
+    await page.locator(FAULT_SEARCH).fill("");
     await expect(page.locator(".toast")).toHaveCount(0, { timeout: 15_000 });
 
-    await openSimulatorView(page, "Overview");
+    await openSimulatorView(page, "overview");
     await expect(page.locator("article.card.faulted")).toHaveCount(1);
     await expect(
         page.locator("article.card.faulted .mark.fault"),
@@ -772,36 +876,32 @@ const captureSimulatorPages = async (page: Page): Promise<void> => {
 
     for (const view of SIMULATOR_VIEWS) {
         await openSimulatorView(page, view);
-        if (view === "Faults") {
-            await page
-                .getByRole("searchbox", { name: "Search faults" })
-                .fill("Fan");
+        if (view === "faults") {
+            await page.locator(FAULT_SEARCH).fill("Fan");
             await expect(
                 page.getByRole("switch", { name: SIMULATOR_FAULT }),
             ).toBeChecked();
         }
-        if (view === "Registers") {
+        if (view === "registers") {
             await expect(
                 page.locator("section.view:visible .registers-row").nth(1),
             ).toBeVisible();
         }
-        if (view === "Traffic") {
+        if (view === "traffic") {
             await expect(
                 page
                     .locator("section.view:visible .row.log-row.error-row")
                     .first(),
             ).toBeVisible();
         }
-        await capturePageView(page, view.toLowerCase());
+        await capturePageView(page, view);
     }
 
-    await openSimulatorView(page, "Traffic");
-    const log = page.locator("section.view:visible .card").filter({
-        has: page.getByRole("heading", { name: "Log, newest first" }),
-    });
-    await log
-        .getByRole("switch", { name: "Errors only" })
-        .check({ force: true });
+    await openSimulatorView(page, "traffic");
+    // The log is the last card of the traffic view, and Errors only is the
+    // first switch of the log's toolbar.
+    const log = page.locator("section.view:visible .card").last();
+    await log.getByRole("switch").first().check({ force: true });
     await log.locator(".row.log-row.error-row").first().click();
     await expect(log.locator(".log-detail")).toBeVisible();
     await capture(`${SIMULATOR_PREFIX}-traffic-log-detail`, log);
@@ -827,11 +927,17 @@ test("takes every documentation screenshot", async ({
     await logIn(page);
     await selectUserLanguage(page);
 
-    // Without a country Home Assistant raises a repair of its own.
-    await hassWebSocket(page, { type: "config/core/update", country: "GB" });
+    // Without a country Home Assistant raises a repair of its own. The server
+    // language names the entities, so it is set before SAJ Local is set up.
+    await hassWebSocket(page, {
+        type: "config/core/update",
+        country: "GB",
+        language: locale,
+    });
     await addHs3(page);
     await addH2(page);
     await waitForSolarPower(page);
+    await expectEntityNamesInLanguage(page);
 
     const hs3Entry = await entryIdOf(page, "");
     const h2Entry = await entryIdOf(page, H2_PREFIX);
