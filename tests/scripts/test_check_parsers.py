@@ -318,6 +318,51 @@ def test_jscpd_clones_with_a_format_suffix_or_inside_one_file_are_located():
     assert parsed.findings[1] == Finding("ci.yml", 87, "duplicates ci.yml:108-118")
 
 
+def test_jscpd_joins_the_shared_folder_prefix_back_onto_both_files():
+    output = (
+        "Clones:\n"
+        ".github/ work/future/add-security-policy-and-issue-templates.md:yaml:141-174"
+        " ~ workflows/labels.yml:1-34\n---\n"
+    )
+
+    parsed = check_parsers.parse_jscpd(output, 1)
+
+    assert parsed.summary == "1 duplicated block"
+    assert parsed.details == (
+        (
+            ".github/work/future/add-security-policy-and-issue-templates.md:141-174"
+            " ↔ .github/workflows/labels.yml:1-34"
+        ),
+    )
+    assert parsed.findings == (
+        Finding(
+            ".github/work/future/add-security-policy-and-issue-templates.md",
+            141,
+            "duplicates .github/workflows/labels.yml:1-34",
+        ),
+    )
+
+
+def test_jscpd_same_file_clone_drops_the_format_tag():
+    parsed = check_parsers.parse_jscpd("Clones:\np.md:yaml 4-37 ~ 40-73\n---\n", 1)
+
+    assert parsed.details == ("p.md:4-37 ↔ p.md:40-73",)
+    assert parsed.findings == (Finding("p.md", 4, "duplicates p.md:40-73"),)
+
+
+def test_jscpd_failure_without_a_clone_hides_the_uv_warning():
+    output = (
+        "warning: `VIRTUAL_ENV=/x/.venv` does not match the project environment path "
+        "`.venv` and will be ignored\n"
+        "Error: boom\n"
+    )
+
+    parsed = check_parsers.parse_jscpd(output, 1)
+
+    assert parsed.summary == "failed"
+    assert parsed.details == ("Error: boom",)
+
+
 def test_jscpd_success():
     output = "Clones:\n---\n0 clones · 0.0% duplication\n"
 

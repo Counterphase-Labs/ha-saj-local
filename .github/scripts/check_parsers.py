@@ -26,6 +26,8 @@ class Parsed:
 
 type Parser = Callable[[str, int], Parsed]
 
+UV_WARNING_PREFIX = "warning: "
+
 _PYTEST_RESULT_LINE = re.compile(
     r"^(?:=+ )?(?P<counts>(?:\d+ \w+(?:, )?)+|no tests ran) in [\d.]+s"
     r"(?: \([\d:]+\))?(?: =+)?$"
@@ -53,11 +55,12 @@ _MYPY_LINE = re.compile(
 )
 _COMPLEXIPY_LINE = re.compile(r"^(?P<file>\S+) (?P<function>\S+) (?P<score>\d+)$")
 _JSCPD_CLONE = re.compile(
-    r"^(?P<first>\S+?)(?::[a-z]+)?:(?P<first_start>\d+)-(?P<first_end>\d+) ~ "
+    r"^(?:(?P<prefix>\S+/) )?"
+    r"(?P<first>\S+?)(?::[a-z]+)?:(?P<first_start>\d+)-(?P<first_end>\d+) ~ "
     r"(?P<second>\S+?)(?::[a-z]+)?:(?P<second_start>\d+)-(?P<second_end>\d+)$"
 )
 _JSCPD_SAME_FILE_CLONE = re.compile(
-    r"^(?P<file>\S+) (?P<first_start>\d+)-(?P<first_end>\d+) ~ "
+    r"^(?P<file>\S+?)(?::[a-z]+)? (?P<first_start>\d+)-(?P<first_end>\d+) ~ "
     r"(?P<second_start>\d+)-(?P<second_end>\d+)$"
 )
 _TSC_LINE = re.compile(
@@ -355,9 +358,12 @@ def parse_complexipy(output: str, return_code: int) -> Parsed:
 def _jscpd_clone(line: str) -> tuple[str, int, str] | None:
     clone = _JSCPD_CLONE.match(line)
     if clone:
-        first = f"{clone['first']}:{clone['first_start']}-{clone['first_end']}"
-        second = f"{clone['second']}:{clone['second_start']}-{clone['second_end']}"
-        return clone["first"], int(clone["first_start"]), f"{first} \u2194 {second}"
+        prefix = clone["prefix"] or ""
+        first_file = f"{prefix}{clone['first']}"
+        first = f"{first_file}:{clone['first_start']}-{clone['first_end']}"
+        second_file = f"{prefix}{clone['second']}"
+        second = f"{second_file}:{clone['second_start']}-{clone['second_end']}"
+        return first_file, int(clone["first_start"]), f"{first} \u2194 {second}"
     same_file = _JSCPD_SAME_FILE_CLONE.match(line)
     if same_file:
         name = same_file["file"]
@@ -368,9 +374,12 @@ def _jscpd_clone(line: str) -> tuple[str, int, str] | None:
 
 
 def parse_jscpd(output: str, return_code: int) -> Parsed:
-    clones = [clone for line in _lines(output) if (clone := _jscpd_clone(line))]
+    lines = [line for line in _lines(output) if not line.startswith(UV_WARNING_PREFIX)]
+    clones = [clone for line in lines if (clone := _jscpd_clone(line))]
     if return_code == 0:
         return Parsed("no duplicates")
+    if not clones:
+        return Parsed("failed", tuple(lines))
     findings = tuple(
         Finding(file, start, f"duplicates {description.split(' \u2194 ')[1]}")
         for file, start, description in clones
@@ -532,9 +541,6 @@ def parse_docs_check(output: str, return_code: int) -> Parsed:
     if not findings:
         return Parsed("failed", tuple(lines))
     return Parsed(_plural(len(findings), "documentation finding"), tuple(findings))
-
-
-UV_WARNING_PREFIX = "warning: "
 
 
 def parse_freeze_check(output: str, return_code: int) -> Parsed:
