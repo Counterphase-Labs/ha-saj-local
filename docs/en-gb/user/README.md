@@ -6,7 +6,7 @@ SAJ Local is a local Home Assistant integration. SAJ Local reads a SAJ HS3 or H2
 
 SAJ Local is an unofficial, community-built integration. SAJ does not make, support or endorse SAJ Local. See the [disclaimer](#disclaimer).
 
-SAJ Local is in development and has no published release yet. Each page below states what is not supported yet. The documentation covers the HS3 and the H2, and marks the differences with a note such as "HS3 only". The screenshots come from simulated systems, so the readings are not real.
+SAJ Local has no stable release yet. Every release before `1.0.0` is a beta, see [beta versions](installation.md#beta-versions). Each page below states what is not supported yet. The documentation covers the HS3 and the H2, and marks the differences with a note such as "HS3 only". The screenshots come from simulated systems, so the readings are not real.
 
 ## Start here
 

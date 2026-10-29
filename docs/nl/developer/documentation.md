@@ -131,8 +131,8 @@ Elke sectie van een functielijst wordt onderzocht vanaf de regel `Files:` van de
 | Entiteitstypen, regels voor standaard ingeschakeld en tekenconventies | de sectie Apparaten en entiteiten van de functielijst van de integratie |
 | Ontwikkelomgeving | [omgeving](environment.md) |
 | Make-targets en controleregels | [controles](checks.md) |
-| Ophoging van de Home Assistant-versie | [releasen](releasing.md) |
-| Overzichtsschermafbeelding van de site | `docs/images/en-gb/cards-power-flow-card.png`, bij elke release gekopieerd naar `assets/images/saj-local-power-flow.png` in de repository `website`, zie de [releasepagina](releasing.md) |
+| Releasen en ophoging van de Home Assistant-versie | [releasen](releasing.md) |
+| Overzichtsschermafbeelding van de site | `docs/images/en-gb/cards-power-flow-card.png`, bij elke release door de maintainers naar de projectwebsite gekopieerd, zie de [releasepagina](releasing.md) |
 | Hoe u een beveiligingsprobleem meldt | `SECURITY.md` |
 | Issuelabels en de regels voor labels | `.github/labels.yml` en `CONTRIBUTING.md` |
 | Licentievoorwaarden | `LICENSE` |

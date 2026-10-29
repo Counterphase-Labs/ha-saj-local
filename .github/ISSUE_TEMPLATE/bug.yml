@@ -29,6 +29,13 @@ body:
         - Other
     validations:
       required: true
+  - type: input
+    id: version
+    attributes:
+      label: SAJ Local version
+      description: The version that HACS shows for SAJ Local, for example 1.0.0b1.
+    validations:
+      required: true
   - type: textarea
     id: description
     attributes:

@@ -131,8 +131,8 @@
 | 实体类型、默认启用规则和符号约定 | 集成功能列表的“设备与实体”一节 |
 | 开发环境设置 | [环境](environment.md) |
 | Make 目标和检查规则 | [检查](checks.md) |
-| Home Assistant 版本升级 | [发布](releasing.md) |
-| 站点概览截图 | `docs/images/en-gb/cards-power-flow-card.png`，每次发布时复制到 `website` 仓库中的 `assets/images/saj-local-power-flow.png`，参见[发布页面](releasing.md) |
+| 发布流程与 Home Assistant 版本升级 | [发布](releasing.md) |
+| 站点概览截图 | `docs/images/en-gb/cards-power-flow-card.png`，每次发布时由维护者复制到项目网站，参见[发布页面](releasing.md) |
 | 如何报告安全问题 | `SECURITY.md` |
 | 问题标签和标签规则 | `.github/labels.yml` 和 `CONTRIBUTING.md` |
 | 许可条款 | `LICENSE` |

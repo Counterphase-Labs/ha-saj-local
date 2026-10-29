@@ -17,7 +17,7 @@ Twoja instalacja słoneczna SAJ w Home Assistancie, odczytywana prosto z falowni
 
 To nieoficjalna integracja, tworzona przez społeczność. Nie jest wykonana, wspierana ani popierana przez SAJ. Zobacz [zastrzeżenie](user/README.md#zastrzeżenie).
 
-> **Stan: w aktywnym rozwoju i jeszcze niewydana.** Nie ma jeszcze opublikowanego wydania.
+> **Stan: wersja przedpremierowa.** SAJ Local nie ma jeszcze stabilnego wydania. Każde wydanie przed `1.0.0` jest wersją beta, a informacje o wydaniu wersji beta wymieniają każdą niezgodną zmianę. Zobacz [wersje beta](user/installation.md#wersje-beta).
 
 ## Dlaczego SAJ Local
 

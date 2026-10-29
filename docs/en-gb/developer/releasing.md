@@ -14,9 +14,11 @@ Do these on `main`, in order.
 
 1. **Run `make ci`.** The [checks page](checks.md) lists what `make ci` runs.
 2. **Run `make docs-images`.** The user documentation shows the interface, and CI does not regenerate the images, so each release needs a fresh set. The target needs Docker. Run the target, look at every changed image, commit the changed images in `docs/images/en-gb/` and run `make docs-check`. A run that fails writes no image, so do not release with a failed run. Read [Screenshots](documentation.md#screenshots) for what the run does and why every reading in an image is simulated.
-3. **Copy the site screenshot in the same step.** Copy `docs/images/en-gb/cards-power-flow-card.png` to `assets/images/saj-local-power-flow.png` in the `website` repository and commit the copy there, because the SAJ Local page on `counterphase.dev` shows a copy of the image. No check catches a stale copy, because CI in this repository cannot see the website repository.
+3. **Maintainers only: update the site screenshot.** The project website shows a copy of `docs/images/en-gb/cards-power-flow-card.png`. Update the copy in the same step. No check in this repository catches a stale copy.
 4. **Run `make release-check`.** The step makes an archive from `custom_components/saj_local/` and fails when the archive lacks `asset-manifest.json`, the built card bundle or `THIRD_PARTY_LICENSES.md`, the licences of the libraries in the bundle. Run `make build` and commit the bundle and the licence file first when the cards changed.
 5. **Set the new version.** Set the version in `custom_components/saj_local/manifest.json`, `pyproject.toml` and `frontend/package.json`. Run `uv lock` so `uv.lock` records the project version, and run `npm install --package-lock-only` in `frontend/` so `frontend/package-lock.json` records the version. Run `make release-check`, commit to `main` and wait for CI to pass.
+
+For `1.0.0`, also remove the pre-release status: the status line in `README.md` and in `docs/<code>/README.md`, and the first sentence about the stable release in `docs/<code>/user/README.md` and `docs/<code>/user/installation.md`, in every language. Write the Beta versions section of `installation.md` again for the betas after `1.0.0`.
 
 The screenshots are the only part of a release that CI cannot check. A change that adds or removes an image fails `make docs-check` through the unused-image and missing-image rules. A change to the interface that leaves an image outdated fails nothing, so step 2 is what keeps the images current.
 

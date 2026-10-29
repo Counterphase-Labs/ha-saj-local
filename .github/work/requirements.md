@@ -12,9 +12,14 @@ Platform stability and correctness is paramount.
 
 ## Compatibility
 
-- Backwards compatibility MUST drive architecture decisions. Sensor names must remain stable. Architecture decisions should limit the possibility of being boxed into creating breaking changes.
-
-- **CRITICAL**: While this line is in place, DO NOT create backwards compatibility layers. The integration is not released yet. Breaking changes to address the backwards compatible architecture are acceptable while this line is in place (before release). Build as if it is released.
+- Backwards compatibility MUST drive architecture decisions.
+- Sensor names MUST remain stable.
+- Architecture decisions SHOULD limit the risk of a future breaking change.
+- A breaking change is a change that breaks an existing installation, dashboard or automation.
+- Before the first beta, `1.0.0b1`, a change MUST NOT add a backwards compatibility layer, and a breaking change is acceptable.
+- From the first beta until `1.0.0`, a change MUST NOT be a breaking change, unless the maintainer approves the breaking change as an exception.
+- An approved exception MUST NOT add a backwards compatibility layer.
+- From `1.0.0`, a change MUST NOT be a breaking change.
 
 ## Security
 
@@ -71,7 +76,7 @@ Platform stability and correctness is paramount.
   - One `make test` runs every test. Each test suite also has its own target, which `make test` runs
   - One `make ci` runs every check. The partial targets that make up `make ci` stay
 
-- Once a release exists, `make ci` fails when a change removes an entity key, a stored setting key, a card type or a card setting, changes an entity's platform, unit, device class, state class or state values, removes a value a card setting accepts, or lowers a config entry or store version, compared with the newest stable release tag.
+- From `1.0.0`, `make ci` fails when a change removes an entity key, a stored setting key, a card type or a card setting, changes an entity's platform, unit, device class, state class or state values, removes a value a card setting accepts, or lowers a config entry or store version, compared with the newest stable release tag.
 
 - All testing and verification can run in github workflows using the same make targets
 

@@ -17,7 +17,7 @@ Your SAJ solar system in Home Assistant, read straight from the inverter over yo
 
 This is an unofficial, community-built integration. It is not made, supported or endorsed by SAJ. See the [disclaimer](docs/en-gb/user/README.md#disclaimer).
 
-> **Status: in active development and not yet released.** There is no published release yet.
+> **Status: pre-release.** SAJ Local has no stable release yet. Every release before `1.0.0` is a beta, and the release notes of a beta name every breaking change. See [beta versions](docs/en-gb/user/installation.md#beta-versions).
 
 ## Why SAJ Local
 

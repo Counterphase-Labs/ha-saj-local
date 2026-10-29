@@ -4,7 +4,7 @@
 
 “安装”页面介绍如何通过 HACS（Home Assistant 社区商店）安装 SAJ Local。设置过程所做事项的完整列表见集成功能列表的 [设置与检测](../../../custom_components/saj_local/docs/features.md#setup-and-detection) 一节。
 
-SAJ Local 尚未发布正式版本。安装前请先查看[支持的设备](supported-equipment.md)。
+SAJ Local 还没有稳定版本。`1.0.0` 之前的每个版本都是测试版，参见[测试版](#测试版)。安装前请先查看[支持的设备](supported-equipment.md)。
 
 ## 你需要什么
 

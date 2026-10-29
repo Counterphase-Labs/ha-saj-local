@@ -17,7 +17,7 @@ Uw SAJ-zonnesysteem in Home Assistant, rechtstreeks uit de omvormer uitgelezen v
 
 Dit is een onofficiële integratie, gebouwd door de community. Ze wordt niet gemaakt, ondersteund of goedgekeurd door SAJ. Zie de [disclaimer](user/README.md#disclaimer).
 
-> **Status: in actieve ontwikkeling en nog niet uitgebracht.** Er is nog geen uitgebrachte versie.
+> **Status: pre-release.** SAJ Local heeft nog geen stabiele release. Elke release vóór `1.0.0` is een bèta, en de releaseopmerkingen van een bèta noemen elke incompatibele wijziging. Zie [bètaversies](user/installation.md#bètaversies).
 
 ## Waarom SAJ Local
 

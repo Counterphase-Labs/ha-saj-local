@@ -160,8 +160,8 @@ Each feature list section is investigated from the `Files:` line of the section 
 | Entity types, enabled-by-default rules and sign conventions | the integration feature list section Devices and entities |
 | Development setup | [environment](environment.md) |
 | Make targets and check rules | [checks](checks.md) |
-| Home Assistant version bump | [releasing](releasing.md) |
-| Site overview screenshot | `docs/images/en-gb/cards-power-flow-card.png`, copied to `assets/images/saj-local-power-flow.png` in the `website` repository at each release, see the [releasing page](releasing.md) |
+| Release process and Home Assistant version bump | [releasing](releasing.md) |
+| Site overview screenshot | `docs/images/en-gb/cards-power-flow-card.png`, copied by the maintainers to the project website at each release, see the [releasing page](releasing.md) |
 | How to report a security problem | `SECURITY.md` |
 | Issue labels and the rules for labels | `.github/labels.yml` and `CONTRIBUTING.md` |
 | Licence terms | `LICENSE` |

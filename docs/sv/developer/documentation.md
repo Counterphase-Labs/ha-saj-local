@@ -131,8 +131,8 @@ Varje funktionslisteavsnitt undersöks utifrån avsnittets rad `Files:` och täc
 | Entitetstyper, regler för aktivering som standard och teckenkonventioner | integrationens funktionslisteavsnitt Enheter och entiteter |
 | Utvecklingsmiljö | [miljö](environment.md) |
 | Make-mål och kontrollregler | [kontroller](checks.md) |
-| Höjning av Home Assistant-versionen | [utgåvor](releasing.md) |
-| Skärmbild av översikten för webbplatsen | `docs/images/en-gb/cards-power-flow-card.png`, kopierad till `assets/images/saj-local-power-flow.png` i arkivet `website` vid varje utgåva, se [sidan om utgåvor](releasing.md) |
+| Utgåvor och höjning av Home Assistant-versionen | [utgåvor](releasing.md) |
+| Skärmbild av översikten för webbplatsen | `docs/images/en-gb/cards-power-flow-card.png`, kopierad av underhållarna till projektets webbplats vid varje utgåva, se [sidan om utgåvor](releasing.md) |
 | Hur ett säkerhetsproblem rapporteras | `SECURITY.md` |
 | Ärendeetiketter och reglerna för etiketter | `.github/labels.yml` och `CONTRIBUTING.md` |
 | Licensvillkor | `LICENSE` |

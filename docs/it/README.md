@@ -17,7 +17,7 @@ Il tuo impianto solare SAJ in Home Assistant, letto direttamente dall'inverter a
 
 Questa è un'integrazione non ufficiale, creata dalla comunità. Non è realizzata, supportata né approvata da SAJ. Vedi l'[esclusione di responsabilità](user/README.md#esclusione-di-responsabilità).
 
-> **Stato: in sviluppo attivo e non ancora rilasciata.** Non esiste ancora una versione pubblicata.
+> **Stato: pre-release.** SAJ Local non ha ancora una versione stabile. Ogni versione prima di `1.0.0` è una beta, e le note di rilascio di una beta nominano ogni modifica incompatibile. Vedi [versioni beta](user/installation.md#versioni-beta).
 
 ## Perché SAJ Local
 

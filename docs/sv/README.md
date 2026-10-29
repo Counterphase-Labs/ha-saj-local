@@ -17,7 +17,7 @@ Ditt SAJ-solsystem i Home Assistant, avläst direkt från växelriktaren över d
 
 Det här är en inofficiell integration, byggd av communityn. Den är inte gjord, stödd eller godkänd av SAJ. Se [friskrivningen](user/README.md#friskrivning).
 
-> **Status: under aktiv utveckling och ännu inte utgiven.** Det finns ännu ingen publicerad utgåva.
+> **Status: förhandsversion.** SAJ Local har ännu ingen stabil version. Varje version före `1.0.0` är en beta, och versionsinformationen för en beta nämner varje inkompatibel ändring. Se [betaversioner](user/installation.md#betaversioner).
 
 ## Varför SAJ Local
 

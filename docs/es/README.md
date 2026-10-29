@@ -17,7 +17,7 @@ Tu sistema solar SAJ en Home Assistant, leído directamente del inversor a trav�
 
 Esta es una integración no oficial, creada por la comunidad. SAJ no la ha creado, ni da soporte, ni la respalda. Consulta el [descargo de responsabilidad](user/README.md#descargo-de-responsabilidad).
 
-> **Estado: en desarrollo activo y todavía sin publicar.** Aún no hay ninguna versión publicada.
+> **Estado: versión preliminar.** SAJ Local aún no tiene ninguna versión estable. Toda versión anterior a `1.0.0` es una beta, y las notas de versión de una beta nombran cada cambio incompatible. Consulta [versiones beta](user/installation.md#versiones-beta).
 
 ## Por qué SAJ Local
 

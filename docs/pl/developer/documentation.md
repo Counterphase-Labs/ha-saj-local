@@ -131,8 +131,8 @@ Każda sekcja listy funkcji jest badana na podstawie wiersza `Files:` sekcji i p
 | Typy encji, zasady włączenia domyślnego i konwencje znaku | sekcja Urządzenia i encje listy funkcji integracji |
 | Konfiguracja środowiska deweloperskiego | [środowisko](environment.md) |
 | Cele make i zasady sprawdzeń | [sprawdzenia](checks.md) |
-| Podniesienie wersji Home Assistanta | [wydawanie](releasing.md) |
-| Zrzut ekranu przeglądu dla strony | `docs/images/en-gb/cards-power-flow-card.png`, kopiowany do `assets/images/saj-local-power-flow.png` w repozytorium `website` przy każdym wydaniu, zobacz [stronę wydawania](releasing.md) |
+| Wydawanie i podniesienie wersji Home Assistanta | [wydawanie](releasing.md) |
+| Zrzut ekranu przeglądu dla strony | `docs/images/en-gb/cards-power-flow-card.png`, kopiowany przez opiekunów na stronę internetową projektu przy każdym wydaniu, zobacz [stronę wydawania](releasing.md) |
 | Jak zgłosić problem z bezpieczeństwem | `SECURITY.md` |
 | Etykiety zgłoszeń i zasady dla etykiet | `.github/labels.yml` i `CONTRIBUTING.md` |
 | Warunki licencji | `LICENSE` |

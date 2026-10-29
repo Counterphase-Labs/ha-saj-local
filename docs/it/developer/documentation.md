@@ -131,8 +131,8 @@ Ogni sezione di un elenco delle funzionalità viene esaminata dalla riga `Files:
 | Tipi di entità, regole di abilitazione predefinita e convenzioni dei segni | la sezione Devices and entities dell'elenco delle funzionalità dell'integrazione |
 | Impostazione dello sviluppo | [ambiente](environment.md) |
 | Target make e regole dei controlli | [controlli](checks.md) |
-| Aggiornamento della versione di Home Assistant | [rilascio](releasing.md) |
-| Schermata panoramica del sito | `docs/images/en-gb/cards-power-flow-card.png`, copiata in `assets/images/saj-local-power-flow.png` nel repository `website` a ogni rilascio, vedi la [pagina del rilascio](releasing.md) |
+| Rilascio e aggiornamento della versione di Home Assistant | [rilascio](releasing.md) |
+| Schermata panoramica del sito | `docs/images/en-gb/cards-power-flow-card.png`, copiata dai maintainer sul sito web del progetto a ogni rilascio, vedi la [pagina del rilascio](releasing.md) |
 | Come segnalare un problema di sicurezza | `SECURITY.md` |
 | Etichette delle segnalazioni e regole per le etichette | `.github/labels.yml` e `CONTRIBUTING.md` |
 | Termini della licenza | `LICENSE` |

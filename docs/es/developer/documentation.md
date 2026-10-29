@@ -131,8 +131,8 @@ Cada sección de una lista de funciones se investiga a partir de la línea `File
 | Tipos de entidad, reglas de habilitada por defecto y convenciones de signo | la sección Devices and entities de la lista de funciones de la integración |
 | Configuración del desarrollo | [entorno](environment.md) |
 | Objetivos de make y reglas de comprobación | [comprobaciones](checks.md) |
-| Subida de versión de Home Assistant | [publicación de versiones](releasing.md) |
-| Captura general del sitio | `docs/images/en-gb/cards-power-flow-card.png`, copiada a `assets/images/saj-local-power-flow.png` del repositorio `website` en cada versión, consulta la [página de publicación de versiones](releasing.md) |
+| Publicación de versiones y subida de versión de Home Assistant | [publicación de versiones](releasing.md) |
+| Captura general del sitio | `docs/images/en-gb/cards-power-flow-card.png`, que los mantenedores copian al sitio web del proyecto en cada versión, consulta la [página de publicación de versiones](releasing.md) |
 | Cómo informar de un problema de seguridad | `SECURITY.md` |
 | Etiquetas de incidencias y reglas de las etiquetas | `.github/labels.yml` y `CONTRIBUTING.md` |
 | Términos de la licencia | `LICENSE` |

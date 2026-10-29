@@ -21,4 +21,4 @@ This folder is the SAJ Local Home Assistant integration, with the SAJ library in
 
 ## Stored Forms
 
-Once a release exists, a change to any stored form (config entry data or options, a subentry's data, the power control store, or a value stored in one of them) raises the config entry `VERSION` or `MINOR_VERSION`, or the store version, and adds a migration.
+From the first beta, `1.0.0b1`, a change to any stored form (config entry data or options, a subentry's data, the power control store, or a value stored in one of them) raises the config entry `VERSION` or `MINOR_VERSION`, or the store version, and adds a migration. The one exception is a breaking change that the user approved under the Backwards Compatibility rules in the root `AGENTS.md`.

@@ -131,8 +131,8 @@ Jeder Abschnitt einer Funktionsliste wird anhand der Zeile `Files:` des Abschnit
 | Entitätstypen, Regeln zur Standardaktivierung und Vorzeichenkonventionen | der Abschnitt Geräte und Entitäten der Funktionsliste der Integration |
 | Entwicklungsumgebung | [Umgebung](environment.md) |
 | Make-Targets und Prüfregeln | [Prüfungen](checks.md) |
-| Erhöhung der Home-Assistant-Version | [Veröffentlichen](releasing.md) |
-| Screenshot für die Übersicht der Website | `docs/images/en-gb/cards-power-flow-card.png`, bei jeder Veröffentlichung nach `assets/images/saj-local-power-flow.png` im Repository `website` kopiert, siehe die [Seite Veröffentlichen](releasing.md) |
+| Veröffentlichung und Erhöhung der Home-Assistant-Version | [Veröffentlichen](releasing.md) |
+| Screenshot für die Übersicht der Website | `docs/images/en-gb/cards-power-flow-card.png`, bei jeder Veröffentlichung von den Maintainern auf die Projekt-Website kopiert, siehe die [Seite Veröffentlichen](releasing.md) |
 | Wie man ein Sicherheitsproblem meldet | `SECURITY.md` |
 | Issue-Labels und die Regeln für Labels | `.github/labels.yml` und `CONTRIBUTING.md` |
 | Lizenzbedingungen | `LICENSE` |

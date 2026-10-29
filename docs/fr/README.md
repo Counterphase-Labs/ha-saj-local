@@ -17,7 +17,7 @@ Votre installation solaire SAJ dans Home Assistant, lue directement depuis l'ond
 
 Il s'agit d'une intégration non officielle, développée par la communauté. Elle n'est ni conçue, ni prise en charge, ni approuvée par SAJ. Voir l'[avis de non-responsabilité](user/README.md#avis-de-non-responsabilité).
 
-> **Statut : en développement actif et pas encore publiée.** Il n'existe pas encore de version publiée.
+> **Statut : préversion.** SAJ Local n'a pas encore de version stable. Chaque version avant `1.0.0` est une bêta, et les notes de version d'une bêta nomment chaque changement incompatible. Voir [versions bêta](user/installation.md#versions-bêta).
 
 ## Pourquoi SAJ Local
 

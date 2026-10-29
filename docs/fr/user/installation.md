@@ -4,7 +4,7 @@
 
 La page Installation installe SAJ Local avec HACS, le Home Assistant Community Store. La liste complète de ce que fait la configuration se trouve dans la section [Configuration et détection](../../../custom_components/saj_local/docs/features.md#setup-and-detection) de la liste des fonctionnalités de l'intégration.
 
-SAJ Local n'a pas encore de version publiée. Consultez les [équipements pris en charge](supported-equipment.md) avant d'installer.
+SAJ Local n'a pas encore de version stable. Chaque version avant `1.0.0` est une bêta, voir [versions bêta](#versions-bêta). Consultez les [équipements pris en charge](supported-equipment.md) avant d'installer.
 
 ## Ce dont vous avez besoin
 

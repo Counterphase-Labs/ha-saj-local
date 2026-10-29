@@ -63,4 +63,4 @@ The rules come from the [Creative Commons repository label guide](https://openso
 - Requirements: what the project must do. [Global](.github/work/requirements.md), [integration](custom_components/saj_local/docs/requirements.md), [cards](frontend/docs/requirements.md) and [simulator](mock/docs/requirements.md).
 - [Code style](.github/work/code-style.md): how code, tests and documentation are written.
 - [AGENTS.md](AGENTS.md): the rules that bind everyone working in the repository.
-- [Releasing](docs/en-gb/developer/releasing.md): how to bump the Home Assistant version.
+- [Releasing](docs/en-gb/developer/releasing.md): how to prepare and publish a release, and how to bump the Home Assistant version.

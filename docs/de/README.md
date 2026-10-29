@@ -17,7 +17,7 @@ Deine SAJ-Solaranlage in Home Assistant, direkt aus dem Wechselrichter über dei
 
 Dies ist eine inoffizielle, von der Community entwickelte Integration. Sie wird weder von SAJ hergestellt noch unterstützt oder gutgeheißen. Siehe den [Haftungsausschluss](user/README.md#haftungsausschluss).
 
-> **Status: in aktiver Entwicklung und noch nicht veröffentlicht.** Es gibt noch keine veröffentlichte Version.
+> **Status: Vorabversion.** SAJ Local hat noch keine stabile Version. Jede Version vor `1.0.0` ist eine Beta, und die Versionshinweise einer Beta nennen jede inkompatible Änderung. Siehe [Beta-Versionen](user/installation.md#beta-versionen).
 
 ## Warum SAJ Local
 

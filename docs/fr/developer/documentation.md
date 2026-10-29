@@ -131,8 +131,8 @@ Chaque section de liste des fonctionnalités est examinée à partir de la ligne
 | Types d'entités, règles d'activation par défaut et conventions de signe | la section Appareils et entités de la liste des fonctionnalités de l'intégration |
 | Mise en place du développement | [environnement](environment.md) |
 | Cibles make et règles de vérification | [vérifications](checks.md) |
-| Mise à jour de la version de Home Assistant | [publication](releasing.md) |
-| Capture d'écran de la vue d'ensemble du site | `docs/images/en-gb/cards-power-flow-card.png`, copiée vers `assets/images/saj-local-power-flow.png` dans le dépôt `website` à chaque publication, voir la [page de publication](releasing.md) |
+| Publication et mise à jour de la version de Home Assistant | [publication](releasing.md) |
+| Capture d'écran de la vue d'ensemble du site | `docs/images/en-gb/cards-power-flow-card.png`, copiée par les mainteneurs vers le site web du projet à chaque publication, voir la [page de publication](releasing.md) |
 | Comment signaler un problème de sécurité | `SECURITY.md` |
 | Étiquettes des tickets et règles des étiquettes | `.github/labels.yml` et `CONTRIBUTING.md` |
 | Conditions de licence | `LICENSE` |
