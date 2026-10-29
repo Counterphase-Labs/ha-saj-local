@@ -15,7 +15,7 @@
 1. **运行 `make ci`。** [检查页面](checks.md)列出 `make ci` 运行什么。
 2. **运行 `make docs-images`。** 用户文档显示界面，而 CI 不会重新生成图片，因此每次发布都需要一套新的图片。该目标需要 Docker。运行该目标，查看每一张改变的图片，提交 `docs/images/en-gb/` 中改变的图片，并运行 `make docs-check`。失败的运行不会写入任何图片，因此不要在运行失败的情况下发布。请阅读[截图](documentation.md#截图)，了解这次运行做什么，以及为什么图片中的每个读数都是模拟的。
 3. **在同一步骤中复制站点截图。** 把 `docs/images/en-gb/cards-power-flow-card.png` 复制到 `website` 仓库中的 `assets/images/saj-local-power-flow.png`，并在那里提交该副本，因为 `counterphase.dev` 上的 SAJ Local 页面显示的是该图片的副本。没有任何检查能发现过时的副本，因为本仓库中的 CI 看不到网站仓库。
-4. **运行 `make release-check`。** 该步骤用 `custom_components/saj_local/` 制作压缩包，当压缩包缺少 `asset-manifest.json` 或构建出的卡片包时失败。卡片发生变化时，请先运行 `make build` 并提交该包。
+4. **运行 `make release-check`。** 该步骤用 `custom_components/saj_local/` 制作压缩包，当压缩包缺少 `asset-manifest.json`、构建出的卡片包或 `THIRD_PARTY_LICENSES.md`（卡片包中各库的许可证）时失败。卡片发生变化时，请先运行 `make build` 并提交该包和许可证文件。
 5. **设置新版本。** 在 `custom_components/saj_local/manifest.json`、`pyproject.toml` 和 `frontend/package.json` 中设置版本。运行 `uv lock`，使 `uv.lock` 记录项目版本，并在 `frontend/` 中运行 `npm install --package-lock-only`，使 `frontend/package-lock.json` 记录该版本。运行 `make release-check`，提交到 `main`，并等待 CI 通过。
 
 截图是发布中唯一 CI 无法检查的部分。增加或删除图片的更改会通过未使用图片规则和缺失图片规则使 `make docs-check` 失败。使某张图片过时的界面更改不会使任何检查失败，因此保持图片最新的是第 2 步。

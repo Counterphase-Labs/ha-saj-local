@@ -17,9 +17,11 @@ MANIFEST_PATH = "custom_components/saj_local/manifest.json"
 VERSION_FORM = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(b[0-9]+)?$")
 ASSET_MANIFEST_ENTRY = "saj_local/frontend/asset-manifest.json"
 BUNDLE_ENTRY = "saj_local/frontend/saj-local-<hash>.js"
+LICENCES_ENTRY = "saj_local/frontend/THIRD_PARTY_LICENSES.md"
 REQUIRED_ENTRIES = (
     (ASSET_MANIFEST_ENTRY, re.compile(r"^saj_local/frontend/asset-manifest\.json$")),
     (BUNDLE_ENTRY, re.compile(r"^saj_local/frontend/saj-local-[A-Za-z0-9_-]+\.js$")),
+    (LICENCES_ENTRY, re.compile(r"^saj_local/frontend/THIRD_PARTY_LICENSES\.md$")),
 )
 
 

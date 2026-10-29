@@ -30,6 +30,7 @@ def test_a_complete_archive_has_nothing_missing():
     entries = [
         "saj_local/frontend/asset-manifest.json",
         "saj_local/frontend/saj-local-aB3_-x.js",
+        "saj_local/frontend/THIRD_PARTY_LICENSES.md",
     ]
 
     assert release_check.missing_entries(entries) == []
@@ -39,6 +40,7 @@ def test_each_absent_required_entry_is_reported_by_name():
     assert release_check.missing_entries(["saj_local/__init__.py"]) == [
         "saj_local/frontend/asset-manifest.json",
         "saj_local/frontend/saj-local-<hash>.js",
+        "saj_local/frontend/THIRD_PARTY_LICENSES.md",
     ]
 
 
@@ -46,6 +48,7 @@ def test_a_bundle_with_an_unexpected_name_does_not_count():
     entries = [
         "saj_local/frontend/asset-manifest.json",
         "saj_local/frontend/saj-local-.js",
+        "saj_local/frontend/THIRD_PARTY_LICENSES.md",
     ]
 
     assert release_check.missing_entries(entries) == [
@@ -53,7 +56,11 @@ def test_a_bundle_with_an_unexpected_name_does_not_count():
     ]
 
 
-COMPLETE_ARCHIVE = ["frontend/asset-manifest.json", "frontend/saj-local-abc.js"]
+COMPLETE_ARCHIVE = [
+    "frontend/asset-manifest.json",
+    "frontend/saj-local-abc.js",
+    "frontend/THIRD_PARTY_LICENSES.md",
+]
 
 
 def completed(*, stdout="", returncode=0):
@@ -102,6 +109,7 @@ def test_main_reports_missing_entries_and_fails(tmp_path, capsys):
     assert capsys.readouterr().out == (
         "missing saj_local/frontend/asset-manifest.json\n"
         "missing saj_local/frontend/saj-local-<hash>.js\n"
+        "missing saj_local/frontend/THIRD_PARTY_LICENSES.md\n"
     )
 
 

@@ -2,6 +2,7 @@
   "gitignore": true,
   "ignore": [
     "**/package-lock.json",
+    "custom_components/saj_local/frontend/THIRD_PARTY_LICENSES.md",
     "config/dashboards/**"
   ],
   "minLines": 5,

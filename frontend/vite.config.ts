@@ -9,6 +9,7 @@ export default defineConfig({
             entry: resolve(import.meta.dirname, "src/index.ts"),
             formats: ["es"],
         },
+        license: { fileName: "THIRD_PARTY_LICENSES.md" },
         manifest: "asset-manifest.json",
         outDir: resolve(
             import.meta.dirname,
