@@ -27,7 +27,7 @@ Het bestand bevat:
 - de openstaande reparaties, en hoe lang de omvormer al faalt;
 - de functies van vermogensregeling, welke draait, welke SAJ Local bezit en de actie die voor elk schema openstaat;
 - een momentopname van de ruwe woorden van elk register dat SAJ Local heeft gelezen sinds het systeem laadde, met de leeftijd van elk, zodat een onderhouder een meting kan toetsen aan het echte apparaat;
-- elk verzoek dat geen bruikbaar antwoord kreeg, met de reden. Een verzoek dat een time-out kreeg ziet er anders uit dan een verzoek dat de omvormer weigerde, en het verschil doet ertoe wanneer een andere client de verbinding van de omvormer vasthoudt.
+- elk verzoek dat geen bruikbaar antwoord kreeg, met de reden. Een verzoek dat een time-out kreeg ziet er anders uit dan een verzoek dat de omvormer weigerde, en het verschil doet ertoe wanneer een andere client de verbinding van de omvormer vasthoudt. Elke geweigerde entiteit, elk mislukt verzoek en elke regel van het debuglogboek noemt de Modbus-functie van het verzoek.
 
 De momentopname voegt geen verzoek aan de omvormer toe. De momentopname begint leeg elke keer dat het systeem laadt.
 

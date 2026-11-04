@@ -27,7 +27,7 @@ El archivo contiene:
 - los avisos de reparación abiertos, y cuánto tiempo lleva fallando el inversor;
 - las funciones de control de potencia, cuál está en marcha, cuál es propiedad de SAJ Local y la acción pendiente de cada programación;
 - una instantánea de las palabras sin procesar de cada registro que SAJ Local ha leído desde que se cargó el sistema, con la antigüedad de cada una, para que un mantenedor pueda comprobar una lectura con el dispositivo real;
-- cada solicitud que no obtuvo una respuesta utilizable, con el motivo. Una solicitud que agotó el tiempo de espera se ve distinta de una solicitud que el inversor rechazó, y la diferencia importa cuando otro cliente mantiene la conexión del inversor.
+- cada solicitud que no obtuvo una respuesta utilizable, con el motivo. Una solicitud que agotó el tiempo de espera se ve distinta de una solicitud que el inversor rechazó, y la diferencia importa cuando otro cliente mantiene la conexión del inversor. Cada entidad rechazada, cada solicitud fallida y cada línea del registro de depuración nombra la función Modbus de la solicitud.
 
 La instantánea no añade ninguna solicitud al inversor. La instantánea empieza vacía cada vez que se carga el sistema.
 

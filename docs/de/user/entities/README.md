@@ -11,7 +11,7 @@ Erzeugt von `make docs`. Nicht von Hand bearbeiten.
 | Bereich | Entitäten | Was sie enthält |
 | --- | --- | --- |
 | [Wechselrichter und PV](inverter-and-pv.md) | 241 | Wechselrichterleistung, Solar-Strings, Notstromanschluss, Energiezähler, Versionen und die Hauslast |
-| [Netz und Zähler A](grid-and-meter-a.md) | 88 | Der Netzanschluss und Zähler A, der Netzzähler |
+| [Netz und Zähler A](grid-and-meter-a.md) | 101 | Der Netzanschluss und Zähler A, der Netzzähler |
 | [Zähler B](meter-b.md) | 22 | Zähler B, der zweite Zähler, der einen Solar-Wechselrichter misst |
 | [Batterie](battery.md) | 133 | Die Batterie als Ganzes |
 | [Batteriepacks](battery-packs.md) | 58 | Messwerte und Identität jedes Batteriepacks |

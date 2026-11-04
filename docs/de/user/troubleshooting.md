@@ -27,7 +27,7 @@ Die Datei enthält:
 - die offenen Reparaturmeldungen und wie lange der Wechselrichter schon ausfällt;
 - die Funktionen der Leistungssteuerung, welche läuft, welche SAJ Local besitzt und die Aktion, die für jeden Zeitplan offen ist;
 - einen Schnappschuss der rohen Wörter jedes Registers, das SAJ Local seit dem Laden des Systems gelesen hat, mit dem Alter jedes Wortes, damit ein Maintainer einen Messwert am echten Gerät prüfen kann;
-- jede Anfrage, die keine brauchbare Antwort bekam, mit dem Grund. Eine Anfrage mit Zeitüberschreitung sieht anders aus als eine Anfrage, die der Wechselrichter verweigert hat, und der Unterschied zählt, wenn ein anderer Client die Verbindung des Wechselrichters hält.
+- jede Anfrage, die keine brauchbare Antwort bekam, mit dem Grund. Eine Anfrage mit Zeitüberschreitung sieht anders aus als eine Anfrage, die der Wechselrichter verweigert hat, und der Unterschied zählt, wenn ein anderer Client die Verbindung des Wechselrichters hält. Jede verweigerte Entität, jede fehlgeschlagene Anfrage und jede Zeile des Debug-Logs nennt die Modbus-Funktion der Anfrage.
 
 Der Schnappschuss fügt keine Anfrage an den Wechselrichter hinzu. Der Schnappschuss beginnt jedes Mal leer, wenn das System geladen wird.
 

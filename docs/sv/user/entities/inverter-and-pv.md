@@ -81,7 +81,6 @@ Ett prefix som anges i Konfigurera hamnar efter `saj_` i ID:t för varje entitet
 | PV2-spänning | `sensor.saj_pv2_voltage` | Sensor | V | HS3, H2 | PV-sträng 2 och högre | Ja |
 | PV2-ström | `sensor.saj_pv2_current` | Sensor | A | HS3, H2 | PV-sträng 2 och högre | Ja |
 | PV2-effekt | `sensor.saj_pv2_power` | Sensor | W | HS3, H2 | PV-sträng 2 och högre | Ja |
-| Hushållslasteffekt | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Ja |
 | Soleffekt | `sensor.saj_pv_power` | Sensor | W | HS3, H2 | - | Ja |
 | Växelriktareffekt | `sensor.saj_inverter_power` | Sensor | W | HS3, H2 | - | Ja |
 | Solenergi idag | `sensor.saj_pv_energy_today` | Sensor | kWh | HS3, H2 | - | Ja |
@@ -194,6 +193,7 @@ Ett prefix som anges i Konfigurera hamnar efter `saj_` i ID:t för varje entitet
 | Mätare A status | `sensor.saj_meter_a_status` | Sensor | - | HS3, H2 | - | Nej |
 | Mätare B status | `sensor.saj_meter_b_status` | Sensor | - | HS3, H2 | - | Nej |
 | Reservlast effekt | `sensor.saj_backup_load_power` | Sensor | W | HS3, H2 | - | Ja |
+| Hushållslasteffekt | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Ja |
 | Läge för omvänt flöde | `sensor.saj_reverse_flow_mode` | Sensor | - | H2 | - | Nej |
 | FCAS frekvenshysteres | `sensor.saj_fcas_frequency_hysteresis` | Sensor | Hz | H2 | - | Nej |
 | Parallellroll | `sensor.saj_parallel_role` | Sensor | - | H2 | - | Nej |

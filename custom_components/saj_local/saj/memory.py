@@ -7,6 +7,7 @@ from itertools import groupby
 from typing import TYPE_CHECKING
 
 from .catalogue import Row, device_registers, private_rows
+from .models import FunctionCode
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Sequence
@@ -34,6 +35,7 @@ class RegisterEntry:
 class FailureEntry:
     address: int
     count: int
+    function: FunctionCode
     outcome: FailureOutcome
     exception_code: int | None
     age_seconds: float
@@ -62,7 +64,7 @@ class RegisterMemory:
     def __init__(self, *, clock: Callable[[], float]) -> None:
         self._clock = clock
         self._words: dict[int, _Remembered] = {}
-        self._failures: dict[tuple[int, int], _Failure] = {}
+        self._failures: dict[tuple[FunctionCode, int, int], _Failure] = {}
         self._paused = 0
 
     @contextmanager
@@ -73,13 +75,19 @@ class RegisterMemory:
         finally:
             self._paused -= 1
 
-    def record_answer(self, *, address: int, words: Sequence[int]) -> None:
+    def record_answer(
+        self,
+        *,
+        address: int,
+        words: Sequence[int],
+        function: FunctionCode = FunctionCode.HOLDING,
+    ) -> None:
         if self._paused:
             return
         read_at = self._clock()
         for offset, value in enumerate(words):
             self._words[address + offset] = _Remembered(value=value, read_at=read_at)
-        self._failures.pop((address, len(words)), None)
+        self._failures.pop((function, address, len(words)), None)
 
     def record_failure(
         self,
@@ -87,11 +95,12 @@ class RegisterMemory:
         address: int,
         count: int,
         outcome: FailureOutcome,
+        function: FunctionCode = FunctionCode.HOLDING,
         exception_code: int | None = None,
     ) -> None:
         if self._paused:
             return
-        self._failures[(address, count)] = _Failure(
+        self._failures[(function, address, count)] = _Failure(
             outcome=outcome, exception_code=exception_code, failed_at=self._clock()
         )
 
@@ -131,11 +140,15 @@ class RegisterMemory:
                 FailureEntry(
                     address=address,
                     count=count,
+                    function=function,
                     outcome=failure.outcome,
                     exception_code=failure.exception_code,
                     age_seconds=now - failure.failed_at,
                 )
-                for (address, count), failure in sorted(self._failures.items())
+                for (function, address, count), failure in sorted(
+                    self._failures.items(),
+                    key=lambda item: (item[0][1], item[0][2], item[0][0]),
+                )
             ),
         )
 

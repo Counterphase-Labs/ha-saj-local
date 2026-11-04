@@ -8,6 +8,7 @@ from . import (
     Equipment,
     Evidence,
     FamilyPlacement,
+    FunctionCode,
     PowerFunction,
     Probe,
     Profile,
@@ -18,6 +19,13 @@ from . import (
 )
 from .faults import FaultMap
 from .shared_faults import INVERTER_FAULT_WORDS, SHARED_INVERTER_FAULTS
+
+PHASES = (1, 2, 3)
+
+
+def _phase_keys(pattern: str) -> tuple[str, ...]:
+    return tuple(pattern.format(phase) for phase in PHASES)
+
 
 EMS_TIMEOUT = "ems_timeout"
 EMS_LIMITS = (
@@ -115,7 +123,7 @@ PROFILE = Profile(
     largest_request=32,
     spans=(
         Span(name="network", first=0x0F03, last=0x0F2F),
-        Span(name="ev_data", first=0x3024, last=0x30BB),
+        Span(name="ev_data", first=0x3024, last=0x30BB, function=FunctionCode.INPUT),
         Span(name="settings", first=0x3600, last=0x36EF),
         Span(name="realtime", first=0x4000, last=0x4176),
         Span(name="parallel", first=0x4200, last=0x427C),
@@ -171,10 +179,10 @@ PROFILE = Profile(
                 "pv_direction": 0x4095,
                 "battery_direction": 0x4096,
                 "grid_direction": 0x4097,
-                "load_power": 0x40A0,
+                "load_power": None,
                 "pv_power": 0x40A5,
                 "battery_power": 0x40A6,
-                "grid_power": 0x40A7,
+                "grid_power": None,
                 "inverter_power": 0x40A9,
                 "grid_load_power": 0x40AD,
                 "ev_settings_protocol_version": 0x4B03,
@@ -213,6 +221,18 @@ PROFILE = Profile(
                 "meter_a_status": 0xA03C,
                 "meter_a_power": None,
                 "backup_load_power": None,
+                "ev_serial_number": 0x3024,
+                "ev_model": 0x3034,
+                "ev_software_version": 0x303C,
+                "ev_hardware_version": 0x3041,
+                "ev_phase_count": 0x3046,
+                "ev_minimum_power": 0x3047,
+                "ev_work_mode": 0x309C,
+                "ev_status": 0x309D,
+                "ev_total_energy": 0x30A9,
+                "ev_control_pilot_voltage": 0x30AF,
+                "ev_remote_control": 0x30B6,
+                "ev_current_setpoint": 0x30B7,
             },
             Evidence.RESPONDS_UNCHECKED: {
                 "parallel_mode": 0x4200,
@@ -234,6 +254,15 @@ PROFILE = Profile(
                 "parallel_backup_load_power_high_word": 0x4210,
                 "parallel_grid_load_power_high_word": 0x4211,
                 "parallel_meter_b_power": 0x4212,
+                "ev_fault_word_1": 0x30AB,
+                "ev_fault_word_2": 0x30AD,
+                "ev_maximum_power": 0x3048,
+                "ev_power": 0x30A4,
+                "ev_charge_duration": 0x30A6,
+                "ev_session_energy": 0x30A7,
+                "ev_duty_cycle": 0x30B0,
+                "ev_session_start": 0x30B8,
+                "ev_session_end": 0x30BA,
                 "meter_b_status": 0xA053,
                 "meter_b_power": None,
                 "parallel_backup_load_power": None,
@@ -274,31 +303,10 @@ PROFILE = Profile(
             },
             Evidence.DOCUMENTED: {
                 "battery_fault_word_1": 0x400B,
-                "ev_fault_word_1": 0x30AB,
-                "ev_fault_word_2": 0x30AD,
                 "clear_current_fault": 0x8015,
                 "restart_inverter": 0x801A,
                 "synchronise_clock": 0x8020,
                 "ems_pv_power_limit_remove": 0x8412,
-                "ev_serial_number": 0x3024,
-                "ev_model": 0x3034,
-                "ev_software_version": 0x303C,
-                "ev_hardware_version": 0x3041,
-                "ev_phase_count": 0x3046,
-                "ev_minimum_power": 0x3047,
-                "ev_maximum_power": 0x3048,
-                "ev_work_mode": 0x309C,
-                "ev_status": 0x309D,
-                "ev_power": 0x30A4,
-                "ev_charge_duration": 0x30A6,
-                "ev_session_energy": 0x30A7,
-                "ev_total_energy": 0x30A9,
-                "ev_control_pilot_voltage": 0x30AF,
-                "ev_duty_cycle": 0x30B0,
-                "ev_remote_control": 0x30B6,
-                "ev_current_setpoint": 0x30B7,
-                "ev_session_start": 0x30B8,
-                "ev_session_end": 0x30BA,
                 "battery_charge_soc_limit": 0x3646,
                 "slave_software_version": 0x8F19,
                 "ev_ems_charging": 0x4B46,
@@ -442,7 +450,11 @@ PROFILE = Profile(
         FamilyPlacement(
             family="meter_b_reactive_power", evidence=Evidence.RESPONDS_UNCHECKED
         ),
-        FamilyPlacement(family="ev_phase", evidence=Evidence.DOCUMENTED),
+        FamilyPlacement(
+            family="ev_phase",
+            evidence=Evidence.RESPONDS_UNCHECKED,
+            exceptions={f"ev_l{phase}_voltage": Evidence.VERIFIED for phase in PHASES},
+        ),
         FamilyPlacement(family="ethernet_addresses", evidence=Evidence.VERIFIED),
         FamilyPlacement(
             family="charge_slots",
@@ -464,6 +476,21 @@ PROFILE = Profile(
                 6: "ems",
                 11: "time_of_use_bms",
             },
+        ),
+        Replacement(key="load_power", sum_of=_phase_keys("grid_output_l{}_power")),
+        Replacement(
+            key="grid_power",
+            equipment=Equipment.METER_A,
+            sum_of=_phase_keys("meter_a_l{}_power"),
+        ),
+        *(
+            Replacement(
+                key=f"grid_l{phase}_{member}",
+                equipment=Equipment.METER_A,
+                sum_of=(f"meter_a_l{phase}_{member}",),
+            )
+            for phase in PHASES
+            for member in ("power", "apparent_power", "current", "power_factor")
         ),
     ),
     probes=(

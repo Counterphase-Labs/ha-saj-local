@@ -11,7 +11,7 @@ Généré par `make docs`. Ne pas modifier à la main.
 | Zone | Entités | Contenu |
 | --- | --- | --- |
 | [Onduleur et solaire](inverter-and-pv.md) | 241 | Sortie de l'onduleur, chaînes solaires, port de secours, compteurs d'énergie, versions et charge domestique |
-| [Réseau et compteur A](grid-and-meter-a.md) | 88 | Le raccordement au réseau et le compteur A, le compteur du réseau |
+| [Réseau et compteur A](grid-and-meter-a.md) | 101 | Le raccordement au réseau et le compteur A, le compteur du réseau |
 | [Compteur B](meter-b.md) | 22 | Le compteur B, le second compteur qui mesure un onduleur solaire |
 | [Batterie](battery.md) | 133 | La batterie dans son ensemble |
 | [Modules de batterie](battery-packs.md) | 58 | Mesures et identité de chaque module de batterie |

@@ -24,6 +24,8 @@ Batterijvermogen en netvermogen gebruiken op elk model één teken, zodat een me
 - **Netvermogen** is positief terwijl het systeem teruglevert en negatief terwijl het systeem afneemt. Meter A volgt het tekenstelsel van het net.
 - **Meter B** is positief terwijl de zonne-omvormer die Meter B meet, opwekt.
 
+Op de HS3 is het netvermogen het totaal van Meter A, en het netfasevermogen, het schijnbaar vermogen, de stroom en de arbeidsfactor komen van de bijbehorende fase van Meter A, omdat de netregisters van de HS3 waarden van de omvormer bevatten. Een HS3 zonder Meter A heeft deze entiteiten niet. Het vermogen van de huishoudelijke belasting is de som van de drie netgekoppelde uitgangsfasevermogens.
+
 De doelen van [vermogensregeling](power-control.md) volgen de tekens van de metingen.
 
 ## Het voorvoegsel

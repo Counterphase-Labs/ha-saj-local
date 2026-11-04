@@ -24,6 +24,8 @@ La puissance de la batterie et la puissance du réseau utilisent un seul signe s
 - **La puissance du réseau** est positive pendant que le système injecte et négative pendant que le système soutire. Le compteur A suit le signe du réseau.
 - **Le compteur B** est positif pendant que l'onduleur solaire que le compteur B mesure produit.
 
+Sur le HS3, la puissance du réseau est le total du compteur A, et la puissance par phase du réseau, la puissance apparente, le courant et le facteur de puissance viennent de la phase correspondante du compteur A, car les registres réseau du HS3 contiennent des valeurs de l'onduleur. Un HS3 sans compteur A n'a pas ces entités. La puissance de la charge du foyer est la somme des trois puissances de phase de sortie sur réseau.
+
 Les cibles du [pilotage de puissance](power-control.md) suivent les signes des mesures.
 
 ## Le préfixe

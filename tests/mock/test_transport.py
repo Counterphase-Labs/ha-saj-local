@@ -33,8 +33,10 @@ class MemoryBank:
     def __init__(self):
         self.words = {address: address for address in range(0x100)}
         self.writes = []
+        self.functions = []
 
-    def read(self, *, start, count):
+    def read(self, *, start, count, function):
+        self.functions.append(function)
         if start + count > 0x100:
             raise ModbusError(code=ExceptionCode.ILLEGAL_DATA_ADDRESS)
         return [self.words[address] for address in range(start, start + count)]
@@ -57,6 +59,17 @@ def test_a_read_returns_the_requested_registers_as_big_endian_words():
     assert respond_to(pdu=read_pdu(start=0x10, count=3)) == bytes(
         [3, 6, 0, 0x10, 0, 0x11, 0, 0x12]
     )
+
+
+@pytest.mark.parametrize("function", [3, 4])
+def test_each_read_function_is_forwarded_to_the_bank_and_echoed_in_the_answer(
+    function,
+):
+    bank = MemoryBank()
+    pdu = struct.pack(">BHH", function, 0x10, 1)
+
+    assert respond_to(pdu=pdu, bank=bank) == bytes([function, 2, 0, 0x10])
+    assert bank.functions == [function]
 
 
 def test_a_single_register_write_is_forwarded_and_echoed():
@@ -617,6 +630,22 @@ async def test_a_peer_with_no_address_is_recorded_as_unknown():
     )
 
     assert recorder.connections[0].client == Client(address="unknown", port=0)
+
+
+async def test_an_answered_input_register_read_is_recorded_as_a_read_with_its_words():
+    recorder = FakeRecorder()
+
+    await serve(
+        server=make_server(recorder=recorder),
+        data=mbap(pdu=struct.pack(">BHH", 4, 0x10, 2)),
+    )
+
+    record = recorder.requests[0]
+    assert (record.function, record.operation, record.words) == (
+        4,
+        Operation.READ,
+        (0x10, 0x11),
+    )
 
 
 async def test_an_answered_read_is_recorded_with_its_span_words_and_time_to_answer():

@@ -23,6 +23,7 @@ from .models import (
     ENABLED_WITHOUT_EVIDENCE,
     ENABLING_EVIDENCE,
     Evidence,
+    FunctionCode,
     Placement,
     Profile,
     Replacement,
@@ -62,6 +63,7 @@ class Fit:
 class Row:
     address: int
     words: int
+    function: FunctionCode = FunctionCode.HOLDING
 
     @property
     def end(self) -> int:
@@ -74,6 +76,7 @@ class Register:
     address: int | None
     evidence: Evidence
     core: bool
+    function: FunctionCode = FunctionCode.HOLDING
 
     @property
     def key(self) -> str:
@@ -95,7 +98,7 @@ class Register:
     def row(self) -> Row | None:
         if self.address is None:
             return None
-        return Row(address=self.address, words=self.words)
+        return Row(address=self.address, words=self.words, function=self.function)
 
     @property
     def encoding(self) -> Encoding:
@@ -191,7 +194,7 @@ class Catalogue:
         effective = {**effective, **fault_definitions}
         _require_unique_keys(placements=placements)
         registers = tuple(
-            _register(placement=placement, definitions=effective)
+            _register(placement=placement, definitions=effective, profile=profile)
             for placement in placements
         )
         _require_writable_forms(registers=registers)
@@ -324,6 +327,15 @@ def _replaced(*, original: Definition, replacement: Replacement) -> Definition:
         definition = replace(definition, scale=replacement.scale)
     if replacement.uncombined:
         definition = replace(definition, combination=None)
+    if replacement.sum_of:
+        definition = replace(
+            definition,
+            combination=Combination(
+                operation=Operation.SUM, sources=replacement.sum_of
+            ),
+        )
+    if replacement.equipment is not None:
+        definition = replace(definition, equipment=replacement.equipment)
     return definition
 
 
@@ -348,7 +360,13 @@ def _placements(
             )
             for key, address in family.addresses()
         )
-    return tuple(placed)
+    combined = {
+        replacement.key for replacement in profile.replacements if replacement.sum_of
+    }
+    return tuple(
+        replace(placement, address=None) if placement.key in combined else placement
+        for placement in placed
+    )
 
 
 def _require_unique_keys(*, placements: Iterable[Placement]) -> None:
@@ -361,7 +379,7 @@ def _require_unique_keys(*, placements: Iterable[Placement]) -> None:
 
 
 def _register(
-    *, placement: Placement, definitions: Mapping[str, Definition]
+    *, placement: Placement, definitions: Mapping[str, Definition], profile: Profile
 ) -> Register:
     definition = definitions.get(placement.key)
     if definition is None:
@@ -373,7 +391,20 @@ def _register(
         evidence=placement.evidence,
         core=definition.core
         and _enabled_by_default(definition=definition, evidence=placement.evidence),
+        function=_function_at(profile=profile, address=placement.address),
     )
+
+
+def _function_at(*, profile: Profile, address: int | None) -> FunctionCode:
+    span = next(
+        (
+            span
+            for span in profile.spans
+            if address is not None and span.first <= address <= span.last
+        ),
+        None,
+    )
+    return FunctionCode.HOLDING if span is None else span.function
 
 
 def _enabled_by_default(*, definition: Definition, evidence: Evidence) -> bool:

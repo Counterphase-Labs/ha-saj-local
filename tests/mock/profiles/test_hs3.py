@@ -114,6 +114,7 @@ def test_the_common_builders_are_asked_for_the_hs3_layout(calls):
         "scenario": scenario,
         "phases": 3,
         "extended": True,
+        "house_flows": True,
     }
     assert arguments_of(calls=calls, name="settings_fields") == {
         "scenario": scenario,
@@ -156,6 +157,13 @@ def test_only_the_charger_data_block_is_gated_on_the_installation(
     )
     assert block_at(blocks=blocks, address=0x4B00).unavailable is None
     assert block_at(blocks=blocks, address=0x3024).unavailable is gate
+
+
+def test_only_the_charger_data_block_is_read_with_input_register_reads(calls):
+    blocks = build(calls=calls)
+
+    assert [block.start for block in blocks if block.function == 0x04] == [0x3024]
+    assert all(block.function == 0x03 for block in blocks if block.start != 0x3024)
 
 
 def test_hs3_refuses_reads_past_a_block_with_its_own_exception(calls):

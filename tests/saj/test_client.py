@@ -17,7 +17,7 @@ from saj.client import (
     ModbusTcpClient,
 )
 from saj.memory import FailureOutcome
-from saj.models import ALL_EQUIPMENT
+from saj.models import ALL_EQUIPMENT, FunctionCode
 from saj.models.hs3 import PROFILE as HS3
 
 ANSWER = "0302 0001"
@@ -1008,6 +1008,63 @@ async def test_a_read_cancelled_before_it_answers_is_remembered_as_a_timeout(
     assert _failures(client) == (
         [(UNCATALOGUED, 2, FailureOutcome.TIMEOUT, None)] if remembering else []
     )
+
+
+async def test_an_input_register_read_sends_function_code_4_and_decodes_words():
+    device = FakeDevice(_frame("0404 1234 abcd"))
+    client = _client(device)
+
+    assert await client.read_input_registers(0x3024, 2) == (0x1234, 0xABCD)
+    assert device.writer.requests == [bytes.fromhex("0001 0000 0006 01 04 3024 0002")]
+
+
+async def test_an_input_register_read_answered_as_a_holding_read_is_malformed():
+    client = _client(FakeDevice(_frame("0302 0001")))
+
+    with pytest.raises(ModbusError, match="Malformed Modbus register response"):
+        await client.read_input_registers(0x3024, 1)
+
+
+async def test_an_input_register_read_is_charged_to_the_budget():
+    budget = RecordingBudget()
+    client = _client(FakeDevice(_frame("0402 0001")), budget=budget)
+
+    await client.read_input_registers(0x3024, 1)
+
+    assert [event for event in budget.events if event.startswith("record")] == [
+        "record@7.0"
+    ]
+
+
+async def test_refusals_of_the_two_read_functions_are_remembered_apart():
+    client = _client(FakeDevice(_frame("8330"), _frame("8430", transaction=2)))
+    for read in (client.read_holding_registers, client.read_input_registers):
+        with pytest.raises(ModbusError):
+            await read(0x3024, 4)
+
+    assert [
+        (failure.function, failure.exception_code)
+        for failure in client.memory.snapshot(fit=FIT).failed
+    ] == [(FunctionCode.HOLDING, 0x30), (FunctionCode.INPUT, 0x30)]
+
+
+async def test_an_answer_lifts_only_the_failure_of_its_own_function():
+    client = _client(
+        FakeDevice(
+            _frame("8330"),
+            _frame("8430", transaction=2),
+            _frame("0408 0001 0002 0003 0004", transaction=3),
+        )
+    )
+    for read in (client.read_holding_registers, client.read_input_registers):
+        with pytest.raises(ModbusError):
+            await read(0x3024, 4)
+
+    await client.read_input_registers(0x3024, 4)
+
+    assert [failure.function for failure in client.memory.snapshot(fit=FIT).failed] == [
+        FunctionCode.HOLDING
+    ]
 
 
 async def _read_unremembered(client: ModbusTcpClient, *, remembering: bool):

@@ -24,6 +24,8 @@ Battery power and grid power use one sign on every model, so a reading has one m
 - **Grid power** is positive while the system exports and negative while the system imports. Meter A follows the grid sign.
 - **Meter B** is positive while the solar inverter that Meter B measures generates.
 
+On the HS3, Grid power is the Meter A total, and the grid phase power, apparent power, current and power factor come from the matching Meter A phase, because the grid registers of the HS3 carry inverter values. An HS3 without Meter A has none of these entities. Household load power is the sum of the three on-grid output phase powers.
+
 The [power control](power-control.md) targets follow the signs of the readings.
 
 ## The prefix

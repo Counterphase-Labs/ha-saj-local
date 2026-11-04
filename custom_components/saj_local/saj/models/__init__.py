@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 from typing import TYPE_CHECKING
 
 from .faults import FaultMap
@@ -214,11 +214,17 @@ class Shape:
 SINGLE_PHASE_SINGLE_STRING = Shape(phases=1, strings=1)
 
 
+class FunctionCode(IntEnum):
+    HOLDING = 0x03
+    INPUT = 0x04
+
+
 @dataclass(frozen=True)
 class Span:
     name: str
     first: int
     last: int
+    function: FunctionCode = FunctionCode.HOLDING
 
     def contains(self, *, address: int, words: int) -> bool:
         return self.first <= address and address + words - 1 <= self.last
@@ -251,6 +257,8 @@ class Replacement:
     encoding: str | None = None
     scale: float | None = None
     uncombined: bool = False
+    sum_of: tuple[str, ...] = ()
+    equipment: Equipment | None = None
 
 
 @dataclass(frozen=True)

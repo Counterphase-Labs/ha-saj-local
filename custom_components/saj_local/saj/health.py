@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .models import FunctionCode
+
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping, Sequence
 
@@ -29,6 +31,7 @@ class Refusal:
     count: int
     code: int
     retest_at: float | None
+    function: FunctionCode = FunctionCode.HOLDING
 
 
 @dataclass(frozen=True)
@@ -114,7 +117,14 @@ class ReadHealth:
             if refusal.retest_at is not None and refusal.retest_at <= now
         )
 
-    def record_refusal(self, *, key: str, code: int, now: float) -> bool:
+    def record_refusal(
+        self,
+        *,
+        key: str,
+        code: int,
+        now: float,
+        function: FunctionCode = FunctionCode.HOLDING,
+    ) -> bool:
         previous = self._refusals.get(key)
         count = 1 if previous is None else previous.count + 1
         suspended = count >= REFUSAL_THRESHOLD
@@ -122,6 +132,7 @@ class ReadHealth:
             count=count,
             code=code,
             retest_at=now + RETEST_PERIOD if suspended else None,
+            function=function,
         )
         return suspended and (previous is None or previous.retest_at is None)
 
@@ -138,9 +149,10 @@ class ReadHealth:
         now: float,
     ) -> frozenset[str]:
         self._detach(rows=rows)
+        function = rows[0].function
         if len(rows) > 1:
             for key in keys:
-                self._mark_unavailable(key=key, code=code)
+                self._mark_unavailable(key=key, code=code, function=function)
             lower, upper = halves(rows)
             link = _Link(gap=Break(before=lower[-1].end, after=upper[0].address))
             self._narrowing.extend(
@@ -149,7 +161,9 @@ class ReadHealth:
             return frozenset()
         self._narrowing.append(_Narrowing(rows=list(rows), link=None))
         return frozenset(
-            key for key in keys if self.record_refusal(key=key, code=code, now=now)
+            key
+            for key in keys
+            if self.record_refusal(key=key, code=code, now=now, function=function)
         )
 
     def record_request_read(self, *, rows: Sequence[Row]) -> None:
@@ -181,10 +195,11 @@ class ReadHealth:
             if not narrowing.rows:
                 self._narrowing.remove(narrowing)
 
-    def _mark_unavailable(self, *, key: str, code: int) -> None:
+    def _mark_unavailable(self, *, key: str, code: int, function: FunctionCode) -> None:
         previous = self._refusals.get(key)
         self._refusals[key] = Refusal(
             count=0 if previous is None else previous.count,
             code=code,
             retest_at=None if previous is None else previous.retest_at,
+            function=function,
         )

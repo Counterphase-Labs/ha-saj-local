@@ -27,7 +27,7 @@ The file holds:
 - the open repair issues, and how long the inverter has been failing;
 - the power control functions, which one is running, which one SAJ Local owns and the action that is outstanding for each schedule;
 - a snapshot of the raw words of every register that SAJ Local has read since the system loaded, with the age of each, so a maintainer can check a reading against the real device;
-- every request that got no usable answer, with the reason. A request that timed out looks different from a request the inverter refused, and the difference matters when another client holds the connection of the inverter.
+- every request that got no usable answer, with the reason. A request that timed out looks different from a request the inverter refused, and the difference matters when another client holds the connection of the inverter. Each refused entity, failed request and debug log line names the Modbus function of the request.
 
 The snapshot adds no request to the inverter. The snapshot starts empty each time the system loads.
 

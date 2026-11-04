@@ -12,6 +12,7 @@ The Protecting the inverter page lists the limits SAJ Local keeps on everything 
 - **No retries within a cycle.** After a failed read, the wait before the next attempt doubles from the shortest interval, up to 5 minutes. The wait survives reloads. The first good cycle reads everything again.
 - **Every wait has a time limit.** A stalled inverter ends a cycle as a failure and does not stop polling. A late or stray answer is discarded.
 - **A closed connection is reopened once.** That cycle then reads every enabled entity again, so no value is older than the reconnect.
+- **Two kinds of register read.** SAJ Local reads holding registers (Modbus function 03) and input registers (function 04). The HS3 serves the EV charger readings as input registers. Both kinds count against the 40 requests, and a refusal of one kind never suspends the other.
 - **At most 20 changes in 60 seconds.** See [changing settings](changing-settings.md#what-happens-to-a-change). A change over the limit is refused and not queued.
 
 ## When the inverter refuses a reading

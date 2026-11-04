@@ -81,7 +81,6 @@ Een voorvoegsel dat in Configureren is ingesteld komt na `saj_` in de ID van elk
 | PV2-spanning | `sensor.saj_pv2_voltage` | Sensor | V | HS3, H2 | PV-string 2 en hoger | Ja |
 | PV2-stroom | `sensor.saj_pv2_current` | Sensor | A | HS3, H2 | PV-string 2 en hoger | Ja |
 | PV2-vermogen | `sensor.saj_pv2_power` | Sensor | W | HS3, H2 | PV-string 2 en hoger | Ja |
-| Huisvermogen | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Ja |
 | Zonnevermogen | `sensor.saj_pv_power` | Sensor | W | HS3, H2 | - | Ja |
 | Omvormervermogen | `sensor.saj_inverter_power` | Sensor | W | HS3, H2 | - | Ja |
 | Zonne-energie vandaag | `sensor.saj_pv_energy_today` | Sensor | kWh | HS3, H2 | - | Ja |
@@ -194,6 +193,7 @@ Een voorvoegsel dat in Configureren is ingesteld komt na `saj_` in de ID van elk
 | Meter A status | `sensor.saj_meter_a_status` | Sensor | - | HS3, H2 | - | Nee |
 | Meter B status | `sensor.saj_meter_b_status` | Sensor | - | HS3, H2 | - | Nee |
 | Back-upbelastingvermogen | `sensor.saj_backup_load_power` | Sensor | W | HS3, H2 | - | Ja |
+| Huisvermogen | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Ja |
 | Terugstroommodus | `sensor.saj_reverse_flow_mode` | Sensor | - | H2 | - | Nee |
 | FCAS-frequentiehysterese | `sensor.saj_fcas_frequency_hysteresis` | Sensor | Hz | H2 | - | Nee |
 | Parallelrol | `sensor.saj_parallel_role` | Sensor | - | H2 | - | Nee |

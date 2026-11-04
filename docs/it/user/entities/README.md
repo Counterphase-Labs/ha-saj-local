@@ -11,7 +11,7 @@ Generato da `make docs`. Non modificare a mano.
 | Area | Entità | Che cosa contiene |
 | --- | --- | --- |
 | [Inverter e solare](inverter-and-pv.md) | 241 | Uscita dell'inverter, stringhe solari, porta di backup, contatori di energia, versioni e carico domestico |
-| [Rete e Contatore A](grid-and-meter-a.md) | 88 | Il collegamento alla rete e il Contatore A, il contatore di rete |
+| [Rete e Contatore A](grid-and-meter-a.md) | 101 | Il collegamento alla rete e il Contatore A, il contatore di rete |
 | [Contatore B](meter-b.md) | 22 | Il Contatore B, il secondo contatore che misura un inverter solare |
 | [Batteria](battery.md) | 133 | La batteria nel suo insieme |
 | [Moduli batteria](battery-packs.md) | 58 | Letture e identità di ogni modulo batteria |

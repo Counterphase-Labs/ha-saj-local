@@ -342,7 +342,7 @@ def _shipped_selection(
     [
         (HS3.key, "core", 14),
         (HS3.key, "every", 36),
-        (HS3.key, "fast", 1),
+        (HS3.key, "fast", 2),
         (H2.key, "core", 9),
         (H2.key, "every", 17),
         (H2.key, "fast", 1),

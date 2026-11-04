@@ -1853,6 +1853,7 @@ SINGLES: tuple[Definition, ...] = (
         equipment=Equipment.EV_CHARGER,
         quantity=Quantity.VOLTAGE,
         encoding=Encoding.U16,
+        scale=0.1,
         unit=Unit.VOLT,
     ),
     Definition(

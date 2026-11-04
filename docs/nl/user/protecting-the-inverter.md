@@ -12,6 +12,7 @@ De pagina De omvormer beschermen vermeldt de limieten die SAJ Local aanhoudt voo
 - **Geen nieuwe pogingen binnen een cyclus.** Na een mislukte uitlezing verdubbelt de wachttijd voor de volgende poging vanaf het kortste interval, tot 5 minuten. De wachttijd blijft bestaan over herladingen heen. De eerste goede cyclus leest alles opnieuw uit.
 - **Elke wachttijd heeft een tijdslimiet.** Een vastgelopen omvormer beëindigt een cyclus als mislukking en stopt de polling niet. Een laat of verdwaald antwoord wordt verworpen.
 - **Een gesloten verbinding wordt één keer heropend.** Die cyclus leest dan elke ingeschakelde entiteit opnieuw uit, zodat geen enkele waarde ouder is dan het herverbinden.
+- **Twee soorten registerlezingen.** SAJ Local leest houdregisters (Modbus-functie 03) en invoerregisters (functie 04). De HS3 levert de metingen van de EV-lader als invoerregisters. Beide soorten tellen mee voor de 40 verzoeken, en een weigering van de ene soort schort de andere nooit op.
 - **Hooguit 20 wijzigingen in 60 seconden.** Zie [instellingen wijzigen](changing-settings.md#wat-er-met-een-wijziging-gebeurt). Een wijziging boven de limiet wordt geweigerd en niet in de wachtrij gezet.
 
 ## Wanneer de omvormer een meting weigert

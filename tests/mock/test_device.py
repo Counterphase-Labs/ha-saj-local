@@ -1,7 +1,7 @@
 import pytest
 
 from saj_local_mock import device as device_module
-from saj_local_mock.device import Block, Device, initial_settings
+from saj_local_mock.device import Block, Device, InputBlock, initial_settings
 from saj_local_mock.exceptions import ControlError, ExceptionCode, ModbusError
 from saj_local_mock.registers import Access, Encoding, Field
 
@@ -112,6 +112,7 @@ def build(*, unavailable=None):
     blocks = (
         Block(start=0x100, end=0x10E, fields=fields),
         Block(start=0x200, end=0x201, fields=(), unavailable=unavailable),
+        InputBlock(start=0x3024, end=0x3025, fields=()),
     )
     settings = initial_settings(blocks=blocks)
     recorder = Recorder()
@@ -191,6 +192,20 @@ def test_reads_that_the_device_cannot_serve_produce_the_documented_exception(
     device, _, _ = build(unavailable=ExceptionCode.CHARGER_UNAVAILABLE)
 
     assert refusal(action=lambda: device.read(start=start, count=count)) is code
+
+
+def test_a_block_answers_only_its_own_read_function():
+    device, _, _ = build()
+
+    assert device.read(start=0x3024, count=2, function=0x04) == [0, 0]
+    assert device.read(start=0x100, count=1, function=0x03) == [125]
+    assert (
+        refusal(action=lambda: device.read(start=0x3024, count=2, function=0x03))
+        == 0x30
+    )
+    assert (
+        refusal(action=lambda: device.read(start=0x100, count=1, function=0x04)) == 0x01
+    )
 
 
 def test_a_refused_read_notifies_nobody():

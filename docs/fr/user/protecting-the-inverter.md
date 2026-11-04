@@ -12,6 +12,7 @@ La page Protéger l'onduleur liste les limites que SAJ Local applique à tout ce
 - **Aucune nouvelle tentative dans un cycle.** Après une lecture échouée, l'attente avant la tentative suivante double à partir du plus court intervalle, jusqu'à 5 minutes. L'attente survit aux rechargements. Le premier bon cycle relit tout.
 - **Chaque attente a une limite de temps.** Un onduleur bloqué met fin à un cycle comme un échec et n'arrête pas l'interrogation. Une réponse tardive ou parasite est écartée.
 - **Une connexion fermée est rouverte une fois.** Ce cycle relit alors chaque entité activée, pour qu'aucune valeur ne soit plus ancienne que la reconnexion.
+- **Deux types de lecture de registres.** SAJ Local lit des registres de maintien (fonction Modbus 03) et des registres d'entrée (fonction 04). Le HS3 sert les mesures de la borne de recharge VE comme registres d'entrée. Les deux types comptent dans les 40 requêtes, et le refus d'un type ne suspend jamais l'autre.
 - **Au plus 20 changements en 60 secondes.** Voir [modifier les réglages](changing-settings.md#ce-qui-arrive-à-un-changement). Un changement au-delà de la limite est refusé et non mis en file d'attente.
 
 ## Quand l'onduleur refuse une lecture

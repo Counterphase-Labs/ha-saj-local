@@ -6,7 +6,7 @@ Der Netzanschluss und Zähler A, der Netzzähler.
 
 Die Funktionsliste der Integration erklärt die Entitäten (Netz und Zähler A) in [Geräte und Entitäten](../../../../custom_components/saj_local/docs/features.md#devices-and-entities) und [Optionale Ausstattung](../../../../custom_components/saj_local/docs/features.md#optional-equipment).
 
-88 Entitäten. Erzeugt von `make docs`. Nicht von Hand bearbeiten.
+101 Entitäten. Erzeugt von `make docs`. Nicht von Hand bearbeiten.
 
 Ein in Konfigurieren gesetztes Präfix steht nach `saj_` in der ID jeder Entität (Netz und Zähler A), zum Beispiel `sensor.saj_house_grid_connection_countdown` mit dem Präfix `house`.
 
@@ -14,26 +14,14 @@ Ein in Konfigurieren gesetztes Präfix steht nach `saj_` in der ID jeder Entitä
 | --- | --- | --- | --- | --- | --- | --- |
 | Countdown der Netzzuschaltung | `sensor.saj_grid_connection_countdown` | Sensor | s | HS3, H2 | - | Nein |
 | Netzspannung L1 | `sensor.saj_grid_l1_voltage` | Sensor | V | HS3, H2 | - | Ja |
-| Netzstrom L1 | `sensor.saj_grid_l1_current` | Sensor | A | HS3, H2 | - | Nein |
 | Netzfrequenz L1 | `sensor.saj_grid_l1_frequency` | Sensor | Hz | HS3, H2 | - | Ja |
 | Netzgleichstrom L1 | `sensor.saj_grid_l1_dc_current` | Sensor | mA | HS3, H2 | - | Nein |
-| Netzleistung L1 | `sensor.saj_grid_l1_power` | Sensor | W | HS3, H2 | - | Nein |
-| Netzscheinleistung L1 | `sensor.saj_grid_l1_apparent_power` | Sensor | VA | HS3, H2 | - | Nein |
-| Netzleistungsfaktor L1 | `sensor.saj_grid_l1_power_factor` | Sensor | - | HS3, H2 | - | Nein |
 | Netzspannung L2 | `sensor.saj_grid_l2_voltage` | Sensor | V | HS3, H2 | Phase 2 und höher | Ja |
-| Netzstrom L2 | `sensor.saj_grid_l2_current` | Sensor | A | HS3, H2 | Phase 2 und höher | Nein |
 | Netzfrequenz L2 | `sensor.saj_grid_l2_frequency` | Sensor | Hz | HS3, H2 | Phase 2 und höher | Nein |
 | Netzgleichstrom L2 | `sensor.saj_grid_l2_dc_current` | Sensor | mA | HS3, H2 | Phase 2 und höher | Nein |
-| Netzleistung L2 | `sensor.saj_grid_l2_power` | Sensor | W | HS3, H2 | Phase 2 und höher | Nein |
-| Netzscheinleistung L2 | `sensor.saj_grid_l2_apparent_power` | Sensor | VA | HS3, H2 | Phase 2 und höher | Nein |
-| Netzleistungsfaktor L2 | `sensor.saj_grid_l2_power_factor` | Sensor | - | HS3, H2 | Phase 2 und höher | Nein |
 | Netzspannung L3 | `sensor.saj_grid_l3_voltage` | Sensor | V | HS3, H2 | Phase 3 und höher | Ja |
-| Netzstrom L3 | `sensor.saj_grid_l3_current` | Sensor | A | HS3, H2 | Phase 3 und höher | Nein |
 | Netzfrequenz L3 | `sensor.saj_grid_l3_frequency` | Sensor | Hz | HS3, H2 | Phase 3 und höher | Nein |
 | Netzgleichstrom L3 | `sensor.saj_grid_l3_dc_current` | Sensor | mA | HS3, H2 | Phase 3 und höher | Nein |
-| Netzleistung L3 | `sensor.saj_grid_l3_power` | Sensor | W | HS3, H2 | Phase 3 und höher | Nein |
-| Netzscheinleistung L3 | `sensor.saj_grid_l3_apparent_power` | Sensor | VA | HS3, H2 | Phase 3 und höher | Nein |
-| Netzleistungsfaktor L3 | `sensor.saj_grid_l3_power_factor` | Sensor | - | HS3, H2 | Phase 3 und höher | Nein |
 | Netzausgangsspannung L1 | `sensor.saj_grid_output_l1_voltage` | Sensor | V | HS3, H2 | - | Nein |
 | Netzausgangsstrom L1 | `sensor.saj_grid_output_l1_current` | Sensor | A | HS3, H2 | - | Nein |
 | Netzausgangsfrequenz L1 | `sensor.saj_grid_output_l1_frequency` | Sensor | Hz | HS3, H2 | - | Nein |
@@ -42,7 +30,6 @@ Ein in Konfigurieren gesetztes Präfix steht nach `saj_` in der ID jeder Entitä
 | Netzausgangsleistung L2 | `sensor.saj_grid_output_l2_power` | Sensor | W | HS3, H2 | Phase 2 und höher | Nein |
 | Netzausgangsspannung L3 | `sensor.saj_grid_output_l3_voltage` | Sensor | V | HS3, H2 | Phase 3 und höher | Nein |
 | Netzausgangsleistung L3 | `sensor.saj_grid_output_l3_power` | Sensor | W | HS3, H2 | Phase 3 und höher | Nein |
-| Netzleistung | `sensor.saj_grid_power` | Sensor | W | HS3, H2 | - | Ja |
 | Netzlastleistung | `sensor.saj_grid_load_power` | Sensor | W | HS3, H2 | - | Nein |
 | Netzeinspeiseenergie L1 heute | `sensor.saj_grid_l1_export_energy_today` | Sensor | kWh | HS3, H2 | - | Nein |
 | Netzeinspeiseenergie L1 diesen Monat | `sensor.saj_grid_l1_export_energy_month` | Sensor | kWh | HS3, H2 | - | Nein |
@@ -97,6 +84,32 @@ Ein in Konfigurieren gesetztes Präfix steht nach `saj_` in der ID jeder Entitä
 | Zähler A L1 Blindleistung | `sensor.saj_meter_a_l1_reactive_power` | Sensor | var | HS3 | Zähler A | Nein |
 | Zähler A L2 Blindleistung | `sensor.saj_meter_a_l2_reactive_power` | Sensor | var | HS3 | Zähler A; Phase 2 und höher | Nein |
 | Zähler A L3 Blindleistung | `sensor.saj_meter_a_l3_reactive_power` | Sensor | var | HS3 | Zähler A; Phase 3 und höher | Nein |
+| Netzscheinleistung L1 | `sensor.saj_grid_l1_apparent_power` | Sensor | VA | HS3 | Zähler A | Nein |
+| Netzstrom L1 | `sensor.saj_grid_l1_current` | Sensor | A | HS3 | Zähler A | Nein |
+| Netzleistung L1 | `sensor.saj_grid_l1_power` | Sensor | W | HS3 | Zähler A | Nein |
+| Netzleistungsfaktor L1 | `sensor.saj_grid_l1_power_factor` | Sensor | - | HS3 | Zähler A | Nein |
+| Netzscheinleistung L2 | `sensor.saj_grid_l2_apparent_power` | Sensor | VA | HS3 | Zähler A; Phase 2 und höher | Nein |
+| Netzstrom L2 | `sensor.saj_grid_l2_current` | Sensor | A | HS3 | Zähler A; Phase 2 und höher | Nein |
+| Netzleistung L2 | `sensor.saj_grid_l2_power` | Sensor | W | HS3 | Zähler A; Phase 2 und höher | Nein |
+| Netzleistungsfaktor L2 | `sensor.saj_grid_l2_power_factor` | Sensor | - | HS3 | Zähler A; Phase 2 und höher | Nein |
+| Netzscheinleistung L3 | `sensor.saj_grid_l3_apparent_power` | Sensor | VA | HS3 | Zähler A; Phase 3 und höher | Nein |
+| Netzstrom L3 | `sensor.saj_grid_l3_current` | Sensor | A | HS3 | Zähler A; Phase 3 und höher | Nein |
+| Netzleistung L3 | `sensor.saj_grid_l3_power` | Sensor | W | HS3 | Zähler A; Phase 3 und höher | Nein |
+| Netzleistungsfaktor L3 | `sensor.saj_grid_l3_power_factor` | Sensor | - | HS3 | Zähler A; Phase 3 und höher | Nein |
+| Netzleistung | `sensor.saj_grid_power` | Sensor | W | HS3 | Zähler A | Ja |
 | Zähler A Leistung | `sensor.saj_meter_a_power` | Sensor | W | HS3, H2 | Zähler A | Ja |
 | Netztyp | `sensor.saj_grid_type` | Sensor | - | H2 | - | Nein |
+| Netzstrom L1 | `sensor.saj_grid_l1_current` | Sensor | A | H2 | - | Nein |
+| Netzleistung L1 | `sensor.saj_grid_l1_power` | Sensor | W | H2 | - | Nein |
+| Netzscheinleistung L1 | `sensor.saj_grid_l1_apparent_power` | Sensor | VA | H2 | - | Nein |
+| Netzleistungsfaktor L1 | `sensor.saj_grid_l1_power_factor` | Sensor | - | H2 | - | Nein |
+| Netzstrom L2 | `sensor.saj_grid_l2_current` | Sensor | A | H2 | Phase 2 und höher | Nein |
+| Netzleistung L2 | `sensor.saj_grid_l2_power` | Sensor | W | H2 | Phase 2 und höher | Nein |
+| Netzscheinleistung L2 | `sensor.saj_grid_l2_apparent_power` | Sensor | VA | H2 | Phase 2 und höher | Nein |
+| Netzleistungsfaktor L2 | `sensor.saj_grid_l2_power_factor` | Sensor | - | H2 | Phase 2 und höher | Nein |
+| Netzstrom L3 | `sensor.saj_grid_l3_current` | Sensor | A | H2 | Phase 3 und höher | Nein |
+| Netzleistung L3 | `sensor.saj_grid_l3_power` | Sensor | W | H2 | Phase 3 und höher | Nein |
+| Netzscheinleistung L3 | `sensor.saj_grid_l3_apparent_power` | Sensor | VA | H2 | Phase 3 und höher | Nein |
+| Netzleistungsfaktor L3 | `sensor.saj_grid_l3_power_factor` | Sensor | - | H2 | Phase 3 und höher | Nein |
+| Netzleistung | `sensor.saj_grid_power` | Sensor | W | H2 | - | Ja |
 | Netzscheinleistung | `sensor.saj_grid_apparent_power` | Sensor | VA | H2 | - | Nein |

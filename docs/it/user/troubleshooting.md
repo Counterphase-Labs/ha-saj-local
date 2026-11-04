@@ -27,7 +27,7 @@ Il file contiene:
 - i problemi da riparare aperti, e da quanto tempo l'inverter sta fallendo;
 - le funzioni di controllo della potenza, quale è in esecuzione, quale è gestita da SAJ Local e l'azione in sospeso per ogni pianificazione;
 - un'istantanea delle parole grezze di ogni registro che SAJ Local ha letto da quando il sistema è stato caricato, con l'età di ciascuna, così un manutentore può confrontare una lettura con il dispositivo reale;
-- ogni richiesta che non ha ricevuto una risposta utilizzabile, con il motivo. Una richiesta scaduta ha un aspetto diverso da una richiesta che l'inverter ha rifiutato, e la differenza conta quando un altro client occupa la connessione dell'inverter.
+- ogni richiesta che non ha ricevuto una risposta utilizzabile, con il motivo. Una richiesta scaduta ha un aspetto diverso da una richiesta che l'inverter ha rifiutato, e la differenza conta quando un altro client occupa la connessione dell'inverter. Ogni entità rifiutata, ogni richiesta fallita e ogni riga del log di debug nomina la funzione Modbus della richiesta.
 
 L'istantanea non aggiunge alcuna richiesta all'inverter. L'istantanea parte vuota a ogni caricamento del sistema.
 

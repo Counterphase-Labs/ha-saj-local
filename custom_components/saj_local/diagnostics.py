@@ -79,6 +79,7 @@ async def async_get_config_entry_diagnostics(
         "last_cycle_read": sorted(coordinator.last_read),
         "refused_keys": {
             key: {
+                "function_code": int(refusal.function),
                 "exception_code": refusal.code,
                 "consecutive_refusals": refusal.count,
                 "suspended": refusal.retest_at is not None,
@@ -131,6 +132,7 @@ def _failure_entry(*, entry: FailureEntry) -> dict[str, Any]:
     return {
         "address": format(entry.address, ADDRESS_FORMAT),
         "count": entry.count,
+        "function_code": int(entry.function),
         "outcome": entry.outcome.value,
         "exception_code": entry.exception_code,
         "age_seconds": round(entry.age_seconds, AGE_DECIMALS),
@@ -211,6 +213,7 @@ def _break_summary(*, block: Break) -> dict[str, str]:
 def _region_summary(*, region: Region) -> dict[str, str | int]:
     return {
         **_break_summary(block=region.hull),
+        "function_code": int(region.rows[0].function),
         "rows": len(region.rows),
     }
 

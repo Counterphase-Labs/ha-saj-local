@@ -12,6 +12,7 @@ Die Seite Den Wechselrichter schützen listet die Grenzen auf, die SAJ Local fü
 - **Keine Wiederholungen innerhalb eines Zyklus.** Nach einem fehlgeschlagenen Lesen verdoppelt sich die Wartezeit vor dem nächsten Versuch, ausgehend vom kürzesten Intervall, bis zu 5 Minuten. Die Wartezeit übersteht Neuladevorgänge. Der erste gute Zyklus liest wieder alles.
 - **Jedes Warten hat ein Zeitlimit.** Ein hängender Wechselrichter beendet einen Zyklus als Fehlschlag und stoppt die Abfrage nicht. Eine späte oder verirrte Antwort wird verworfen.
 - **Eine geschlossene Verbindung wird einmal wieder geöffnet.** Dieser Zyklus liest dann jede aktivierte Entität erneut, daher ist kein Wert älter als die Wiederverbindung.
+- **Zwei Arten von Registerlesen.** SAJ Local liest Halteregister (Modbus-Funktion 03) und Eingangsregister (Funktion 04). Der HS3 liefert die Messwerte der EV-Ladestation als Eingangsregister. Beide Arten zählen zu den 40 Anfragen, und eine Verweigerung einer Art setzt die andere nie aus.
 - **Höchstens 20 Änderungen in 60 Sekunden.** Siehe [Einstellungen ändern](changing-settings.md#was-mit-einer-änderung-geschieht). Eine Änderung über dem Limit wird abgelehnt und nicht in eine Warteschlange gestellt.
 
 ## Wenn der Wechselrichter ein Lesen verweigert

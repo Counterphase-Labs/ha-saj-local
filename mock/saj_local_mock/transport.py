@@ -7,6 +7,7 @@ import struct
 import time
 from typing import TYPE_CHECKING, Protocol
 
+from .device import READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS
 from .exceptions import ExceptionCode, ModbusError
 from .link import (
     Action,
@@ -32,7 +33,6 @@ PROTOCOL_ID = 0
 MIN_LENGTH_FIELD = 2
 MAX_LENGTH_FIELD = 254
 EXCEPTION_FLAG = 0x80
-READ_HOLDING_REGISTERS = 0x03
 WRITE_SINGLE_REGISTER = 0x06
 WRITE_MULTIPLE_REGISTERS = 0x10
 MAX_READ_COUNT = 125
@@ -46,7 +46,7 @@ SPAN_BYTES = 4
 
 
 class RegisterBank(Protocol):
-    def read(self, *, start: int, count: int) -> list[int]: ...
+    def read(self, *, start: int, count: int, function: int) -> list[int]: ...
 
     def write(self, *, start: int, words: list[int]) -> None: ...
 
@@ -59,14 +59,24 @@ def _register_bytes(*, words: list[int]) -> bytes:
     return struct.pack(f">{len(words)}H", *words)
 
 
-def _read_response(*, bank: RegisterBank, body: bytes) -> bytes:
+def _read_response(*, bank: RegisterBank, body: bytes, function: int) -> bytes:
     if len(body) != struct.calcsize(">HH"):
         raise MalformedFrameError
     start, count = struct.unpack(">HH", body)
     if not 1 <= count <= MAX_READ_COUNT:
         raise ModbusError(code=ExceptionCode.ILLEGAL_DATA_VALUE)
-    payload = _register_bytes(words=bank.read(start=start, count=count))
-    return bytes([READ_HOLDING_REGISTERS, len(payload)]) + payload
+    payload = _register_bytes(
+        words=bank.read(start=start, count=count, function=function)
+    )
+    return bytes([function, len(payload)]) + payload
+
+
+def _read_holding_response(*, bank: RegisterBank, body: bytes) -> bytes:
+    return _read_response(bank=bank, body=body, function=READ_HOLDING_REGISTERS)
+
+
+def _read_input_response(*, bank: RegisterBank, body: bytes) -> bytes:
+    return _read_response(bank=bank, body=body, function=READ_INPUT_REGISTERS)
 
 
 def _write_single_response(*, bank: RegisterBank, body: bytes) -> bytes:
@@ -93,7 +103,8 @@ def _write_multiple_response(*, bank: RegisterBank, body: bytes) -> bytes:
 
 
 _HANDLERS = {
-    READ_HOLDING_REGISTERS: _read_response,
+    READ_HOLDING_REGISTERS: _read_holding_response,
+    READ_INPUT_REGISTERS: _read_input_response,
     WRITE_SINGLE_REGISTER: _write_single_response,
     WRITE_MULTIPLE_REGISTERS: _write_multiple_response,
 }
@@ -129,6 +140,7 @@ def _frame(*, transaction_id: int, unit_id: int, pdu: bytes) -> bytes:
 
 _OPERATIONS = {
     READ_HOLDING_REGISTERS: Operation.READ,
+    READ_INPUT_REGISTERS: Operation.READ,
     WRITE_SINGLE_REGISTER: Operation.WRITE,
     WRITE_MULTIPLE_REGISTERS: Operation.WRITE,
 }
@@ -173,7 +185,7 @@ def _request_span(*, function: int, body: bytes) -> tuple[int, int]:
 def _transferred_words(
     *, function: int, body: bytes, response: bytes
 ) -> tuple[int, ...]:
-    if function == READ_HOLDING_REGISTERS:
+    if function in {READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS}:
         data = response[2:]
     elif function == WRITE_SINGLE_REGISTER:
         data = body[2:]

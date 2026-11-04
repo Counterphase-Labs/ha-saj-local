@@ -81,7 +81,6 @@ A prefix set in Configure goes after `saj_` in the ID of every Inverter and PV e
 | PV2 voltage | `sensor.saj_pv2_voltage` | Sensor | V | HS3, H2 | PV string 2 and above | Yes |
 | PV2 current | `sensor.saj_pv2_current` | Sensor | A | HS3, H2 | PV string 2 and above | Yes |
 | PV2 power | `sensor.saj_pv2_power` | Sensor | W | HS3, H2 | PV string 2 and above | Yes |
-| Household load power | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Yes |
 | Solar power | `sensor.saj_pv_power` | Sensor | W | HS3, H2 | - | Yes |
 | Inverter power | `sensor.saj_inverter_power` | Sensor | W | HS3, H2 | - | Yes |
 | Solar energy today | `sensor.saj_pv_energy_today` | Sensor | kWh | HS3, H2 | - | Yes |
@@ -194,6 +193,7 @@ A prefix set in Configure goes after `saj_` in the ID of every Inverter and PV e
 | Meter A status | `sensor.saj_meter_a_status` | Sensor | - | HS3, H2 | - | No |
 | Meter B status | `sensor.saj_meter_b_status` | Sensor | - | HS3, H2 | - | No |
 | Backup load power | `sensor.saj_backup_load_power` | Sensor | W | HS3, H2 | - | Yes |
+| Household load power | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Yes |
 | Reverse flow mode | `sensor.saj_reverse_flow_mode` | Sensor | - | H2 | - | No |
 | FCAS frequency hysteresis | `sensor.saj_fcas_frequency_hysteresis` | Sensor | Hz | H2 | - | No |
 | Parallel role | `sensor.saj_parallel_role` | Sensor | - | H2 | - | No |

@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from saj_local_mock.device import Block
+from saj_local_mock.device import Block, InputBlock
 from saj_local_mock.exceptions import ExceptionCode
 from saj_local_mock.models import MODELS, ModelSpec
 
@@ -63,7 +63,10 @@ def build_blocks(*, scenario: Scenario) -> tuple[Block, ...]:
             end=0x4176,
             fields=tuple(
                 common.realtime_energy_fields(
-                    scenario=scenario, phases=SPEC.phases, extended=True
+                    scenario=scenario,
+                    phases=SPEC.phases,
+                    extended=True,
+                    house_flows=True,
                 ),
             ),
             name="Realtime data",
@@ -86,7 +89,7 @@ def build_blocks(*, scenario: Scenario) -> tuple[Block, ...]:
             fields=tuple(hs3_equipment.ev_settings_fields(scenario=scenario)),
             name="EV charger settings",
         ),
-        Block(
+        InputBlock(
             start=0x3024,
             end=0x30BB,
             fields=tuple(hs3_equipment.ev_data_fields()),

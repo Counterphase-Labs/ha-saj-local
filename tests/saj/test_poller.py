@@ -9,6 +9,7 @@ from saj.device import Device
 from saj.errors import UnsupportedDeviceError
 from saj.guard import EndpointGuard
 from saj.health import REFUSAL_THRESHOLD, Break, ReadHealth, Refusal, Region
+from saj.models import FunctionCode
 from saj.models.hs3 import PROFILE as HS3
 from saj.poller import (
     RECONNECT_REQUESTS,
@@ -57,6 +58,10 @@ class FakeClient:
 
     async def read_holding_registers(self, address: int, count: int) -> tuple[int, ...]:
         self.events.append("read")
+        return (address,) * count
+
+    async def read_input_registers(self, address: int, count: int) -> tuple[int, ...]:
+        self.events.append("read input")
         return (address,) * count
 
 
@@ -415,7 +420,10 @@ async def test_many_keys_suspended_or_lifted_together_make_one_line_each(caplog)
 
     assert [r.getMessage() for r in caplog.records] == [
         f"{LABEL}: Sensors a, d answer again and are no longer suspended",
-        f"{LABEL}: Sensors b, c suspended after repeated refusals (code 5)",
+        (
+            f"{LABEL}: Sensors b, c suspended after repeated refusals of function"
+            " 0x03 (code 5)"
+        ),
     ]
 
 
@@ -968,10 +976,51 @@ async def test_a_poll_logs_one_line_with_its_cadences_requests_duration_and_next
 
     assert _poller_debug(caplog) == [
         (
-            f"{LABEL}: Poll of cadences ['10 s']: {LOAD_ADDRESS:#06x}+8 ok; "
-            "took 0.0 s; next wake-up in 10.0 s"
+            f"{LABEL}: Poll of cadences ['10 s']: {LOAD_ADDRESS:#06x}+8 "
+            "function 0x03 ok; took 0.0 s; next wake-up in 10.0 s"
         )
     ]
+
+
+async def test_an_input_register_request_is_logged_with_its_function_code(caplog):
+    harness = Harness()
+    harness.schedule.due_keys = frozenset({"a"})
+
+    async def read_input(*, client, **_):
+        await client.read_input_registers(address=0x3024, count=2)
+        return _readout(a=1)
+
+    harness.read = read_input
+
+    with caplog.at_level(logging.DEBUG, logger="saj.poller"):
+        await harness.poller().run(enabled={"a"})
+
+    assert harness.client.events == ["read input"]
+    assert "0x3024+2 function 0x04 ok" in _poller_debug(caplog)[-1]
+
+
+async def test_a_refused_input_request_is_logged_with_its_function_code(caplog):
+    harness = Harness()
+    harness.schedule.due_keys = frozenset({"a"})
+    rows = tuple(
+        Row(address=address, words=1, function=FunctionCode.INPUT)
+        for address in (0x3024, 0x3025)
+    )
+    harness.outcomes = [
+        Readout(
+            values={},
+            refusals={"a": 48},
+            outcomes=(RequestOutcome(rows=rows, keys=frozenset({"a"}), code=48),),
+        )
+    ]
+
+    with caplog.at_level(logging.DEBUG, logger="saj.poller"):
+        await harness.poller().run(enabled={"a"})
+
+    assert (
+        f"{LABEL}: Narrowing refused request 0x3024+2 of function 0x04"
+        " (exception 48) into 0x3024+1 and 0x3025+1"
+    ) in _poller_debug(caplog)
 
 
 async def test_a_refused_request_is_listed_with_its_code_and_its_narrowing_logged(
@@ -989,11 +1038,12 @@ async def test_a_refused_request_is_listed_with_its_code_and_its_narrowing_logge
     assert _poller_debug(caplog) == [
         (
             f"{LABEL}: Narrowing refused request {LOAD_ADDRESS:#06x}+8 "
-            f"(exception 48) into {LOAD_ADDRESS:#06x}+1 and {PV_ADDRESS:#06x}+3"
+            f"of function 0x03 (exception 48) into {LOAD_ADDRESS:#06x}+1"
+            f" and {PV_ADDRESS:#06x}+3"
         ),
         (
             f"{LABEL}: Poll of cadences ['10 s']: {LOAD_ADDRESS:#06x}+8 "
-            "exception 48; took 0.0 s; next wake-up in 10.0 s"
+            "function 0x03 exception 48; took 0.0 s; next wake-up in 10.0 s"
         ),
     ]
 
@@ -1010,8 +1060,8 @@ async def test_a_failed_poll_still_logs_its_line_after_the_back_off(caplog):
     assert _poller_debug(caplog) == [
         f"{LABEL}: Backing off for 10 s after 1 consecutive failed polls",
         (
-            f"{LABEL}: Poll of cadences ['10 s']: {LOAD_ADDRESS:#06x}+8 timeout; "
-            "took 0.0 s; next wake-up in 10.0 s"
+            f"{LABEL}: Poll of cadences ['10 s']: {LOAD_ADDRESS:#06x}+8 "
+            "function 0x03 timeout; took 0.0 s; next wake-up in 10.0 s"
         ),
     ]
 
@@ -1038,7 +1088,7 @@ async def test_a_poll_cut_short_by_its_deadline_lists_the_pending_request_as_tim
     ):
         await poller.run(enabled=POWER_KEYS)
 
-    assert f"{LOAD_ADDRESS:#06x}+8 timeout" in _poller_debug(caplog)[-1]
+    assert f"{LOAD_ADDRESS:#06x}+8 function 0x03 timeout" in _poller_debug(caplog)[-1]
 
 
 async def test_the_back_off_after_a_link_failure_logs_the_delay_and_failure_count(

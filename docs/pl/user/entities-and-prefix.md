@@ -24,6 +24,8 @@ Moc baterii i moc sieci używają jednego znaku na każdym modelu, więc odczyt 
 - **Moc sieci** jest dodatnia, gdy system oddaje moc, i ujemna, gdy system pobiera moc. Licznik A stosuje znak sieci.
 - **Licznik B** jest dodatni, gdy falownik solarny, który mierzy Licznik B, wytwarza moc.
 
+W HS3 moc sieci to suma Licznika A, a moc fazowa sieci, moc pozorna, prąd i współczynnik mocy pochodzą z odpowiedniej fazy Licznika A, ponieważ rejestry sieci w HS3 zawierają wartości falownika. HS3 bez Licznika A nie ma tych encji. Moc obciążenia domu to suma trzech mocy fazowych wyjścia sieciowego.
+
 Wartości zadane [sterowania mocą](power-control.md) stosują znaki odczytów.
 
 ## Prefiks

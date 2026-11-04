@@ -81,7 +81,6 @@ Ein in Konfigurieren gesetztes Präfix steht nach `saj_` in der ID jeder Entitä
 | PV2-Spannung | `sensor.saj_pv2_voltage` | Sensor | V | HS3, H2 | PV-String 2 und höher | Ja |
 | PV2-Strom | `sensor.saj_pv2_current` | Sensor | A | HS3, H2 | PV-String 2 und höher | Ja |
 | PV2-Leistung | `sensor.saj_pv2_power` | Sensor | W | HS3, H2 | PV-String 2 und höher | Ja |
-| Hauslastleistung | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Ja |
 | Solarleistung | `sensor.saj_pv_power` | Sensor | W | HS3, H2 | - | Ja |
 | Wechselrichterleistung | `sensor.saj_inverter_power` | Sensor | W | HS3, H2 | - | Ja |
 | Solarenergie heute | `sensor.saj_pv_energy_today` | Sensor | kWh | HS3, H2 | - | Ja |
@@ -194,6 +193,7 @@ Ein in Konfigurieren gesetztes Präfix steht nach `saj_` in der ID jeder Entitä
 | Zähler A Status | `sensor.saj_meter_a_status` | Sensor | - | HS3, H2 | - | Nein |
 | Zähler B Status | `sensor.saj_meter_b_status` | Sensor | - | HS3, H2 | - | Nein |
 | Notstromlastleistung | `sensor.saj_backup_load_power` | Sensor | W | HS3, H2 | - | Ja |
+| Hauslastleistung | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Ja |
 | Rückstrommodus | `sensor.saj_reverse_flow_mode` | Sensor | - | H2 | - | Nein |
 | FCAS-Frequenzhysterese | `sensor.saj_fcas_frequency_hysteresis` | Sensor | Hz | H2 | - | Nein |
 | Parallelrolle | `sensor.saj_parallel_role` | Sensor | - | H2 | - | Nein |

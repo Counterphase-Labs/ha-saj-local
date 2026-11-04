@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from custom_components.saj_local.saj.models import Profile
 
 LAST_ADDRESS = 0xFFFF
+ADDRESSES_OF_COMBINED_KEYS = {"grid_power": 0x40A7, "load_power": 0x40A0}
 
 
 def profile(
@@ -52,7 +53,7 @@ def profile(
             replace(
                 template,
                 key=register.key,
-                address=register.address,
+                address=ADDRESSES_OF_COMBINED_KEYS.get(register.key, register.address),
                 evidence=register.evidence,
             )
             for register in chosen

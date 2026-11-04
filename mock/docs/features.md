@@ -13,6 +13,8 @@ Requirements: [Simulated models](requirements.md#simulated-models)
 - The simulator plays a three-phase HS3 of 5 to 12 kW, or a single-phase H2 of 3 to 6 kW, each reporting its own device type and serial.
 - Each simulator answers Modbus TCP reads and writes on its own port and unit ID, and accepts two clients at once by default.
 - The simulator serves the registers each model documents. The HS3 also answers a set of undocumented settings registers with fixed values.
+- On the HS3, the registers that real units serve with other meanings are served that way: the load power register holds solar plus battery power, the grid power register and the grid phase power registers hold inverter values, and the on-grid output phase powers hold the household load.
+- On the HS3, the EV charger readings answer Modbus function 04 and are refused on function 03 with exception code 48, the high byte of the address. A read with the wrong function on any block is refused the same way.
 - Solar, household load, battery, grid, backup load, meters, EV charger and parallel readings are worked out together, so the readings balance.
 - Written settings change what the simulated system does: the self-use, time-of-use, backup and EMS application modes, the time-of-use slots, the battery limits, the export limits and EMS control all steer the energy flows.
 - A Docker health check confirms the simulator answers a Modbus read of the device type.

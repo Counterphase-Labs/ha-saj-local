@@ -81,7 +81,6 @@ Prefiks ustawiony w Skonfiguruj trafia po `saj_` w ID każdej encji: Falownik i 
 | Napięcie PV2 | `sensor.saj_pv2_voltage` | Sensor | V | HS3, H2 | Ciąg paneli PV 2 i wyższe | Tak |
 | Prąd PV2 | `sensor.saj_pv2_current` | Sensor | A | HS3, H2 | Ciąg paneli PV 2 i wyższe | Tak |
 | Moc PV2 | `sensor.saj_pv2_power` | Sensor | W | HS3, H2 | Ciąg paneli PV 2 i wyższe | Tak |
-| Moc obciążenia domu | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Tak |
 | Moc słoneczna | `sensor.saj_pv_power` | Sensor | W | HS3, H2 | - | Tak |
 | Moc falownika | `sensor.saj_inverter_power` | Sensor | W | HS3, H2 | - | Tak |
 | Energia słoneczna dzisiaj | `sensor.saj_pv_energy_today` | Sensor | kWh | HS3, H2 | - | Tak |
@@ -194,6 +193,7 @@ Prefiks ustawiony w Skonfiguruj trafia po `saj_` w ID każdej encji: Falownik i 
 | Stan licznika A | `sensor.saj_meter_a_status` | Sensor | - | HS3, H2 | - | Nie |
 | Stan licznika B | `sensor.saj_meter_b_status` | Sensor | - | HS3, H2 | - | Nie |
 | Moc odbiorów awaryjnych | `sensor.saj_backup_load_power` | Sensor | W | HS3, H2 | - | Tak |
+| Moc obciążenia domu | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Tak |
 | Tryb przepływu zwrotnego | `sensor.saj_reverse_flow_mode` | Sensor | - | H2 | - | Nie |
 | Histereza częstotliwości FCAS | `sensor.saj_fcas_frequency_hysteresis` | Sensor | Hz | H2 | - | Nie |
 | Rola w systemie równoległym | `sensor.saj_parallel_role` | Sensor | - | H2 | - | Nie |

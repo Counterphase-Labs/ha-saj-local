@@ -11,7 +11,7 @@ Generado por `make docs`. No editar a mano.
 | Área | Entidades | Qué contiene |
 | --- | --- | --- |
 | [Inversor y PV](inverter-and-pv.md) | 241 | Salida del inversor, strings solares, puerto de respaldo, contadores de energía, versiones y la carga doméstica |
-| [Red y Contador A](grid-and-meter-a.md) | 88 | La conexión a la red y el Contador A, el contador de la red |
+| [Red y Contador A](grid-and-meter-a.md) | 101 | La conexión a la red y el Contador A, el contador de la red |
 | [Contador B](meter-b.md) | 22 | El Contador B, el segundo contador, que mide un inversor solar |
 | [Batería](battery.md) | 133 | La batería en conjunto |
 | [Módulos de batería](battery-packs.md) | 58 | Lecturas e identidad de cada módulo de batería |

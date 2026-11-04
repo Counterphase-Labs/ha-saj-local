@@ -24,6 +24,8 @@ La potenza della batteria e la potenza della rete usano un solo segno su ogni mo
 - **La potenza della rete** è positiva mentre il sistema immette ed è negativa mentre il sistema preleva. Il Contatore A segue il segno della rete.
 - **Il Contatore B** è positivo mentre produce l'inverter solare che il Contatore B misura.
 
+Sull'HS3, la potenza di rete è il totale del Contatore A, e la potenza per fase di rete, la potenza apparente, la corrente e il fattore di potenza vengono dalla fase corrispondente del Contatore A, perché i registri di rete dell'HS3 contengono valori dell'inverter. Un HS3 senza Contatore A non ha queste entità. La potenza del carico domestico è la somma delle tre potenze di fase di uscita in rete.
+
 Gli obiettivi del [controllo della potenza](power-control.md) seguono i segni delle letture.
 
 ## Il prefisso

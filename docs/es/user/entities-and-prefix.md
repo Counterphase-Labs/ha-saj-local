@@ -24,6 +24,8 @@ La potencia de la batería y la potencia de la red usan un único signo en todos
 - **La potencia de la red** es positiva mientras el sistema exporta y negativa mientras el sistema importa. El Contador A sigue el signo de la red.
 - **El Contador B** es positivo mientras genera el inversor solar que mide el Contador B.
 
+En el HS3, la potencia de red es el total del Contador A, y la potencia por fase de red, la potencia aparente, la corriente y el factor de potencia vienen de la fase correspondiente del Contador A, porque los registros de red del HS3 contienen valores del inversor. Un HS3 sin Contador A no tiene estas entidades. La potencia de la carga del hogar es la suma de las tres potencias de fase de salida conectada a la red.
+
 Los objetivos del [control de potencia](power-control.md) siguen los signos de las lecturas.
 
 ## El prefijo

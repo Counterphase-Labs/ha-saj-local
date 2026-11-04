@@ -27,7 +27,7 @@ Le fichier contient :
 - les problèmes de réparation ouverts, et depuis combien de temps l'onduleur est en échec ;
 - les fonctions de pilotage de puissance, laquelle s'exécute, laquelle SAJ Local possède et l'action en attente pour chaque programme ;
 - un instantané des mots bruts de chaque registre que SAJ Local a lu depuis le chargement du système, avec l'ancienneté de chacun, pour qu'un mainteneur puisse comparer une mesure à l'appareil réel ;
-- chaque requête qui n'a reçu aucune réponse utilisable, avec la raison. Une requête qui a expiré se distingue d'une requête que l'onduleur a refusée, et la différence compte quand un autre client tient la connexion de l'onduleur.
+- chaque requête qui n'a reçu aucune réponse utilisable, avec la raison. Une requête qui a expiré se distingue d'une requête que l'onduleur a refusée, et la différence compte quand un autre client tient la connexion de l'onduleur. Chaque entité refusée, chaque requête en échec et chaque ligne du journal de débogage nomme la fonction Modbus de la requête.
 
 L'instantané n'ajoute aucune requête vers l'onduleur. L'instantané repart de zéro à chaque chargement du système.
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, NoReturn, Protocol
 
 from .client import ConnectionReason, ModbusError
@@ -12,6 +13,7 @@ from .health import halves
 from .load import planned_load
 from .log import LabelledLogger
 from .memory import FailureOutcome
+from .models import FunctionCode
 from .telemetry import plan_reads, read_telemetry
 
 if TYPE_CHECKING:
@@ -123,10 +125,14 @@ def _failure_label(error: ModbusError) -> str:
 class _Request:
     address: int
     count: int
+    function: FunctionCode
     outcome: str
 
     def describe(self) -> str:
-        return f"{self.address:#06x}+{self.count} {self.outcome}"
+        return (
+            f"{self.address:#06x}+{self.count} "
+            f"function {self.function:#04x} {self.outcome}"
+        )
 
 
 @dataclass
@@ -144,26 +150,40 @@ class _CountingReader:
         self.requests = 0
 
     async def read_holding_registers(self, address: int, count: int) -> tuple[int, ...]:
+        return await self._read(
+            function=FunctionCode.HOLDING,
+            read=self._client.read_holding_registers,
+            address=address,
+            count=count,
+        )
+
+    async def read_input_registers(self, address: int, count: int) -> tuple[int, ...]:
+        return await self._read(
+            function=FunctionCode.INPUT,
+            read=self._client.read_input_registers,
+            address=address,
+            count=count,
+        )
+
+    async def _read(
+        self,
+        *,
+        function: FunctionCode,
+        read: Callable[..., Awaitable[tuple[int, ...]]],
+        address: int,
+        count: int,
+    ) -> tuple[int, ...]:
         self.requests += 1
+        request = partial(_Request, address=address, count=count, function=function)
         try:
-            words = await self._client.read_holding_registers(
-                address=address, count=count
-            )
+            words = await read(address=address, count=count)
         except ModbusError as err:
-            self._poll.requests.append(
-                _Request(address=address, count=count, outcome=_failure_label(err))
-            )
+            self._poll.requests.append(request(outcome=_failure_label(err)))
             raise
         except asyncio.CancelledError:
-            self._poll.requests.append(
-                _Request(
-                    address=address, count=count, outcome=FailureOutcome.TIMEOUT.value
-                )
-            )
+            self._poll.requests.append(request(outcome=FailureOutcome.TIMEOUT.value))
             raise
-        self._poll.requests.append(
-            _Request(address=address, count=count, outcome=REQUEST_ANSWERED)
-        )
+        self._poll.requests.append(request(outcome=REQUEST_ANSWERED))
         return words
 
 
@@ -422,16 +442,20 @@ class Poller:
             if len(outcome.rows) > 1:
                 lower, upper = halves(outcome.rows)
                 self._log.debug(
-                    "Narrowing refused request %s (exception %s) into %s and %s",
+                    "Narrowing refused request %s of function %#04x"
+                    " (exception %s) into %s and %s",
                     _span(rows=outcome.rows),
+                    outcome.rows[0].function,
                     outcome.code,
                     _span(rows=lower),
                     _span(rows=upper),
                 )
             if suspended:
                 self._log.warning(
-                    "Sensors %s suspended after repeated refusals (code %s)",
+                    "Sensors %s suspended after repeated refusals of function %#04x"
+                    " (code %s)",
                     ", ".join(sorted(suspended)),
+                    outcome.rows[0].function,
                     outcome.code,
                 )
 

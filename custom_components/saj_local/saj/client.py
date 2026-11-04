@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Protocol
 from .budget import RequestBudget
 from .log import LabelledLogger
 from .memory import FailureOutcome, RegisterMemory
+from .models import FunctionCode
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterator, Sequence
@@ -22,7 +23,6 @@ _LOGGER = logging.getLogger(__name__)
 
 MBAP_HEADER_SIZE = 7
 PROTOCOL_IDENTIFIER = 0
-READ_HOLDING_REGISTERS = 0x03
 WRITE_SINGLE_REGISTER = 0x06
 WRITE_MULTIPLE_REGISTERS = 0x10
 EXCEPTION_FLAG = 0x80
@@ -109,6 +109,10 @@ class RegisterReader(Protocol):
         self, address: int, count: int
     ) -> tuple[int, ...]: ...
 
+    async def read_input_registers(
+        self, address: int, count: int
+    ) -> tuple[int, ...]: ...
+
 
 class RegisterWriter(Protocol):
     async def write_single_register(self, address: int, value: int) -> None: ...
@@ -176,26 +180,43 @@ class ModbusTcpClient:
         self._reason = ConnectionReason.RECONNECT
 
     async def read_holding_registers(self, address: int, count: int) -> tuple[int, ...]:
+        return await self._read(
+            function=FunctionCode.HOLDING, address=address, count=count
+        )
+
+    async def read_input_registers(self, address: int, count: int) -> tuple[int, ...]:
+        return await self._read(
+            function=FunctionCode.INPUT, address=address, count=count
+        )
+
+    async def _read(
+        self, *, function: FunctionCode, address: int, count: int
+    ) -> tuple[int, ...]:
         self._require_span(address=address, count=count, limit=MAX_READ_REGISTERS)
-        pdu = struct.pack(">BHH", READ_HOLDING_REGISTERS, address, count)
+        pdu = struct.pack(">BHH", function, address, count)
         try:
             words = await self._request(
-                pdu=pdu, interpret=partial(_registers_of, count=count)
+                pdu=pdu,
+                interpret=partial(_registers_of, count=count, function=function),
             )
         except ModbusError as err:
             self.memory.record_failure(
                 address=address,
                 count=count,
+                function=function,
                 outcome=err.failure_outcome,
                 exception_code=err.exception_code,
             )
             raise
         except asyncio.CancelledError:
             self.memory.record_failure(
-                address=address, count=count, outcome=FailureOutcome.TIMEOUT
+                address=address,
+                count=count,
+                function=function,
+                outcome=FailureOutcome.TIMEOUT,
             )
             raise
-        self.memory.record_answer(address=address, words=words)
+        self.memory.record_answer(address=address, words=words, function=function)
         return words
 
     @contextmanager
@@ -384,10 +405,12 @@ class ModbusTcpClient:
             await asyncio.wait_for(writer.wait_closed(), timeout=self.timeout)
 
 
-def _registers_of(body: bytes, *, count: int) -> tuple[int, ...]:
+def _registers_of(
+    body: bytes, *, count: int, function: FunctionCode
+) -> tuple[int, ...]:
     expected_bytes = count * REGISTER_WORD_SIZE
     if (
-        body[0] != READ_HOLDING_REGISTERS
+        body[0] != function
         or len(body) != expected_bytes + 2
         or body[1] != expected_bytes
     ):

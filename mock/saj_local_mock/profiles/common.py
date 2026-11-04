@@ -183,8 +183,10 @@ def factory_command_fields() -> list[Field]:
     ]
 
 
-def _grid_ports(*, phases: int) -> list[Field]:
+def _grid_ports(*, phases: int, house_flows: bool) -> list[Field]:
     fields: list[Field] = []
+    grid_power_group = "inv" if house_flows else "grid"
+    side_power_group = "load" if house_flows else "side"
 
     def key(*, group: str, phase: int, suffix: str) -> str:
         return phase_key(group=group, phase=phase, suffix=suffix, phases=phases)
@@ -220,13 +222,13 @@ def _grid_ports(*, phases: int) -> list[Field]:
             live(
                 address=base + 4,
                 name=f"{name}_grid_power",
-                source=key(group="grid", phase=phase, suffix="w"),
+                source=key(group=grid_power_group, phase=phase, suffix="w"),
                 enc=I16,
             ),
             live(
                 address=base + 5,
                 name=f"{name}_grid_apparent",
-                source=key(group="grid", phase=phase, suffix="va"),
+                source=key(group=grid_power_group, phase=phase, suffix="va"),
             ),
             live(
                 address=base + 6,
@@ -328,7 +330,7 @@ def _grid_ports(*, phases: int) -> list[Field]:
         live(
             address=0x4090,
             name="R_side_power",
-            source=key(group="side", phase=0, suffix="w"),
+            source=key(group=side_power_group, phase=0, suffix="w"),
         ),
         live(
             address=0x4091,
@@ -339,7 +341,7 @@ def _grid_ports(*, phases: int) -> list[Field]:
         live(
             address=0x4092,
             name="S_side_power",
-            source=key(group="side", phase=1, suffix="w"),
+            source=key(group=side_power_group, phase=1, suffix="w"),
         ),
         live(
             address=0x4093,
@@ -350,7 +352,7 @@ def _grid_ports(*, phases: int) -> list[Field]:
         live(
             address=0x4094,
             name="T_side_power",
-            source=key(group="side", phase=THIRD_PHASE, suffix="w"),
+            source=key(group=side_power_group, phase=THIRD_PHASE, suffix="w"),
         ),
     ]
     return fields
@@ -468,7 +470,9 @@ def _status_and_mirrors(*, scenario: Scenario) -> list[Field]:
     ]
 
 
-def _battery_and_power() -> list[Field]:
+def _battery_and_power(*, house_flows: bool) -> list[Field]:
+    dc_input_source = "inverter_w" if house_flows else "load_w"
+    grid_total = "inverter_w" if house_flows else "grid_export_w"
     return [
         live(address=0x4067, name="bus_voltage_master", source="bus_v", scale=0.1),
         live(address=0x4068, name="bus_voltage_slave", source="bus_v", scale=0.1),
@@ -503,17 +507,15 @@ def _battery_and_power() -> list[Field]:
         ),
         live(address=0x4097, name="direction_grid", source="direction_grid", enc=I16),
         live(address=0x4098, name="direction_output", source="direction_output"),
-        live(address=0x40A0, name="total_load_power", source="load_w", enc=I16),
+        live(address=0x40A0, name="total_load_power", source=dc_input_source, enc=I16),
         live(address=0x40A1, name="ct_grid_power", source="ct_grid_w", enc=I16),
         live(address=0x40A2, name="ct_grid_apparent", source="ct_grid_w", enc=I16),
         live(address=0x40A3, name="ct_pv_power", source="ext_pv_w", enc=I16),
         live(address=0x40A4, name="ct_pv_apparent", source="ext_pv_w", enc=I16),
         live(address=0x40A5, name="pv_power", source="pv_w", enc=I16),
         live(address=0x40A6, name="battery_total_power", source="battery_w", enc=I16),
-        live(address=0x40A7, name="grid_total_power", source="grid_export_w", enc=I16),
-        live(
-            address=0x40A8, name="grid_total_apparent", source="grid_export_w", enc=I16
-        ),
+        live(address=0x40A7, name="grid_total_power", source=grid_total, enc=I16),
+        live(address=0x40A8, name="grid_total_apparent", source=grid_total, enc=I16),
         live(address=0x40A9, name="inverter_total_power", source="inverter_w", enc=I16),
         live(
             address=0x40AA, name="inverter_total_apparent", source="inverter_w", enc=I16
@@ -525,10 +527,16 @@ def _battery_and_power() -> list[Field]:
 
 
 def realtime_energy_fields(
-    *, scenario: Scenario, phases: int, extended: bool
+    *,
+    scenario: Scenario,
+    phases: int,
+    extended: bool,
+    house_flows: bool = False,
 ) -> list[Field]:
-    fields = _status_and_mirrors(scenario=scenario) + _grid_ports(phases=phases)
-    fields += _strings() + _battery_and_power()
+    fields = _status_and_mirrors(scenario=scenario) + _grid_ports(
+        phases=phases, house_flows=house_flows
+    )
+    fields += _strings() + _battery_and_power(house_flows=house_flows)
     groups = [
         (0x40BF, "pv", "pv_energy"),
         (0x40C7, "bat_charge", "battery_charge_energy"),

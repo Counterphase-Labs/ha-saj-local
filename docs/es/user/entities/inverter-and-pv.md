@@ -81,7 +81,6 @@ Un prefijo definido en Configurar va después de `saj_` en el ID de cada entidad
 | Tensión PV2 | `sensor.saj_pv2_voltage` | Sensor | V | HS3, H2 | String PV 2 y superiores | Sí |
 | Corriente PV2 | `sensor.saj_pv2_current` | Sensor | A | HS3, H2 | String PV 2 y superiores | Sí |
 | Potencia PV2 | `sensor.saj_pv2_power` | Sensor | W | HS3, H2 | String PV 2 y superiores | Sí |
-| Potencia de la carga doméstica | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Sí |
 | Potencia solar | `sensor.saj_pv_power` | Sensor | W | HS3, H2 | - | Sí |
 | Potencia del inversor | `sensor.saj_inverter_power` | Sensor | W | HS3, H2 | - | Sí |
 | Energía solar de hoy | `sensor.saj_pv_energy_today` | Sensor | kWh | HS3, H2 | - | Sí |
@@ -194,6 +193,7 @@ Un prefijo definido en Configurar va después de `saj_` en el ID de cada entidad
 | Estado del contador A | `sensor.saj_meter_a_status` | Sensor | - | HS3, H2 | - | No |
 | Estado del contador B | `sensor.saj_meter_b_status` | Sensor | - | HS3, H2 | - | No |
 | Potencia de la carga de respaldo | `sensor.saj_backup_load_power` | Sensor | W | HS3, H2 | - | Sí |
+| Potencia de la carga doméstica | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Sí |
 | Modo de flujo inverso | `sensor.saj_reverse_flow_mode` | Sensor | - | H2 | - | No |
 | Histéresis de frecuencia FCAS | `sensor.saj_fcas_frequency_hysteresis` | Sensor | Hz | H2 | - | No |
 | Función en paralelo | `sensor.saj_parallel_role` | Sensor | - | H2 | - | No |

@@ -81,7 +81,6 @@ Un préfixe défini dans Configurer se place après `saj_` dans l'ID de chaque e
 | Tension PV2 | `sensor.saj_pv2_voltage` | Capteur | V | HS3, H2 | Chaîne solaire 2 et suivantes | Oui |
 | Courant PV2 | `sensor.saj_pv2_current` | Capteur | A | HS3, H2 | Chaîne solaire 2 et suivantes | Oui |
 | Puissance PV2 | `sensor.saj_pv2_power` | Capteur | W | HS3, H2 | Chaîne solaire 2 et suivantes | Oui |
-| Puissance de la charge domestique | `sensor.saj_load_power` | Capteur | W | HS3, H2 | - | Oui |
 | Puissance solaire | `sensor.saj_pv_power` | Capteur | W | HS3, H2 | - | Oui |
 | Puissance de l'onduleur | `sensor.saj_inverter_power` | Capteur | W | HS3, H2 | - | Oui |
 | Énergie solaire du jour | `sensor.saj_pv_energy_today` | Capteur | kWh | HS3, H2 | - | Oui |
@@ -194,6 +193,7 @@ Un préfixe défini dans Configurer se place après `saj_` dans l'ID de chaque e
 | État du compteur A | `sensor.saj_meter_a_status` | Capteur | - | HS3, H2 | - | Non |
 | État du compteur B | `sensor.saj_meter_b_status` | Capteur | - | HS3, H2 | - | Non |
 | Puissance du circuit de secours | `sensor.saj_backup_load_power` | Capteur | W | HS3, H2 | - | Oui |
+| Puissance de la charge domestique | `sensor.saj_load_power` | Capteur | W | HS3, H2 | - | Oui |
 | Mode de flux inverse | `sensor.saj_reverse_flow_mode` | Capteur | - | H2 | - | Non |
 | Hystérésis de fréquence FCAS | `sensor.saj_fcas_frequency_hysteresis` | Capteur | Hz | H2 | - | Non |
 | Rôle en parallèle | `sensor.saj_parallel_role` | Capteur | - | H2 | - | Non |

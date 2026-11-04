@@ -27,7 +27,7 @@ Plik zawiera:
 - otwarte problemy do naprawy i to, jak długo falownik zawodzi;
 - funkcje sterowania mocą, informację, która z nich działa, którą posiada SAJ Local, i akcję oczekującą dla każdego harmonogramu;
 - migawkę surowych słów każdego rejestru, który SAJ Local odczytał od załadowania systemu, z wiekiem każdego, aby opiekun mógł sprawdzić odczyt względem prawdziwego urządzenia;
-- każde żądanie, które nie dostało użytecznej odpowiedzi, wraz z przyczyną. Żądanie, które przekroczyło limit czasu, wygląda inaczej niż żądanie odrzucone przez falownik, a różnica ma znaczenie, gdy inny klient zajmuje połączenie falownika.
+- każde żądanie, które nie dostało użytecznej odpowiedzi, wraz z przyczyną. Żądanie, które przekroczyło limit czasu, wygląda inaczej niż żądanie odrzucone przez falownik, a różnica ma znaczenie, gdy inny klient zajmuje połączenie falownika. Każda odrzucona encja, każde nieudane żądanie i każdy wiersz dziennika debugowania podaje funkcję Modbus żądania.
 
 Migawka nie dodaje żadnego żądania do falownika. Migawka zaczyna od pustej przy każdym załadowaniu systemu.
 

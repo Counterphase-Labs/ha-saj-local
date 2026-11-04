@@ -81,7 +81,6 @@ Un prefisso impostato in Configura va dopo `saj_` nell'ID di ogni entità dell'a
 | Tensione PV2 | `sensor.saj_pv2_voltage` | Sensore | V | HS3, H2 | Stringa PV 2 e successive | Sì |
 | Corrente PV2 | `sensor.saj_pv2_current` | Sensore | A | HS3, H2 | Stringa PV 2 e successive | Sì |
 | Potenza PV2 | `sensor.saj_pv2_power` | Sensore | W | HS3, H2 | Stringa PV 2 e successive | Sì |
-| Potenza del carico domestico | `sensor.saj_load_power` | Sensore | W | HS3, H2 | - | Sì |
 | Potenza solare | `sensor.saj_pv_power` | Sensore | W | HS3, H2 | - | Sì |
 | Potenza dell'inverter | `sensor.saj_inverter_power` | Sensore | W | HS3, H2 | - | Sì |
 | Energia solare oggi | `sensor.saj_pv_energy_today` | Sensore | kWh | HS3, H2 | - | Sì |
@@ -194,6 +193,7 @@ Un prefisso impostato in Configura va dopo `saj_` nell'ID di ogni entità dell'a
 | Stato del contatore A | `sensor.saj_meter_a_status` | Sensore | - | HS3, H2 | - | No |
 | Stato del contatore B | `sensor.saj_meter_b_status` | Sensore | - | HS3, H2 | - | No |
 | Potenza dei carichi di backup | `sensor.saj_backup_load_power` | Sensore | W | HS3, H2 | - | Sì |
+| Potenza del carico domestico | `sensor.saj_load_power` | Sensore | W | HS3, H2 | - | Sì |
 | Modalità di flusso inverso | `sensor.saj_reverse_flow_mode` | Sensore | - | H2 | - | No |
 | Isteresi di frequenza FCAS | `sensor.saj_fcas_frequency_hysteresis` | Sensore | Hz | H2 | - | No |
 | Ruolo in parallelo | `sensor.saj_parallel_role` | Sensore | - | H2 | - | No |

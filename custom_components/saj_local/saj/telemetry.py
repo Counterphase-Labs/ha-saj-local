@@ -7,6 +7,7 @@ from .catalogue import device_read_registers
 from .client import ModbusError, ModbusErrorMessage
 from .codec import Value, decode
 from .definitions import Combination, Operation
+from .models import FunctionCode
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterable, Mapping, Sequence
@@ -39,6 +40,7 @@ class ReadRange:
     count: int
     keys: tuple[str, ...]
     rows: tuple[Row, ...] = ()
+    function: FunctionCode = FunctionCode.HOLDING
 
 
 @dataclass(frozen=True)
@@ -99,6 +101,7 @@ def _request(
         count=members[-1].end - members[0].address,
         keys=tuple(key for row in members for key in keys_by_row[row]),
         rows=tuple(members),
+        function=members[0].function,
     )
 
 
@@ -257,6 +260,17 @@ def _outcome_keys(
     return frozenset((set(read_range.keys) | dependents) & set(requested))
 
 
+async def _read_range(
+    *, client: RegisterReader, read_range: ReadRange
+) -> tuple[int, ...]:
+    read = (
+        client.read_input_registers
+        if read_range.function is FunctionCode.INPUT
+        else client.read_holding_registers
+    )
+    return await read(address=read_range.address, count=read_range.count)
+
+
 async def read_telemetry(
     client: RegisterReader,
     device: Device,
@@ -279,9 +293,7 @@ async def read_telemetry(
     ):
         code: int | None = None
         try:
-            words = await client.read_holding_registers(
-                address=read_range.address, count=read_range.count
-            )
+            words = await _read_range(client=client, read_range=read_range)
         except ModbusError as err:
             if err.exception_code is None or err.device_unavailable:
                 raise

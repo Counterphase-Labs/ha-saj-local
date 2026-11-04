@@ -38,6 +38,9 @@ Requirements: [Devices and entities](requirements.md#devices-and-entities)
 - Versions, network settings, the inverter clock, the limits the inverter is applying and the installer settings are readings in the diagnostic category.
 - The H2 has identity entities for each battery pack, created disabled.
 - Battery power and grid power use one sign on every model: battery power is positive while the battery discharges, and grid power is positive while the system exports. Meter A follows the grid sign. Meter B reads positive while its solar inverter generates.
+- On the HS3, grid power is the Meter A total, and the grid phase power, apparent power, current and power factor come from the matching Meter A phase, because the grid registers of the HS3 carry inverter values. Grid voltage and frequency stay on the grid registers. An HS3 without Meter A has none of these entities.
+- On the HS3, household load power is the sum of the three on-grid output phase powers.
+- The EV charger readings of the HS3 are read as input registers, and the EV charger settings as holding registers.
 - An option code with no known name shows as unknown, and diagnostics list the code so it can be reported.
 
 ## Optional equipment
@@ -97,6 +100,7 @@ Requirements: [Protecting the inverter](requirements.md#protecting-the-inverter)
 - Each inverter gets one connection and one request at a time, with a short pause between requests.
 - No more than 40 requests go to an inverter address in any 60 seconds. The count survives reloads, so a reload, a setup retry or a connection check cannot exceed the limit. A request over the limit waits.
 - Neighbouring registers are read in one request, never beyond a block the model documents and never larger than 32 registers on the HS3 or 56 on the H2.
+- Holding registers (Modbus function 03) and input registers (function 04) count against the same request limit. The two are narrowed, suspended and tracked apart, so a refusal of one never suspends the other.
 - A failed read is not retried in the same cycle. The wait before the next attempt doubles from the shortest interval, up to 5 minutes, and survives reloads.
 - Every wait has a time limit, so a stalled inverter ends a cycle as a failure instead of stopping polling. A late or stray answer is discarded.
 - A connection the inverter closed is reopened once, and that cycle reads every enabled entity again.
@@ -197,6 +201,7 @@ Files: [diagnostics.py](../diagnostics.py), [memory.py](../saj/memory.py), [labe
 Requirements: [Diagnostics and debug logging](requirements.md#diagnostics-and-debug-logging)
 
 - The diagnostics download lists the enabled entities, the intervals with the requests each takes, the planned load against the limit, refused and suspended entities, active faults with their raw words, unrecognised fault bits, open repair issues, how long the inverter has been failing, and the power control functions with which is running, which is owned and each schedule's outstanding action.
+- Refused entities, failed requests, narrowed regions and debug log lines name the Modbus function of the request.
 - The diagnostics download includes a snapshot of the raw words of every register read since the integration loaded, with the age of each, and every request that got no usable answer, with the reason.
 - Debug logging records each connection, poll, request, write, heartbeat and schedule change, one line per event.
 - Every log line starts with the system's title and the serial masked to its last three characters, so lines from two systems can be told apart.

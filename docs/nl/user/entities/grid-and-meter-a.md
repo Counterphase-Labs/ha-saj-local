@@ -6,7 +6,7 @@ De netaansluiting en Meter A, de netmeter.
 
 De functielijst van de integratie legt de Net en Meter A-entiteiten uit in [Apparaten en entiteiten](../../../../custom_components/saj_local/docs/features.md#devices-and-entities) en [Optionele apparatuur](../../../../custom_components/saj_local/docs/features.md#optional-equipment).
 
-88 entiteiten. Gegenereerd door `make docs`. Niet met de hand bewerken.
+101 entiteiten. Gegenereerd door `make docs`. Niet met de hand bewerken.
 
 Een voorvoegsel dat in Configureren is ingesteld komt na `saj_` in de ID van elke Net en Meter A-entiteit, bijvoorbeeld `sensor.saj_house_grid_connection_countdown` met het voorvoegsel `house`.
 
@@ -14,26 +14,14 @@ Een voorvoegsel dat in Configureren is ingesteld komt na `saj_` in de ID van elk
 | --- | --- | --- | --- | --- | --- | --- |
 | Aftelling netaansluiting | `sensor.saj_grid_connection_countdown` | Sensor | s | HS3, H2 | - | Nee |
 | Netspanning L1 | `sensor.saj_grid_l1_voltage` | Sensor | V | HS3, H2 | - | Ja |
-| Netstroom L1 | `sensor.saj_grid_l1_current` | Sensor | A | HS3, H2 | - | Nee |
 | Netfrequentie L1 | `sensor.saj_grid_l1_frequency` | Sensor | Hz | HS3, H2 | - | Ja |
 | Netgelijkstroom L1 | `sensor.saj_grid_l1_dc_current` | Sensor | mA | HS3, H2 | - | Nee |
-| Netvermogen L1 | `sensor.saj_grid_l1_power` | Sensor | W | HS3, H2 | - | Nee |
-| Schijnbaar netvermogen L1 | `sensor.saj_grid_l1_apparent_power` | Sensor | VA | HS3, H2 | - | Nee |
-| Netarbeidsfactor L1 | `sensor.saj_grid_l1_power_factor` | Sensor | - | HS3, H2 | - | Nee |
 | Netspanning L2 | `sensor.saj_grid_l2_voltage` | Sensor | V | HS3, H2 | Fase 2 en hoger | Ja |
-| Netstroom L2 | `sensor.saj_grid_l2_current` | Sensor | A | HS3, H2 | Fase 2 en hoger | Nee |
 | Netfrequentie L2 | `sensor.saj_grid_l2_frequency` | Sensor | Hz | HS3, H2 | Fase 2 en hoger | Nee |
 | Netgelijkstroom L2 | `sensor.saj_grid_l2_dc_current` | Sensor | mA | HS3, H2 | Fase 2 en hoger | Nee |
-| Netvermogen L2 | `sensor.saj_grid_l2_power` | Sensor | W | HS3, H2 | Fase 2 en hoger | Nee |
-| Schijnbaar netvermogen L2 | `sensor.saj_grid_l2_apparent_power` | Sensor | VA | HS3, H2 | Fase 2 en hoger | Nee |
-| Netarbeidsfactor L2 | `sensor.saj_grid_l2_power_factor` | Sensor | - | HS3, H2 | Fase 2 en hoger | Nee |
 | Netspanning L3 | `sensor.saj_grid_l3_voltage` | Sensor | V | HS3, H2 | Fase 3 en hoger | Ja |
-| Netstroom L3 | `sensor.saj_grid_l3_current` | Sensor | A | HS3, H2 | Fase 3 en hoger | Nee |
 | Netfrequentie L3 | `sensor.saj_grid_l3_frequency` | Sensor | Hz | HS3, H2 | Fase 3 en hoger | Nee |
 | Netgelijkstroom L3 | `sensor.saj_grid_l3_dc_current` | Sensor | mA | HS3, H2 | Fase 3 en hoger | Nee |
-| Netvermogen L3 | `sensor.saj_grid_l3_power` | Sensor | W | HS3, H2 | Fase 3 en hoger | Nee |
-| Schijnbaar netvermogen L3 | `sensor.saj_grid_l3_apparent_power` | Sensor | VA | HS3, H2 | Fase 3 en hoger | Nee |
-| Netarbeidsfactor L3 | `sensor.saj_grid_l3_power_factor` | Sensor | - | HS3, H2 | Fase 3 en hoger | Nee |
 | Netuitgangsspanning L1 | `sensor.saj_grid_output_l1_voltage` | Sensor | V | HS3, H2 | - | Nee |
 | Netuitgangsstroom L1 | `sensor.saj_grid_output_l1_current` | Sensor | A | HS3, H2 | - | Nee |
 | Netuitgangsfrequentie L1 | `sensor.saj_grid_output_l1_frequency` | Sensor | Hz | HS3, H2 | - | Nee |
@@ -42,7 +30,6 @@ Een voorvoegsel dat in Configureren is ingesteld komt na `saj_` in de ID van elk
 | Netuitgangsvermogen L2 | `sensor.saj_grid_output_l2_power` | Sensor | W | HS3, H2 | Fase 2 en hoger | Nee |
 | Netuitgangsspanning L3 | `sensor.saj_grid_output_l3_voltage` | Sensor | V | HS3, H2 | Fase 3 en hoger | Nee |
 | Netuitgangsvermogen L3 | `sensor.saj_grid_output_l3_power` | Sensor | W | HS3, H2 | Fase 3 en hoger | Nee |
-| Netvermogen | `sensor.saj_grid_power` | Sensor | W | HS3, H2 | - | Ja |
 | Netbelastingvermogen | `sensor.saj_grid_load_power` | Sensor | W | HS3, H2 | - | Nee |
 | Netteruglevering L1 vandaag | `sensor.saj_grid_l1_export_energy_today` | Sensor | kWh | HS3, H2 | - | Nee |
 | Netteruglevering L1 deze maand | `sensor.saj_grid_l1_export_energy_month` | Sensor | kWh | HS3, H2 | - | Nee |
@@ -97,6 +84,32 @@ Een voorvoegsel dat in Configureren is ingesteld komt na `saj_` in de ID van elk
 | Meter A L1 blindvermogen | `sensor.saj_meter_a_l1_reactive_power` | Sensor | var | HS3 | Meter A | Nee |
 | Meter A L2 blindvermogen | `sensor.saj_meter_a_l2_reactive_power` | Sensor | var | HS3 | Meter A; Fase 2 en hoger | Nee |
 | Meter A L3 blindvermogen | `sensor.saj_meter_a_l3_reactive_power` | Sensor | var | HS3 | Meter A; Fase 3 en hoger | Nee |
+| Schijnbaar netvermogen L1 | `sensor.saj_grid_l1_apparent_power` | Sensor | VA | HS3 | Meter A | Nee |
+| Netstroom L1 | `sensor.saj_grid_l1_current` | Sensor | A | HS3 | Meter A | Nee |
+| Netvermogen L1 | `sensor.saj_grid_l1_power` | Sensor | W | HS3 | Meter A | Nee |
+| Netarbeidsfactor L1 | `sensor.saj_grid_l1_power_factor` | Sensor | - | HS3 | Meter A | Nee |
+| Schijnbaar netvermogen L2 | `sensor.saj_grid_l2_apparent_power` | Sensor | VA | HS3 | Meter A; Fase 2 en hoger | Nee |
+| Netstroom L2 | `sensor.saj_grid_l2_current` | Sensor | A | HS3 | Meter A; Fase 2 en hoger | Nee |
+| Netvermogen L2 | `sensor.saj_grid_l2_power` | Sensor | W | HS3 | Meter A; Fase 2 en hoger | Nee |
+| Netarbeidsfactor L2 | `sensor.saj_grid_l2_power_factor` | Sensor | - | HS3 | Meter A; Fase 2 en hoger | Nee |
+| Schijnbaar netvermogen L3 | `sensor.saj_grid_l3_apparent_power` | Sensor | VA | HS3 | Meter A; Fase 3 en hoger | Nee |
+| Netstroom L3 | `sensor.saj_grid_l3_current` | Sensor | A | HS3 | Meter A; Fase 3 en hoger | Nee |
+| Netvermogen L3 | `sensor.saj_grid_l3_power` | Sensor | W | HS3 | Meter A; Fase 3 en hoger | Nee |
+| Netarbeidsfactor L3 | `sensor.saj_grid_l3_power_factor` | Sensor | - | HS3 | Meter A; Fase 3 en hoger | Nee |
+| Netvermogen | `sensor.saj_grid_power` | Sensor | W | HS3 | Meter A | Ja |
 | Meter A vermogen | `sensor.saj_meter_a_power` | Sensor | W | HS3, H2 | Meter A | Ja |
 | Nettype | `sensor.saj_grid_type` | Sensor | - | H2 | - | Nee |
+| Netstroom L1 | `sensor.saj_grid_l1_current` | Sensor | A | H2 | - | Nee |
+| Netvermogen L1 | `sensor.saj_grid_l1_power` | Sensor | W | H2 | - | Nee |
+| Schijnbaar netvermogen L1 | `sensor.saj_grid_l1_apparent_power` | Sensor | VA | H2 | - | Nee |
+| Netarbeidsfactor L1 | `sensor.saj_grid_l1_power_factor` | Sensor | - | H2 | - | Nee |
+| Netstroom L2 | `sensor.saj_grid_l2_current` | Sensor | A | H2 | Fase 2 en hoger | Nee |
+| Netvermogen L2 | `sensor.saj_grid_l2_power` | Sensor | W | H2 | Fase 2 en hoger | Nee |
+| Schijnbaar netvermogen L2 | `sensor.saj_grid_l2_apparent_power` | Sensor | VA | H2 | Fase 2 en hoger | Nee |
+| Netarbeidsfactor L2 | `sensor.saj_grid_l2_power_factor` | Sensor | - | H2 | Fase 2 en hoger | Nee |
+| Netstroom L3 | `sensor.saj_grid_l3_current` | Sensor | A | H2 | Fase 3 en hoger | Nee |
+| Netvermogen L3 | `sensor.saj_grid_l3_power` | Sensor | W | H2 | Fase 3 en hoger | Nee |
+| Schijnbaar netvermogen L3 | `sensor.saj_grid_l3_apparent_power` | Sensor | VA | H2 | Fase 3 en hoger | Nee |
+| Netarbeidsfactor L3 | `sensor.saj_grid_l3_power_factor` | Sensor | - | H2 | Fase 3 en hoger | Nee |
+| Netvermogen | `sensor.saj_grid_power` | Sensor | W | H2 | - | Ja |
 | Schijnbaar netvermogen | `sensor.saj_grid_apparent_power` | Sensor | VA | H2 | - | Nee |

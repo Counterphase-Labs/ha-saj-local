@@ -11,7 +11,7 @@ Wygenerowano poleceniem `make docs`. Nie edytuj ręcznie.
 | Obszar | Encje | Co zawiera |
 | --- | --- | --- |
 | [Falownik i PV](inverter-and-pv.md) | 241 | Wyjście falownika, ciągi paneli, port awaryjny, liczniki energii, wersje i obciążenie gospodarstwa domowego |
-| [Sieć i Licznik A](grid-and-meter-a.md) | 88 | Przyłącze sieciowe i Licznik A, licznik sieci |
+| [Sieć i Licznik A](grid-and-meter-a.md) | 101 | Przyłącze sieciowe i Licznik A, licznik sieci |
 | [Licznik B](meter-b.md) | 22 | Licznik B, drugi licznik, który mierzy falownik fotowoltaiczny |
 | [Bateria](battery.md) | 133 | Bateria jako całość |
 | [Moduły baterii](battery-packs.md) | 58 | Odczyty i tożsamość każdego modułu baterii |

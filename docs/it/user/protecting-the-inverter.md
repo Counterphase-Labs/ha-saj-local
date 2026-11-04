@@ -12,6 +12,7 @@ La pagina Protezione dell'inverter elenca i limiti che SAJ Local mantiene su tut
 - **Nessun nuovo tentativo nello stesso ciclo.** Dopo una lettura fallita, l'attesa prima del tentativo successivo raddoppia a partire dall'intervallo più breve, fino a 5 minuti. L'attesa sopravvive alle ricariche. Il primo ciclo riuscito legge di nuovo tutto.
 - **Ogni attesa ha un limite di tempo.** Un inverter bloccato termina un ciclo come fallimento e non ferma il polling. Una risposta tardiva o estranea viene scartata.
 - **Una connessione chiusa viene riaperta una volta.** Quel ciclo legge poi di nuovo ogni entità abilitata, quindi nessun valore è più vecchio della riconnessione.
+- **Due tipi di lettura dei registri.** SAJ Local legge registri di mantenimento (funzione Modbus 03) e registri di ingresso (funzione 04). L'HS3 serve le letture della colonnina EV come registri di ingresso. Entrambi i tipi contano nelle 40 richieste, e il rifiuto di un tipo non sospende mai l'altro.
 - **Al massimo 20 modifiche in 60 secondi.** Vedi la [modifica delle impostazioni](changing-settings.md#che-cosa-succede-a-una-modifica). Una modifica oltre il limite viene rifiutata e non messa in coda.
 
 ## Quando l'inverter rifiuta una lettura

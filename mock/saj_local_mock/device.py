@@ -18,6 +18,9 @@ if TYPE_CHECKING:
 
 ASCII_LIMIT = 0x80
 RESERVED_WORD = 0
+READ_HOLDING_REGISTERS = 0x03
+READ_INPUT_REGISTERS = 0x04
+ADDRESS_HIGH_BYTE_SHIFT = 8
 WHOLE_RAW_TOLERANCE = 1e-6
 
 
@@ -29,6 +32,8 @@ class DeviceObserver(Protocol):
 
 class Block:
     """A contiguous span of addresses; words without a field read as zero."""
+
+    function = READ_HOLDING_REGISTERS
 
     def __init__(
         self,
@@ -65,6 +70,10 @@ class Block:
         return self._by_word.get(address)
 
 
+class InputBlock(Block):
+    function = READ_INPUT_REGISTERS
+
+
 def initial_settings(*, blocks: tuple[Block, ...]) -> dict[str, FieldValue]:
     return {
         field.name: field.initial
@@ -91,11 +100,19 @@ class Device:
         self._settings = settings
         self._observer = observer
 
-    def _locate(self, *, start: int, count: int) -> Block:
+    def _locate(
+        self,
+        *,
+        start: int,
+        count: int,
+        function: int = READ_HOLDING_REGISTERS,
+    ) -> Block:
         for block in self._blocks:
             if block.contains(address=start):
                 if block.unavailable is not None:
                     raise ModbusError(code=block.unavailable)
+                if block.function != function:
+                    raise ModbusError(code=start >> ADDRESS_HIGH_BYTE_SHIFT)
                 if start + count - 1 > block.end:
                     raise ModbusError(code=self._overrun_code)
                 return block
@@ -106,8 +123,14 @@ class Device:
             return telemetry[field.source]
         return self._settings[field.name]
 
-    def read(self, *, start: int, count: int) -> list[int]:
-        block = self._locate(start=start, count=count)
+    def read(
+        self,
+        *,
+        start: int,
+        count: int,
+        function: int = READ_HOLDING_REGISTERS,
+    ) -> list[int]:
+        block = self._locate(start=start, count=count, function=function)
         telemetry = self._telemetry()
         end = start + count
         words: list[int] = []

@@ -27,7 +27,7 @@ Filen innehåller:
 - de öppna reparationsärendena, och hur länge växelriktaren har misslyckats;
 - effektstyrningsfunktionerna, vilken som körs, vilken SAJ Local äger och den åtgärd som väntar för varje schema;
 - en ögonblicksbild av de råa orden i varje register som SAJ Local har läst sedan systemet lästes in, med åldern för varje, så att en underhållare kan kontrollera en avläsning mot den verkliga enheten;
-- varje förfrågan som inte fick något användbart svar, med orsaken. En förfrågan som fick tidsgränsen överskriden ser annorlunda ut än en förfrågan som växelriktaren nekade, och skillnaden spelar roll när en annan klient håller växelriktarens anslutning.
+- varje förfrågan som inte fick något användbart svar, med orsaken. En förfrågan som fick tidsgränsen överskriden ser annorlunda ut än en förfrågan som växelriktaren nekade, och skillnaden spelar roll när en annan klient håller växelriktarens anslutning. Varje nekad entitet, varje misslyckad förfrågan och varje rad i felsökningsloggen anger Modbus-funktionen för förfrågan.
 
 Ögonblicksbilden lägger inte till någon förfrågan till växelriktaren. Ögonblicksbilden börjar tom varje gång systemet läses in.
 

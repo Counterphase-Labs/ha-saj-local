@@ -9,6 +9,7 @@ from saj.health import (
     Region,
     tracked_refusals,
 )
+from saj.models import FunctionCode
 
 
 def _refuse(
@@ -181,6 +182,39 @@ def test_the_rows_of_a_refused_request_are_unavailable_but_not_counted():
     assert health.suspended() == frozenset()
     assert health.refusals["k10"].count == 0
     assert health.refusals["k10"].code == 2
+
+
+def test_a_refusal_keeps_the_function_code_of_the_refused_request():
+    health = ReadHealth()
+    input_row = Row(address=10, words=1, function=FunctionCode.INPUT)
+
+    _refuse_request(health, (input_row,))
+    _refuse_request(health, _rows(11, 12))
+
+    assert health.refusals["k10"].function is FunctionCode.INPUT
+    assert health.refusals["k11"].function is FunctionCode.HOLDING
+
+
+def test_a_holding_read_leaves_the_narrowing_of_an_input_row_at_its_address():
+    health = ReadHealth()
+    input_row = Row(address=10, words=1, function=FunctionCode.INPUT)
+    _refuse_request(health, (input_row,))
+
+    health.record_request_read(rows=_rows(10))
+    assert health.narrowing == (Region(rows=(input_row,)),)
+
+    health.record_request_read(rows=(input_row,))
+    assert health.narrowing == ()
+
+
+def test_an_input_row_is_suspended_after_the_threshold_of_input_refusals():
+    health = ReadHealth()
+    input_row = Row(address=10, words=1, function=FunctionCode.INPUT)
+
+    outcomes = [_refuse_request(health, (input_row,)) for _ in range(REFUSAL_THRESHOLD)]
+
+    assert outcomes[-1] == {"k10"}
+    assert health.refusals["k10"].function is FunctionCode.INPUT
 
 
 def test_a_half_that_reads_returns_to_normal_planning():

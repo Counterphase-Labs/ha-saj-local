@@ -81,7 +81,6 @@
 | PV2 电压 | `sensor.saj_pv2_voltage` | 传感器 | V | HS3, H2 | 光伏组串 2 及以上 | 是 |
 | PV2 电流 | `sensor.saj_pv2_current` | 传感器 | A | HS3, H2 | 光伏组串 2 及以上 | 是 |
 | PV2 功率 | `sensor.saj_pv2_power` | 传感器 | W | HS3, H2 | 光伏组串 2 及以上 | 是 |
-| 家庭负载功率 | `sensor.saj_load_power` | 传感器 | W | HS3, H2 | - | 是 |
 | 光伏功率 | `sensor.saj_pv_power` | 传感器 | W | HS3, H2 | - | 是 |
 | 逆变器功率 | `sensor.saj_inverter_power` | 传感器 | W | HS3, H2 | - | 是 |
 | 光伏今日电量 | `sensor.saj_pv_energy_today` | 传感器 | kWh | HS3, H2 | - | 是 |
@@ -194,6 +193,7 @@
 | 电表 A 状态 | `sensor.saj_meter_a_status` | 传感器 | - | HS3, H2 | - | 否 |
 | 电表 B 状态 | `sensor.saj_meter_b_status` | 传感器 | - | HS3, H2 | - | 否 |
 | 备用负载功率 | `sensor.saj_backup_load_power` | 传感器 | W | HS3, H2 | - | 是 |
+| 家庭负载功率 | `sensor.saj_load_power` | 传感器 | W | HS3, H2 | - | 是 |
 | 逆流模式 | `sensor.saj_reverse_flow_mode` | 传感器 | - | H2 | - | 否 |
 | FCAS 频率回差 | `sensor.saj_fcas_frequency_hysteresis` | 传感器 | Hz | H2 | - | 否 |
 | 并机角色 | `sensor.saj_parallel_role` | 传感器 | - | H2 | - | 否 |

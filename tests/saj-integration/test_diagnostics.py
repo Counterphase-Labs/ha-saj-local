@@ -25,7 +25,11 @@ from custom_components.saj_local.saj.ems import EmsOwnership
 from custom_components.saj_local.saj.equipment import Detection, Setting
 from custom_components.saj_local.saj.health import Break, Refusal, Region
 from custom_components.saj_local.saj.memory import FailureOutcome, RegisterMemory
-from custom_components.saj_local.saj.models import Equipment, PowerFunction
+from custom_components.saj_local.saj.models import (
+    Equipment,
+    FunctionCode,
+    PowerFunction,
+)
 from custom_components.saj_local.saj.models.hs3 import PROFILE as HS3
 from custom_components.saj_local.saj.poller import CadencePlan
 from custom_components.saj_local.saj.telemetry import Telemetry
@@ -279,25 +283,30 @@ async def test_diagnostics_report_refused_and_suspended_keys_with_retest_timing(
     coordinator.poller.refusals = {
         "pv_power": Refusal(count=1, code=2, retest_at=None),
         "grid_power": Refusal(count=3, code=0, retest_at=NOW + 600),
-        "battery_soc": Refusal(count=7, code=11, retest_at=NOW - 5),
+        "battery_soc": Refusal(
+            count=7, code=11, retest_at=NOW - 5, function=FunctionCode.INPUT
+        ),
     }
 
     result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator))
 
     assert result["refused_keys"] == {
         "pv_power": {
+            "function_code": 3,
             "exception_code": 2,
             "consecutive_refusals": 1,
             "suspended": False,
             "next_retest_in_seconds": None,
         },
         "grid_power": {
+            "function_code": 3,
             "exception_code": 0,
             "consecutive_refusals": 3,
             "suspended": True,
             "next_retest_in_seconds": 600,
         },
         "battery_soc": {
+            "function_code": 4,
             "exception_code": 11,
             "consecutive_refusals": 7,
             "suspended": True,
@@ -400,12 +409,19 @@ async def test_diagnostics_report_the_breaks_found_in_address_order():
 async def test_diagnostics_report_the_requests_being_narrowed():
     coordinator = FakeCoordinator(set(), None)
     coordinator.poller.narrowing = (
-        Region(rows=(Row(address=0x4000, words=2), Row(address=0x4005, words=1))),
+        Region(
+            rows=(
+                Row(address=0x4000, words=2, function=FunctionCode.INPUT),
+                Row(address=0x4005, words=1, function=FunctionCode.INPUT),
+            )
+        ),
     )
 
     result = await async_get_config_entry_diagnostics(HASS, _entry(coordinator))
 
-    assert result["narrowing"] == [{"before": "0x4000", "after": "0x4006", "rows": 2}]
+    assert result["narrowing"] == [
+        {"before": "0x4000", "after": "0x4006", "function_code": 4, "rows": 2}
+    ]
 
 
 async def test_diagnostics_report_no_breaks_or_narrowing_when_there_are_none():
@@ -768,7 +784,11 @@ def _remembered_client() -> tuple[FakeClient, list[int]]:
     client.memory.record_answer(address=0x7001, words=[0x0102])
     client.now = NOW - REGISTER_AGE + 1
     client.memory.record_failure(
-        address=0x3024, count=32, outcome=FailureOutcome.EXCEPTION, exception_code=48
+        address=0x3024,
+        count=32,
+        function=FunctionCode.INPUT,
+        outcome=FailureOutcome.EXCEPTION,
+        exception_code=48,
     )
     client.memory.record_failure(
         address=0xA03C, count=32, outcome=FailureOutcome.TIMEOUT
@@ -816,6 +836,7 @@ async def test_diagnostics_list_remembered_registers_by_key_and_failed_requests(
         {
             "address": "0x3024",
             "count": 32,
+            "function_code": 4,
             "outcome": "exception",
             "exception_code": 48,
             "age_seconds": REGISTER_AGE - 1,
@@ -823,6 +844,7 @@ async def test_diagnostics_list_remembered_registers_by_key_and_failed_requests(
         {
             "address": "0xa03c",
             "count": 32,
+            "function_code": 3,
             "outcome": "timeout",
             "exception_code": None,
             "age_seconds": REGISTER_AGE - 1,

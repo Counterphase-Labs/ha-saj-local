@@ -11,7 +11,7 @@ Gegenereerd door `make docs`. Niet met de hand bewerken.
 | Gebied | Entiteiten | Wat het bevat |
 | --- | --- | --- |
 | [Omvormer en PV](inverter-and-pv.md) | 241 | Uitgang van de omvormer, zonnestrings, back-uppoort, energietellers, versies en de huishoudelijke belasting |
-| [Net en Meter A](grid-and-meter-a.md) | 88 | De netaansluiting en Meter A, de netmeter |
+| [Net en Meter A](grid-and-meter-a.md) | 101 | De netaansluiting en Meter A, de netmeter |
 | [Meter B](meter-b.md) | 22 | Meter B, de tweede meter die een zonne-omvormer meet |
 | [Batterij](battery.md) | 133 | De batterij als geheel |
 | [Batterijpacks](battery-packs.md) | 58 | Metingen en identiteit van elk batterijpack |

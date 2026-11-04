@@ -24,6 +24,8 @@ Batteriets effekt och nätets effekt använder ett tecken på varje modell, så 
 - **Nätets effekt** är positiv medan systemet exporterar och negativ medan systemet importerar. Mätare A följer nätets tecken.
 - **Mätare B** är positiv medan den solcellsväxelriktare som Mätare B mäter producerar.
 
+På HS3 är näteffekten summan från Mätare A, och nätets fraseffekt, skenbar effekt, ström och effektfaktor kommer från motsvarande fas hos Mätare A, eftersom nätregistren i HS3 innehåller växelriktarens värden. En HS3 utan Mätare A har inte dessa entiteter. Hushållets lasteffekt är summan av de tre fraseffekterna för nätansluten utgång.
+
 Målen för [effektstyrning](power-control.md) följer avläsningarnas tecken.
 
 ## Prefixet

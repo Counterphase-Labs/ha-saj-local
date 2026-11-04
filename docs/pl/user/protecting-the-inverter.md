@@ -12,6 +12,7 @@ Strona Ochrona falownika wymienia limity, których SAJ Local przestrzega przy ws
 - **Bez ponowień w jednym cyklu.** Po nieudanym odczycie czekanie przed następną próbą podwaja się od najkrótszego odstępu, do 5 minut. Czekanie przetrwa przeładowania. Pierwszy udany cykl odczytuje wszystko od nowa.
 - **Każde czekanie ma limit czasu.** Zawieszony falownik kończy cykl jako niepowodzenie i nie zatrzymuje odpytywania. Spóźniona lub zabłąkana odpowiedź jest odrzucana.
 - **Zamknięte połączenie jest otwierane raz.** Ten cykl odczytuje wtedy ponownie każdą włączoną encję, więc żadna wartość nie jest starsza niż ponowne połączenie.
+- **Dwa rodzaje odczytu rejestrów.** SAJ Local odczytuje rejestry przechowujące (funkcja Modbus 03) i rejestry wejściowe (funkcja 04). HS3 udostępnia odczyty ładowarki EV jako rejestry wejściowe. Oba rodzaje liczą się do 40 żądań, a odmowa jednego rodzaju nigdy nie zawiesza drugiego.
 - **Najwyżej 20 zmian w 60 sekundach.** Zobacz [zmianę ustawień](changing-settings.md#co-się-dzieje-ze-zmianą). Zmiana ponad limit jest odrzucana i nie trafia do kolejki.
 
 ## Gdy falownik odmawia odczytu

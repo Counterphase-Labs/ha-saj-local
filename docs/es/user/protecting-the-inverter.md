@@ -12,6 +12,7 @@ La página Proteger el inversor lista los límites que SAJ Local aplica a todo l
 - **Sin reintentos dentro de un ciclo.** Tras una lectura fallida, la espera antes del siguiente intento se duplica a partir del intervalo más corto, hasta 5 minutos. La espera se mantiene a través de las recargas. El primer ciclo correcto lo lee todo de nuevo.
 - **Cada espera tiene un límite de tiempo.** Un inversor bloqueado termina un ciclo como fallo y no detiene el sondeo. Una respuesta tardía o perdida se descarta.
 - **Una conexión cerrada se reabre una vez.** Ese ciclo vuelve entonces a leer cada entidad habilitada, así que ningún valor es más antiguo que la reconexión.
+- **Dos tipos de lectura de registros.** SAJ Local lee registros de retención (función Modbus 03) y registros de entrada (función 04). El HS3 sirve las lecturas del cargador de VE como registros de entrada. Ambos tipos cuentan en las 40 solicitudes, y el rechazo de un tipo nunca suspende el otro.
 - **Como máximo 20 cambios en 60 segundos.** Consulta [cambiar ajustes](changing-settings.md#qué-ocurre-con-un-cambio). Un cambio por encima del límite se rechaza y no se pone en cola.
 
 ## Cuando el inversor rechaza una lectura

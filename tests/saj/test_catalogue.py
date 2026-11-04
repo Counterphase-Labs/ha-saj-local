@@ -699,7 +699,7 @@ def test_a_device_gets_the_registers_of_its_types_shape():
 
 
 SHIPPED_SHAPES = [
-    ("hs3", Shape(phases=3, strings=2), 547, 746, 182),
+    ("hs3", Shape(phases=3, strings=2), 533, 746, 182),
     ("h2", Shape(phases=1, strings=2), 390, 486, 119),
     ("h2", Shape(phases=1, strings=3), 398, 494, 122),
     ("h2", Shape(phases=3, strings=4, assumed=True), 482, 578, 119),
@@ -719,7 +719,7 @@ def test_shipped_profiles_have_the_catalogued_totals(
     assert sum(register.core for register in registers) == core
 
 
-def test_the_two_shipped_models_share_342_catalogued_rows():
+def test_the_two_shipped_models_share_328_catalogued_rows():
     hs3 = {
         register.row
         for register in CATALOGUES["hs3"].read_registers_for(
@@ -737,7 +737,7 @@ def test_the_two_shipped_models_share_342_catalogued_rows():
     hs3_keys = {r.key for r in CATALOGUES["hs3"].registers if r.readable}
     h2_keys = {r.key for r in CATALOGUES["h2"].registers if r.readable}
 
-    assert len(hs3 & h2) == 342
+    assert len(hs3 & h2) == 328
     assert len(hs3_keys & h2_keys) == 433
 
 

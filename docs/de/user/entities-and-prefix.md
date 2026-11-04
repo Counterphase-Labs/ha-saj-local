@@ -24,6 +24,8 @@ Batterieleistung und Netzleistung verwenden auf jedem Modell dasselbe Vorzeichen
 - **Die Netzleistung** ist positiv, solange das System einspeist, und negativ, solange das System Netzbezug hat. Zähler A folgt dem Netzvorzeichen.
 - **Zähler B** ist positiv, solange der Solar-Wechselrichter, den Zähler B misst, erzeugt.
 
+Beim HS3 ist die Netzleistung die Summe von Zähler A, und die Netz-Phasenleistung, die Scheinleistung, der Strom und der Leistungsfaktor kommen von der passenden Phase von Zähler A, weil die Netzregister des HS3 Werte des Wechselrichters enthalten. Ein HS3 ohne Zähler A hat diese Entitäten nicht. Die Leistung der Haushaltslast ist die Summe der drei netzgekoppelten Ausgangs-Phasenleistungen.
+
 Die Ziele der [Leistungssteuerung](power-control.md) folgen den Vorzeichen der Messwerte.
 
 ## Das Präfix

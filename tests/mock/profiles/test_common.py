@@ -109,6 +109,35 @@ def test_phase_sources_are_requested_for_the_models_phase_count(phases):
     assert fields[0x403F].source == f"phase:grid:2:v:{phases}"
 
 
+def test_house_flows_serve_inverter_values_and_house_load_where_the_hs3_does():
+    scenario = make_scenario(model="hs3")
+    plain = by_address(
+        fields=common.realtime_energy_fields(scenario=scenario, phases=3, extended=True)
+    )
+    house = by_address(
+        fields=common.realtime_energy_fields(
+            scenario=scenario, phases=3, extended=True, house_flows=True
+        )
+    )
+
+    assert plain[0x40A0].source == "load_w"
+    assert plain[0x40A7].source == "grid_export_w"
+    assert plain[0x4035].source == "phase:grid:0:w:3"
+    assert plain[0x4090].source == "phase:side:0:w:3"
+    assert [house[address].source for address in (0x40A0, 0x40A7, 0x40A8)] == [
+        "inverter_w"
+    ] * 3
+    assert [house[address].source for address in (0x4035, 0x403C, 0x4043)] == [
+        f"phase:inv:{phase}:w:3" for phase in range(3)
+    ]
+    assert [house[address].source for address in (0x4036, 0x403D, 0x4044)] == [
+        f"phase:inv:{phase}:va:3" for phase in range(3)
+    ]
+    assert [house[address].source for address in (0x4090, 0x4092, 0x4094)] == [
+        f"phase:load:{phase}:w:3" for phase in range(3)
+    ]
+
+
 def test_every_realtime_register_has_a_unique_address_and_name():
     fields = common.realtime_energy_fields(
         scenario=make_scenario(model="hs3"), phases=3, extended=True

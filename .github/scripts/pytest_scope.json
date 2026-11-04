@@ -38,6 +38,10 @@
     "custom_components/saj_local/saj/control.py",
     "custom_components/saj_local/saj/models/h2.py"
   ],
+  "tests/saj/test_hs3_readings.py": [
+    "custom_components/saj_local/saj/models/hs3.py",
+    "custom_components/saj_local/saj/telemetry.py"
+  ],
   "tests/saj/test_import.py": [
     "custom_components/saj_local/saj/__init__.py"
   ],

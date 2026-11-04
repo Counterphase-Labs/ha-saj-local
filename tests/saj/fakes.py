@@ -35,9 +35,17 @@ class MemoryClient:
         self.bad_addresses = bad_addresses
         self.code = code
         self.reads: list[tuple[int, int]] = []
+        self.input_reads: list[tuple[int, int]] = []
+
+    async def read_input_registers(self, address: int, count: int) -> tuple[int, ...]:
+        self.input_reads.append((address, count))
+        return await self._answer(address=address, count=count)
 
     async def read_holding_registers(self, address: int, count: int) -> tuple[int, ...]:
         self.reads.append((address, count))
+        return await self._answer(address=address, count=count)
+
+    async def _answer(self, *, address: int, count: int) -> tuple[int, ...]:
         if self.bad_addresses & set(range(address, address + count)):
             raise ModbusError(
                 ModbusErrorMessage.EXCEPTION_RESPONSE, exception_code=self.code

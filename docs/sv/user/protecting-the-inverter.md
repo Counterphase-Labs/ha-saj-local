@@ -12,6 +12,7 @@ Sidan Skydda växelriktaren listar de gränser som SAJ Local håller för allt s
 - **Inga nya försök inom en cykel.** Efter en misslyckad avläsning fördubblas väntan före nästa försök från det kortaste intervallet, upp till 5 minuter. Väntan består över omläsningar. Den första lyckade cykeln läser allt igen.
 - **Varje väntan har en tidsgräns.** En växelriktare som hänger sig avslutar en cykel som ett misslyckande och stoppar inte avfrågningen. Ett sent eller förirrat svar kasseras.
 - **En stängd anslutning öppnas igen en gång.** Den cykeln läser sedan varje aktiverad entitet igen, så inget värde är äldre än återanslutningen.
+- **Två slags registerläsning.** SAJ Local läser hållregister (Modbus-funktion 03) och inregister (funktion 04). HS3 levererar elbilsladdarens mätvärden som inregister. Båda slagen räknas mot de 40 förfrågningarna, och en nekad läsning av ett slag stänger aldrig av det andra.
 - **Högst 20 ändringar under 60 sekunder.** Se [ändra inställningar](changing-settings.md#vad-som-händer-med-en-ändring). En ändring över gränsen nekas och köas inte.
 
 ## När växelriktaren nekar en avläsning
