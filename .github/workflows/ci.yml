@@ -30,6 +30,9 @@ jobs:
           python-version: "3.14"
           groups: dev lint
 
+      - name: Use the project interpreter
+        run: echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
