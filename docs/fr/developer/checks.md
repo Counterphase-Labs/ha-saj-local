@@ -8,7 +8,7 @@ Ce que lance chaque cible make, comment restreindre une exécution et les règle
 
 Chaque action est une cible make et la CI appelle les mêmes cibles, réussir en local et réussir en CI signifient donc la même chose. Une nouvelle étape de CI commence comme une cible make. `make help` liste chaque cible en une ligne, et `make help ARGS=<cible>` décrit une cible : ce que la cible lance, ce que la cible affiche en cas de succès et en cas d'échec, ce que fait `ARGS` et, pour une cible de regroupement, les étapes que la cible lance.
 
-`make ci` lance chaque étape de vérification et définit ce qu'est « terminé ». GitHub lance `make ci` lui-même dans l'unique job `checks` de [ci.yml](../../../.github/workflows/ci.yml), à côté des jobs partagés de `roquerodrigo/workflows` (`lint`, `tests`, `validate`) et du job `hacs`, une étape ajoutée à `make ci` s'exécute donc dans GitHub sans modifier le workflow. Lancez les cibles plus étroites pendant que vous itérez.
+`make ci` lance chaque étape de vérification et définit ce qu'est « terminé ». GitHub lance `make ci` lui-même dans l'unique job `checks` de [ci.yml](../../../.github/workflows/ci.yml), à côté des jobs partagés de `roquerodrigo/workflows` (`lint`, `tests`, `validate`), une étape ajoutée à `make ci` s'exécute donc dans GitHub sans modifier le workflow. Lancez les cibles plus étroites pendant que vous itérez.
 
 `make build` est l'unique compilation de production du frontend. `make test` lance chaque suite de tests, et chaque suite a sa propre cible pour pouvoir lancer une suite seule :
 
@@ -39,7 +39,7 @@ Les vérifications qui composent `make ci` ont aussi chacune une cible, pour pou
 | `make docs-check` | La référence des entités générée, les liens, les images, la barre de langues de chaque page, la longueur des pages et la couverture de la liste des fonctionnalités. Voir la [page de documentation](documentation.md#vérifications). |
 | `make template-check` | `bug.yml` exige le téléchargement des diagnostics, chaque libellé qu'un modèle de ticket applique ou référence existe dans `.github/labels.yml`, et la liste déroulante des modèles de `bug.yml` correspond aux modèles de `translations/en.json`. |
 | `make mock-build` | L'image du simulateur se construit et ne contient aucun bytecode. |
-| `make validate` | hassfest sur l'arbre de travail, dans Docker. La validation HACS lit le dépôt poussé, donc seul le job de workflow `hacs` lance la validation HACS. |
+| `make validate` | hassfest sur l'arbre de travail, dans Docker. La validation HACS lit le dépôt poussé, donc seul le job de workflow `validate` lance la validation HACS. |
 
 `make lint`, `make python-ci`, `make frontend-check` et `make frontend-ci` lancent des groupes de ces cibles.
 

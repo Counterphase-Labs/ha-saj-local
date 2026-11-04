@@ -8,7 +8,7 @@ Co uruchamia każdy cel make, jak zawęzić uruchomienie i jakie zasady stosuje 
 
 Każda czynność to cel make, a CI wywołuje te same cele, więc przejście lokalnie i przejście w CI znaczą to samo. Nowy krok CI zaczyna jako cel make. `make help` wymienia każdy cel w jednym wierszu, a `make help ARGS=<target>` opisuje jeden cel: co cel uruchamia, co wypisuje po powodzeniu i po niepowodzeniu, co robi `ARGS` i, dla celu grupującego, jakie kroki cel uruchamia.
 
-`make ci` uruchamia każdy krok sprawdzania i jest definicją ukończenia pracy. GitHub uruchamia samo `make ci` w jednym zadaniu `checks` pliku [ci.yml](../../../.github/workflows/ci.yml), obok wspólnych zadań `roquerodrigo/workflows` (`lint`, `tests`, `validate`) i zadania `hacs`, więc krok dodany do `make ci` działa w GitHubie bez zmiany przepływu pracy. Podczas iteracji uruchamiaj węższe cele.
+`make ci` uruchamia każdy krok sprawdzania i jest definicją ukończenia pracy. GitHub uruchamia samo `make ci` w jednym zadaniu `checks` pliku [ci.yml](../../../.github/workflows/ci.yml), obok wspólnych zadań `roquerodrigo/workflows` (`lint`, `tests`, `validate`), więc krok dodany do `make ci` działa w GitHubie bez zmiany przepływu pracy. Podczas iteracji uruchamiaj węższe cele.
 
 `make build` to jedyna produkcyjna kompilacja frontendu. `make test` uruchamia każdy zestaw testów, a każdy zestaw ma własny cel, aby można było uruchomić jeden zestaw osobno:
 
@@ -39,7 +39,7 @@ Sprawdzenia, z których składa się `make ci`, mają też po jednym celu, aby m
 | `make docs-check` | Wygenerowany opis encji, linki, obrazy, długość stron, pokrycie listy funkcji i pasek języków. Zobacz [stronę dokumentacji](documentation.md#sprawdzenia). |
 | `make template-check` | `bug.yml` wymaga pobrania diagnostyki, każda etykieta, którą szablon zgłoszenia stosuje lub linkuje, istnieje w `.github/labels.yml`, a lista rozwijana modeli w `bug.yml` zgadza się z modelami w `translations/en.json`. |
 | `make mock-build` | Obraz symulatora się buduje i nie zawiera bytecode. |
-| `make validate` | hassfest na drzewie roboczym, w Dockerze. Walidacja HACS czyta wypchnięte repozytorium, więc tylko zadanie `hacs` przepływu pracy uruchamia walidację HACS. |
+| `make validate` | hassfest na drzewie roboczym, w Dockerze. Walidacja HACS czyta wypchnięte repozytorium, więc tylko zadanie `validate` przepływu pracy uruchamia walidację HACS. |
 
 `make lint`, `make python-ci`, `make frontend-check` i `make frontend-ci` uruchamiają grupy tych celów.
 

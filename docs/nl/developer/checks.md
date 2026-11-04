@@ -8,7 +8,7 @@ Wat elke make-target draait, hoe u een run beperkt en de regels die elke control
 
 Elke actie is een make-target en CI roept dezelfde targets aan, dus lokaal slagen en in CI slagen betekenen hetzelfde. Een nieuwe CI-stap begint als make-target. `make help` vermeldt elke target met één regel, en `make help ARGS=<target>` beschrijft één target: wat de target draait, wat de target bij succes en bij falen afdrukt, wat `ARGS` doet en, voor een groeperende target, de stappen die de target draait.
 
-`make ci` draait elke controlestap en is de definitie van klaar. GitHub draait `make ci` zelf in de ene job `checks` van [ci.yml](../../../.github/workflows/ci.yml), naast de gedeelde `roquerodrigo/workflows`-jobs (`lint`, `tests`, `validate`) en de job `hacs`, dus een stap die aan `make ci` wordt toegevoegd draait in GitHub zonder workflowwijziging. Draai de smallere targets tijdens het itereren.
+`make ci` draait elke controlestap en is de definitie van klaar. GitHub draait `make ci` zelf in de ene job `checks` van [ci.yml](../../../.github/workflows/ci.yml), naast de gedeelde `roquerodrigo/workflows`-jobs (`lint`, `tests`, `validate`), dus een stap die aan `make ci` wordt toegevoegd draait in GitHub zonder workflowwijziging. Draai de smallere targets tijdens het itereren.
 
 `make build` is de ene productiebuild van de frontend. `make test` draait elke testsuite, en elke suite heeft een eigen target zodat één suite alleen kan worden gedraaid:
 
@@ -39,7 +39,7 @@ De controles die `make ci` vormen hebben ook elk een target, zodat één tool al
 | `make docs-check` | Het gegenereerde entiteitenoverzicht, links, afbeeldingen, paginalengte, dekking van de functielijsten en de taalbalk. Zie de [documentatiepagina](documentation.md#controles). |
 | `make template-check` | `bug.yml` vereist de diagnosedownload, elk label dat een issuesjabloon toepast of waarnaar het linkt bestaat in `.github/labels.yml`, en de modeldropdown van `bug.yml` komt overeen met de modellen in `translations/en.json`. |
 | `make mock-build` | Het simulatorimage bouwt en bevat geen bytecode. |
-| `make validate` | hassfest tegen de werkboom, in Docker. De HACS-validatie leest de gepushte repository, dus alleen de workflowjob `hacs` draait de HACS-validatie. |
+| `make validate` | hassfest tegen de werkboom, in Docker. De HACS-validatie leest de gepushte repository, dus alleen de workflowjob `validate` draait de HACS-validatie. |
 
 `make lint`, `make python-ci`, `make frontend-check` en `make frontend-ci` draaien groepen van deze targets.
 

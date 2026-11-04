@@ -8,7 +8,7 @@
 
 每个操作都是一个 make 目标，CI 调用同样的目标，因此在本地通过和在 CI 中通过含义相同。新的 CI 步骤先从一个 make 目标开始。`make help` 以一行列出每个目标，`make help ARGS=<target>` 描述一个目标：该目标运行什么、成功和失败时打印什么、`ARGS` 的作用，对于分组目标，还有该目标运行的步骤。
 
-`make ci` 运行每个检查步骤，是完成的定义。GitHub 在 [ci.yml](../../../.github/workflows/ci.yml) 唯一的 `checks` 作业中直接运行 `make ci`，同时运行共享的 `roquerodrigo/workflows` 作业（`lint`、`tests`、`validate`）和 `hacs` 作业，因此添加到 `make ci` 的步骤无需更改工作流就会在 GitHub 中运行。迭代时请运行范围更窄的目标。
+`make ci` 运行每个检查步骤，是完成的定义。GitHub 在 [ci.yml](../../../.github/workflows/ci.yml) 唯一的 `checks` 作业中直接运行 `make ci`，同时运行共享的 `roquerodrigo/workflows` 作业（`lint`、`tests`、`validate`），因此添加到 `make ci` 的步骤无需更改工作流就会在 GitHub 中运行。迭代时请运行范围更窄的目标。
 
 `make build` 是前端唯一的生产构建。`make test` 运行每个测试套件，每个套件都有自己的目标，因此可以单独运行一个套件：
 
@@ -39,7 +39,7 @@
 | `make docs-check` | 生成的实体参考、链接、图片、每个页面的语言栏、页面长度和功能列表覆盖情况。参见[文档页面](documentation.md#检查)。 |
 | `make template-check` | `bug.yml` 要求附上诊断下载，问题模板应用或链接的每个标签都存在于 `.github/labels.yml` 中，并且 `bug.yml` 的型号下拉列表与 `translations/en.json` 中的型号一致。 |
 | `make mock-build` | 模拟器镜像可以构建，并且不含字节码。 |
-| `make validate` | 在 Docker 中对工作树运行 hassfest。HACS 验证读取已推送的仓库，因此只有 `hacs` 工作流作业运行 HACS 验证。 |
+| `make validate` | 在 Docker 中对工作树运行 hassfest。HACS 验证读取已推送的仓库，因此只有 `validate` 工作流作业运行 HACS 验证。 |
 
 `make lint`、`make python-ci`、`make frontend-check` 和 `make frontend-ci` 运行这些目标的组合。
 

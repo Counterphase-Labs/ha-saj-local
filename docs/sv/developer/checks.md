@@ -8,7 +8,7 @@ Vad varje make-mål kör, hur du avgränsar en körning och vilka regler varje k
 
 Varje åtgärd är ett make-mål och CI anropar samma mål, så att godkänt lokalt och godkänt i CI betyder samma sak. Ett nytt CI-steg börjar som ett make-mål. `make help` listar varje mål på en rad, och `make help ARGS=<target>` beskriver ett mål: vad målet kör, vad målet skriver ut vid lyckad och misslyckad körning, vad `ARGS` gör och, för ett samlingsmål, vilka steg målet kör.
 
-`make ci` kör varje kontrollsteg och är definitionen av klart. GitHub kör själva `make ci` i det enda jobbet `checks` i [ci.yml](../../../.github/workflows/ci.yml), vid sidan av de delade jobben från `roquerodrigo/workflows` (`lint`, `tests`, `validate`) och jobbet `hacs`, så ett steg som läggs till i `make ci` körs i GitHub utan någon ändring av arbetsflödet. Kör de smalare målen medan du itererar.
+`make ci` kör varje kontrollsteg och är definitionen av klart. GitHub kör själva `make ci` i det enda jobbet `checks` i [ci.yml](../../../.github/workflows/ci.yml), vid sidan av de delade jobben från `roquerodrigo/workflows` (`lint`, `tests`, `validate`), så ett steg som läggs till i `make ci` körs i GitHub utan någon ändring av arbetsflödet. Kör de smalare målen medan du itererar.
 
 `make build` är det enda produktionsbygget av frontend. `make test` kör varje testsvit, och varje svit har ett eget mål så att en svit kan köras för sig:
 
@@ -39,7 +39,7 @@ Kontrollerna som utgör `make ci` har också ett mål var, så att ett verktyg k
 | `make docs-check` | Den genererade entitetsreferensen, länkar, bilder, sidlängd, täckningen av funktionslistan och språkfältet. Se [dokumentationssidan](documentation.md#kontroller). |
 | `make template-check` | `bug.yml` kräver diagnostiknedladdningen, varje etikett som en ärendemall sätter eller länkar finns i `.github/labels.yml`, och modellrullgardinen i `bug.yml` stämmer med modellerna i `translations/en.json`. |
 | `make mock-build` | Simulatoravbilden byggs och innehåller ingen bytekod. |
-| `make validate` | hassfest mot arbetsträdet, i Docker. HACS-valideringen läser det pushade arkivet, så bara arbetsflödesjobbet `hacs` kör HACS-valideringen. |
+| `make validate` | hassfest mot arbetsträdet, i Docker. HACS-valideringen läser det pushade arkivet, så bara arbetsflödesjobbet `validate` kör HACS-valideringen. |
 
 `make lint`, `make python-ci`, `make frontend-check` och `make frontend-ci` kör grupper av dessa mål.
 

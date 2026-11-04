@@ -8,7 +8,7 @@ What each make target runs, how to narrow a run, and the rules every check follo
 
 Every action is a make target and CI calls the same targets, so passing locally and passing in CI mean the same thing. A new CI step starts as a make target. `make help` lists every target with one line, and `make help ARGS=<target>` describes one target: what the target runs, what the target prints on success and on failure, what `ARGS` does and, for a grouping target, the steps the target runs.
 
-`make ci` runs every check step and is the definition of done. GitHub runs `make ci` itself in the one `checks` job of [ci.yml](../../../.github/workflows/ci.yml), alongside the shared `roquerodrigo/workflows` jobs (`lint`, `tests`, `validate`) and the `hacs` job, so a step added to `make ci` runs in GitHub with no workflow change. Run the narrower targets while iterating.
+`make ci` runs every check step and is the definition of done. GitHub runs `make ci` itself in the one `checks` job of [ci.yml](../../../.github/workflows/ci.yml), alongside the shared `roquerodrigo/workflows` jobs (`lint`, `tests`, `validate`), so a step added to `make ci` runs in GitHub with no workflow change. Run the narrower targets while iterating.
 
 `make build` is the one production build of the frontend. `make test` runs every test suite, and each suite has its own target so one suite can be run alone:
 
@@ -39,7 +39,7 @@ The checks that make up `make ci` also have a target each, so one tool can be ru
 | `make docs-check` | The generated entity reference, links, images, page length, feature list coverage and the language bar. See the [documentation page](documentation.md#checks). |
 | `make template-check` | `bug.yml` requires the diagnostics download, every label an issue template applies or links exists in `.github/labels.yml`, and the model dropdown of `bug.yml` matches the models in `translations/en.json`. |
 | `make mock-build` | The simulator image builds and holds no bytecode. |
-| `make validate` | hassfest against the working tree, in Docker. HACS validation reads the pushed repository, so only the `hacs` workflow job runs the HACS validation. |
+| `make validate` | hassfest against the working tree, in Docker. HACS validation reads the pushed repository, so only the `validate` workflow job runs the HACS validation. |
 
 `make lint`, `make python-ci`, `make frontend-check` and `make frontend-ci` run groups of these targets.
 

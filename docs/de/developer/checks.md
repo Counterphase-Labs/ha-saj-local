@@ -8,7 +8,7 @@ Was jedes Make-Target ausführt, wie du einen Lauf eingrenzt und welche Regeln j
 
 Jede Aktion ist ein Make-Target, und CI ruft dieselben Targets auf. Lokal bestehen und in CI bestehen bedeuten daher dasselbe. Ein neuer CI-Schritt beginnt als Make-Target. `make help` listet jedes Target mit einer Zeile auf, und `make help ARGS=<target>` beschreibt ein Target: was das Target ausführt, was das Target bei Erfolg und bei einem Fehler ausgibt, was `ARGS` bewirkt und, bei einem gruppierenden Target, welche Schritte das Target ausführt.
 
-`make ci` führt jeden Prüfschritt aus und ist die Definition von „fertig“. GitHub führt `make ci` selbst im einen Job `checks` von [ci.yml](../../../.github/workflows/ci.yml) aus, neben den gemeinsamen Jobs von `roquerodrigo/workflows` (`lint`, `tests`, `validate`) und dem Job `hacs`. Ein Schritt, der zu `make ci` hinzukommt, läuft also in GitHub ohne Änderung am Workflow. Führe beim Iterieren die engeren Targets aus.
+`make ci` führt jeden Prüfschritt aus und ist die Definition von „fertig“. GitHub führt `make ci` selbst im einen Job `checks` von [ci.yml](../../../.github/workflows/ci.yml) aus, neben den gemeinsamen Jobs von `roquerodrigo/workflows` (`lint`, `tests`, `validate`). Ein Schritt, der zu `make ci` hinzukommt, läuft also in GitHub ohne Änderung am Workflow. Führe beim Iterieren die engeren Targets aus.
 
 `make build` ist der eine Produktions-Build des Frontends. `make test` führt jede Testsuite aus, und jede Suite hat ein eigenes Target, damit eine Suite allein laufen kann:
 
@@ -39,7 +39,7 @@ Die Prüfungen, aus denen `make ci` besteht, haben ebenfalls je ein Target, dami
 | `make docs-check` | Die erzeugte Entitätsreferenz, Links, Bilder, Seitenlänge, die Abdeckung der Funktionsliste und die Sprachleiste. Siehe die [Seite Dokumentation](documentation.md#prüfungen). |
 | `make template-check` | `bug.yml` verlangt den Diagnosedownload, jedes Label, das eine Issue-Vorlage anwendet oder verlinkt, existiert in `.github/labels.yml`, und das Modell-Dropdown von `bug.yml` stimmt mit den Modellen in `translations/en.json` überein. |
 | `make mock-build` | Das Simulator-Image wird gebaut und enthält keinen Bytecode. |
-| `make validate` | hassfest gegen das Arbeitsverzeichnis, in Docker. Die HACS-Validierung liest das gepushte Repository, daher führt nur der Workflow-Job `hacs` die HACS-Validierung aus. |
+| `make validate` | hassfest gegen das Arbeitsverzeichnis, in Docker. Die HACS-Validierung liest das gepushte Repository, daher führt nur der Workflow-Job `validate` die HACS-Validierung aus. |
 
 `make lint`, `make python-ci`, `make frontend-check` und `make frontend-ci` führen Gruppen dieser Targets aus.
 

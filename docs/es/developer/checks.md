@@ -8,7 +8,7 @@ Qué ejecuta cada objetivo de make, cómo acotar una ejecución y las reglas que
 
 Cada acción es un objetivo de make y CI llama a los mismos objetivos, así que pasar en local y pasar en CI significan lo mismo. Un paso nuevo de CI empieza como un objetivo de make. `make help` lista cada objetivo con una línea, y `make help ARGS=<objetivo>` describe un objetivo: qué ejecuta el objetivo, qué imprime el objetivo si tiene éxito y si falla, qué hace `ARGS` y, para un objetivo de agrupación, los pasos que ejecuta el objetivo.
 
-`make ci` ejecuta cada paso de comprobación y es la definición de terminado. GitHub ejecuta `make ci` en el único trabajo `checks` de [ci.yml](../../../.github/workflows/ci.yml), junto a los trabajos compartidos de `roquerodrigo/workflows` (`lint`, `tests`, `validate`) y el trabajo `hacs`, así que un paso añadido a `make ci` se ejecuta en GitHub sin cambiar el flujo de trabajo. Ejecuta los objetivos más acotados mientras iteras.
+`make ci` ejecuta cada paso de comprobación y es la definición de terminado. GitHub ejecuta `make ci` en el único trabajo `checks` de [ci.yml](../../../.github/workflows/ci.yml), junto a los trabajos compartidos de `roquerodrigo/workflows` (`lint`, `tests`, `validate`), así que un paso añadido a `make ci` se ejecuta en GitHub sin cambiar el flujo de trabajo. Ejecuta los objetivos más acotados mientras iteras.
 
 `make build` es la única compilación de producción del frontend. `make test` ejecuta todas las suites de pruebas, y cada suite tiene su propio objetivo para poder ejecutar una suite sola:
 
@@ -39,7 +39,7 @@ Las comprobaciones que forman `make ci` también tienen un objetivo cada una, pa
 | `make docs-check` | La referencia de entidades generada, los enlaces, las imágenes, la longitud de las páginas, la cobertura de la lista de funciones y la barra de idiomas. Consulta la [página de documentación](documentation.md#comprobaciones). |
 | `make template-check` | `bug.yml` exige la descarga de diagnósticos, toda etiqueta que una plantilla de incidencia aplica o enlaza existe en `.github/labels.yml`, y el desplegable de modelos de `bug.yml` coincide con los modelos de `translations/en.json`. |
 | `make mock-build` | La imagen del simulador se compila y no contiene bytecode. |
-| `make validate` | hassfest sobre el árbol de trabajo, en Docker. La validación de HACS lee el repositorio publicado, así que solo el trabajo `hacs` de CI ejecuta la validación de HACS. |
+| `make validate` | hassfest sobre el árbol de trabajo, en Docker. La validación de HACS lee el repositorio publicado, así que solo el trabajo `validate` de CI ejecuta la validación de HACS. |
 
 `make lint`, `make python-ci`, `make frontend-check` y `make frontend-ci` ejecutan grupos de estos objetivos.
 

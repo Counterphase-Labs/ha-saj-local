@@ -8,7 +8,7 @@ Che cosa esegue ogni target make, come restringere un'esecuzione e le regole che
 
 Ogni azione è un target make e la CI chiama gli stessi target, quindi superare i controlli in locale e superarli nella CI significano la stessa cosa. Un nuovo passaggio della CI parte come target make. `make help` elenca ogni target con una riga, e `make help ARGS=<target>` descrive un target: che cosa esegue il target, che cosa stampa il target in caso di successo e di fallimento, che cosa fa `ARGS` e, per un target di raggruppamento, i passaggi che il target esegue.
 
-`make ci` esegue ogni passaggio di controllo ed è la definizione di completato. GitHub esegue `make ci` stesso nell'unico job `checks` di [ci.yml](../../../.github/workflows/ci.yml), insieme ai job condivisi di `roquerodrigo/workflows` (`lint`, `tests`, `validate`) e al job `hacs`, quindi un passaggio aggiunto a `make ci` viene eseguito in GitHub senza modifiche al workflow. Esegui i target più ristretti mentre iteri.
+`make ci` esegue ogni passaggio di controllo ed è la definizione di completato. GitHub esegue `make ci` stesso nell'unico job `checks` di [ci.yml](../../../.github/workflows/ci.yml), insieme ai job condivisi di `roquerodrigo/workflows` (`lint`, `tests`, `validate`), quindi un passaggio aggiunto a `make ci` viene eseguito in GitHub senza modifiche al workflow. Esegui i target più ristretti mentre iteri.
 
 `make build` è l'unica build di produzione del frontend. `make test` esegue ogni suite di test, e ogni suite ha il proprio target così una suite può essere eseguita da sola:
 
@@ -39,7 +39,7 @@ Anche i controlli che compongono `make ci` hanno un target ciascuno, così uno s
 | `make docs-check` | Il riferimento delle entità generato, i collegamenti, le immagini, la lunghezza delle pagine, la copertura dell'elenco delle funzionalità e la barra delle lingue. Vedi la [pagina della documentazione](documentation.md#controlli). |
 | `make template-check` | `bug.yml` richiede il download della diagnostica, ogni etichetta che un modulo di segnalazione applica o collega esiste in `.github/labels.yml`, e il menu a discesa del modello di `bug.yml` corrisponde ai modelli in `translations/en.json`. |
 | `make mock-build` | L'immagine del simulatore si costruisce e non contiene bytecode. |
-| `make validate` | hassfest sull'albero di lavoro, in Docker. La convalida HACS legge il repository pubblicato, quindi solo il job `hacs` del workflow esegue la convalida HACS. |
+| `make validate` | hassfest sull'albero di lavoro, in Docker. La convalida HACS legge il repository pubblicato, quindi solo il job `validate` del workflow esegue la convalida HACS. |
 
 `make lint`, `make python-ci`, `make frontend-check` e `make frontend-ci` eseguono gruppi di questi target.
 
