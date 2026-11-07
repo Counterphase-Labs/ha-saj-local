@@ -1260,7 +1260,7 @@ wheels = [
 
 [[package]]
 name = "ha-saj-local"
-version = "0.1.0"
+version = "1.0.0b1"
 source = { virtual = "." }
 
 [package.dev-dependencies]

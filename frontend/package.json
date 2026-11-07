@@ -1,7 +1,7 @@
 {
   "name": "saj-local-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0b1",
   "type": "module",
   "engines": {
     "node": ">=22"
