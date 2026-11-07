@@ -67,12 +67,14 @@
 
 ## 截图
 
-`docs/images/<code>/` 中的每张截图都由 `make docs-images` 制作：在 Docker 中的真实 Home Assistant 上，把用户语言设为该文件夹的语言，或者取自同一次运行中的模拟器页面。`make docs-images` 运行每种语言，英语优先，每次运行都使用全新的容器，`ARGS=<code>` 选择一种语言。没有任何截图是手工编辑或手工截取的，因此每当界面变化时都可以重建整套截图。截图显示的是模拟器，因此截图中的每个读数都是模拟值。
+`docs/images/<code>/` 中的每张截图都由 `make docs-images` 制作：在 Docker 中的真实 Home Assistant 上，把用户语言设为该文件夹的语言，或者取自同一次运行中的模拟器页面。`make docs-images` 同时运行每种语言，每种语言使用各自全新的容器，`ARGS=<code>` 选择一种语言。没有任何截图是手工编辑或手工截取的，因此每当界面变化时都可以重建整套截图。截图显示的是模拟器，因此截图中的每个读数都是模拟值。
 
-该目标运行 `tests/playwright/run-docs-images.sh`，该脚本构建 [compose.playwright.yaml](../../../compose.playwright.yaml) 的 `homeassistant` 和 `playwright-docs` 服务，启动一次性的 Home Assistant 和两个模拟器，运行规格，然后移除容器、卷和本地镜像。该目标需要 Docker，时间限制与 `make test-browser-home-assistant` 相同，并通过 `ARGS` 接受选项，由脚本接收。Home Assistant 镜像由 `Dockerfile.playwright-home-assistant` 构建，该文件构建卡片包并把集成复制进镜像，因此不挂载任何集成代码。规格是 `frontend/tests/browser/docs/screenshots.spec.ts`，由 `frontend/playwright.docs.config.ts` 配置。
+该目标运行 `tests/playwright/run-docs-images.sh`，该脚本为所有语言一次性构建 [compose.playwright.yaml](../../../compose.playwright.yaml) 的 `homeassistant` 和 `playwright-docs` 服务的镜像，为每种语言启动一次性的 Home Assistant 和两个模拟器，运行规格，然后移除容器、卷和本地镜像。Playwright 容器以主机用户运行，因此一次运行的任何文件都不属于 root，即使运行提前停止也是如此。该目标需要 Docker，时间限制与 `make test-browser-home-assistant` 相同，并通过 `ARGS` 接受选项，由脚本接收。Home Assistant 镜像由 `Dockerfile.playwright-home-assistant` 构建，该文件构建卡片包并把集成复制进镜像，因此不挂载任何集成代码。规格是 `frontend/tests/browser/docs/screenshots.spec.ts`，由 `frontend/playwright.docs.config.ts` 配置。
 
 - **系统。** HS3 是使用 `mock/scenarios/hs3-full-house.yaml` 的模拟器 `mock-docs`，该场景安装了所有设备。H2 是使用 `mock/scenarios/h2-battery.yaml` 的模拟器 `mock-h2`，并使用实体前缀 `h2`。两个模拟器都不挂载状态文件夹，因此每次运行都从场景开始。
-- **固定条件。** 视口为 1280 乘 800 像素，主题为浅色，时钟为真实时间。较高的对话框或卡片在 1600 像素高的窗口中截取，因为 Home Assistant 固定的页眉会遮住元素的顶部。
+- **固定条件。** 视口为 1280 乘 800 像素，主题为浅色。较高的对话框或卡片在 1600 像素高的窗口中截取，因为 Home Assistant 固定的页眉会遮住元素的顶部。
+- **停止的时钟。** 规格把每个模拟器重置到其场景之后，会在整个运行期间把两个模拟器的模拟时钟停在场景开始时间，因此每次运行的读数都相同。模拟器页面的截图和修复截图显示固定的时间值，而不是真实的时间值。对于每个模拟器页面，规格给浏览器一份页面数据的副本，其中的请求速率、时间、持续时长和客户端地址都是固定的，并固定浏览器的时钟。对于修复截图，规格把浏览器时钟固定在 Home Assistant 创建修复问题之后 5 秒，因此该问题显示“5 秒前”。
+- **并行语言。** 各语言同时运行，每种语言使用各自的容器。运行时同时启动的语言数量，为机器每四个处理器对应一种。每种语言写入各自的结果文件夹 `frontend/test-results/docs/<code>/` 和报告文件夹 `frontend/playwright-report/docs/<code>/`。某种语言失败不会停止其他语言。
 - **语言。** 每次运行都会设置 Home Assistant 服务器语言（在设置 SAJ Local 之前，使实体以该语言的名称创建）和用户语言（按语言代码而不是按语言选择器的标签）。当 SAJ Local 的实体名称不是该次运行的语言时，运行失败。图片保存到 `docs/images/<code>/`。规格通过 URL 路由打开界面，通过 `name` 属性查找 SAJ Local 表单的字段，并用运行时通过 `hass.localize` 从正在运行的 Home Assistant 读取的文字，查找只有文字的 Home Assistant 控件。规格不含任何标签表，因此每种语言运行相同的步骤。
 - **命名。** 每个文件命名为 `<page>-<subject>.png`，其中 `<page>` 是把 `/` 替换为 `-` 的页面路径，例如 `cards-battery-card.png`，显示该图片的页面链接到该文件。
 - **模拟器页面。** 模拟器页面的截图来自同一次运行中的两个模拟器 `mock-docs` 和 `mock-h2`，并使用名称前缀 `developer-simulator-page-`。这些截图最后截取，在每张 Home Assistant 截图之后，因此在模拟器页面上所做的任何操作都不会改变 Home Assistant 截图。规格在 HS3 页面上设置故障“Fan 1 fault”，修复截图使模拟器拒绝的寄存器保持被拒绝状态，因此 Link 视图、流量日志和状态栏中的变化都显示真实的变化。
@@ -81,7 +83,7 @@
 - **等待。** 规格通过检查界面所显示的状态来等待界面，绝不使用固定的休眠。
 - **修复。** 修复截图显示被拒绝寄存器的修复。规格为逆变器温度添加一个间隔为 10 秒的轮询组，通过模拟器页面的 `POST /api/link` 使模拟器拒绝该寄存器，并最多等待两分钟，直到 `repairs/list_issues` 列出 SAJ Local 的 `registers_refused` 问题。当该问题没有出现时，运行会失败，并给出指出缺失问题的消息。
 - **表单。** 前缀更改警告被截取后表单随即关闭，这会中止流程，因此不会保存任何前缀。“允许控制”警告被截取后随即确认，因为卡片需要允许控制。
-- **失败。** HTML 报告位于 `frontend/playwright-report/docs/`，失败的运行会把 Home Assistant 日志保存为 `frontend/test-results/docs/home-assistant.log`。
+- **失败。** 每种语言的 HTML 报告位于 `frontend/playwright-report/docs/<code>/`，失败的语言会把 Home Assistant 日志保存在其结果文件夹 `frontend/test-results/docs/<code>/` 中。失败的运行会列出每种失败的语言及其报告文件夹。
 
 截图不做逐像素比较，无论在 CI 还是在其他任何地方。Home Assistant 每次运行渲染的实时数值和字体都有所不同，因此逐像素比较会在没有真实变化的情况下失败。请通过查看图片来审阅发生变化的图片。
 
@@ -112,7 +114,7 @@
 - **文档检查。** `make docs-check` 对每个语言文件夹运行每条规则。本页的[功能覆盖表](#功能覆盖表)以相同的页面名称适用于每种语言，孤立图片规则把 `docs/images/<code>/` 与同一种语言的页面进行核对。
 - **语言栏。** `docs/<code>/user/` 和 `docs/<code>/developer/` 下每一页的第一行（包括生成的实体页面）都是语言栏 `en | de | nl | fr | zh | es | it | pl | sv`，顺序始终不变。除当前语言外，每个标签都链接到该语言文件夹中的同一页，当前语言为纯文本。`make docs` 写入语言栏，`make docs-check` 报告第一行不是预期语言栏的页面，以及语言栏中指向不存在页面的链接。
 - **翻译的 README。** 仓库根目录的 `README.md` 保持英文，其译文位于 `docs/<code>/README.md`，其中的链接指向该语言的页面。根目录的 `README.md` 和每个 `docs/<code>/README.md` 都以相同的语言栏作为第一行，`make docs-check` 会报告缺失的 `docs/<code>/README.md`。
-- **截图。** `make docs-images` 对每种语言各运行一次规格，英语优先，每次运行都使用全新的容器。`ARGS=<code>` 选择一种语言，参见[截图](#截图)。
+- **截图。** `make docs-images` 同时对每种语言运行规格，每种语言使用各自全新的容器，并有各自的结果文件夹和报告文件夹。`ARGS=<code>` 选择一种语言，参见[截图](#截图)。
 - **术语表。** 每种语言的 `user/nomenclature.md` 页面是该语言中集成、卡片和页面的每一份译文所遵循的术语列表。英语的[术语表](../user/nomenclature.md)是源头。
 - **更改英语。** 对英语文字、页面或截图的更改，要在同一次更改中更新每种语言。没有任何检查使各种语言保持同步。
 

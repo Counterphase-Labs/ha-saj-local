@@ -31,12 +31,60 @@ const HS3_TITLE = "SAJ HS3MOCK0000000000003";
 const H2_HOST = "mock-h2";
 const H2_PREFIX = "h2";
 const SIMULATOR_PANEL = "http://mock-docs:8080";
+const H2_PANEL = "http://mock-h2:8080";
 // The inverter temperature is one register of the HS3 realtime block, so
 // refusing it leaves every other reading of the system answering.
 const REFUSED_KEY = "inverter_temperature";
 const REFUSED_REGISTER = 0x4010;
 const ILLEGAL_ADDRESS = 2;
 const REFUSED_INTERVAL_SECONDS = 10;
+const REPAIR_ISSUE_AGE_SECONDS = 5;
+const MILLISECONDS = 1000;
+const FIXED_CLIENT_ADDRESS_PREFIX = "192.168.1.";
+const FIXED_CLIENT_FIRST_HOST = 20;
+const FIXED_CLIENT_PORT = 50_000;
+const KEPT_ENTRIES = 60;
+const HOLDING = 3;
+const INPUT = 4;
+const NEWEST_ENTRY_AGE_SECONDS = 2;
+const ENTRY_SPACING_SECONDS = 1;
+const REQUEST_DURATION_MS = 30;
+const LAST_REQUEST_AGE_SECONDS = 2;
+const LAST_READ_AGE_SECONDS = 20;
+const CONNECTED_AGE_SECONDS = 600;
+const REQUESTS_LAST_10_SECONDS = 2;
+const REQUESTS_LAST_60_SECONDS = 14;
+const REGISTERS_LAST_60_SECONDS = 700;
+const PEAK_REQUESTS_PER_60_SECONDS = 28;
+const ANSWERED_PER_PERIOD = 14;
+const EXCEPTIONS_PER_PERIOD = 1;
+const HISTORY_SECONDS = 30 * 60;
+
+interface PollRequest {
+    function: number;
+    start: number;
+    count: number;
+}
+
+const POLL_CYCLE: readonly PollRequest[] = [
+    { function: INPUT, start: 0x309d, count: 18 },
+    { function: HOLDING, start: 0x3644, count: 14 },
+    { function: HOLDING, start: 0x4004, count: 13 },
+    { function: HOLDING, start: 0x4010, count: 1 },
+    { function: HOLDING, start: 0x4031, count: 15 },
+    { function: HOLDING, start: 0x4059, count: 30 },
+    { function: HOLDING, start: 0x4090, count: 26 },
+    { function: HOLDING, start: 0x40bf, count: 24 },
+    { function: HOLDING, start: 0x40df, count: 16 },
+    { function: HOLDING, start: 0x4167, count: 16 },
+    { function: HOLDING, start: 0x4204, count: 12 },
+    { function: HOLDING, start: 0x4b12, count: 1 },
+    { function: HOLDING, start: 0x8f00, count: 2 },
+    { function: HOLDING, start: 0x8f03, count: 10 },
+    { function: HOLDING, start: 0xa002, count: 2 },
+    { function: HOLDING, start: 0xa03f, count: 30 },
+    { function: HOLDING, start: 0xa062, count: 1 },
+];
 
 interface FlowResult {
     type: string;
@@ -44,6 +92,95 @@ interface FlowResult {
     step_id?: string;
     reason?: string;
     errors?: Record<string, string> | null;
+}
+
+interface StoppedReadings {
+    hs3: number;
+    h2: number;
+}
+
+interface SimulatorState {
+    time: string;
+    readings: { label: string; value: number | string }[];
+}
+
+interface TrafficEntry {
+    sequence: number;
+    at: number;
+    client: string;
+    port: number;
+    kind: string;
+    connection: number;
+    event?: string;
+    operation?: string;
+    function?: number;
+    start?: number;
+    count?: number;
+    answer?: string;
+    exception_code?: number | null;
+    detail?: { words: number[] };
+    duration_ms?: number;
+    transaction_id?: number;
+    late_duplicate?: boolean;
+}
+
+interface ClientCounters {
+    connections_opened: number;
+    connections_closed: number;
+    connections_refused: number;
+    requests: number;
+    reads: number;
+    writes: number;
+    registers_read: number;
+    registers_written: number;
+    exceptions: Record<string, number>;
+    no_answers: number;
+    dropped_connections: number;
+    last_request_at: number | null;
+    requests_last_10_seconds: number;
+    requests_last_60_seconds: number;
+    registers_last_60_seconds: number;
+    peak_requests_per_60_seconds: number;
+}
+
+interface ConnectedClient {
+    connection: number;
+    client: string;
+    port: number;
+    since: number;
+}
+
+interface HistoryBucket {
+    start: number;
+    answered: number;
+    exception: number;
+    unanswered: number;
+}
+
+interface SimulatorTraffic {
+    entries: TrafficEntry[];
+    latest: number;
+    now: number;
+    counters: {
+        total: ClientCounters;
+        clients: Record<string, ClientCounters>;
+        connected: ConnectedClient[];
+    };
+    history: {
+        bucket_seconds: number;
+        total: HistoryBucket[];
+        clients: Record<string, HistoryBucket[]>;
+    };
+}
+
+interface SimulatorRegisters {
+    blocks: { fields: { last_read: number | null }[] }[];
+}
+
+interface RepairIssue {
+    domain: string;
+    translation_key: string;
+    created: string;
 }
 
 interface HassConnection {
@@ -82,13 +219,22 @@ test.use({ locale: "en-US" });
 
 const screenshots = new Map<string, Buffer>();
 
-const hassApi = (
+const waitForHass = (page: Page): Promise<unknown> =>
+    page.waitForFunction(() => {
+        const home = document.querySelector("home-assistant") as unknown as {
+            hass?: { language?: string; states?: object };
+        } | null;
+        return Boolean(home?.hass?.language && home.hass.states);
+    });
+
+const hassApi = async (
     page: Page,
     method: string,
     path: string,
     body?: Record<string, unknown>,
-): Promise<unknown> =>
-    page.evaluate(
+): Promise<unknown> => {
+    await waitForHass(page);
+    return page.evaluate(
         async ([apiMethod, apiPath, apiBody]) => {
             try {
                 return await (
@@ -105,12 +251,14 @@ const hassApi = (
         },
         [method, path, body] as const,
     );
+};
 
-const hassWebSocket = (
+const hassWebSocket = async (
     page: Page,
     message: Record<string, unknown>,
-): Promise<unknown> =>
-    page.evaluate(
+): Promise<unknown> => {
+    await waitForHass(page);
+    return page.evaluate(
         (wsMessage) =>
             (
                 document.querySelector("home-assistant") as unknown as {
@@ -119,9 +267,14 @@ const hassWebSocket = (
             ).hass.callWS(wsMessage),
         message,
     );
+};
 
-const hassState = (page: Page, entityId: string): Promise<string | undefined> =>
-    page.evaluate(
+const hassState = async (
+    page: Page,
+    entityId: string,
+): Promise<string | undefined> => {
+    await waitForHass(page);
+    return page.evaluate(
         (id) =>
             (
                 document.querySelector("home-assistant") as unknown as {
@@ -130,9 +283,11 @@ const hassState = (page: Page, entityId: string): Promise<string | undefined> =>
             ).hass.states[id]?.state,
         entityId,
     );
+};
 
-const hassLanguage = (page: Page): Promise<string> =>
-    page.evaluate(
+const hassLanguage = async (page: Page): Promise<string> => {
+    await waitForHass(page);
+    return page.evaluate(
         () =>
             (
                 document.querySelector("home-assistant") as unknown as {
@@ -140,10 +295,12 @@ const hassLanguage = (page: Page): Promise<string> =>
                 }
             ).hass.language,
     );
+};
 
 // The text of a Home Assistant control that has only its text, read from the
 // running Home Assistant in the user's language. A renamed key is fixed here.
 const localized = async (page: Page, key: string): Promise<string> => {
+    await waitForHass(page);
     const read = (): Promise<string> =>
         page.evaluate(
             (textKey) =>
@@ -217,6 +374,11 @@ const waitForTwoFrames = async (page: Page): Promise<void> => {
     );
 };
 
+const releasePointer = async (page: Page): Promise<void> => {
+    await page.mouse.move(-1, -1);
+    await waitForTwoFrames(page);
+};
+
 const capture = async (
     name: string,
     target: Locator,
@@ -228,10 +390,77 @@ const capture = async (
         await waitForTwoFrames(page);
     }
     await expect(target).toBeVisible();
+    await releasePointer(page);
     screenshots.set(name, await target.screenshot({ animations: "disabled" }));
     if (tall) {
         await page.setViewportSize(VIEWPORT);
     }
+};
+
+const waitForSettledHeight = async (target: Locator): Promise<void> => {
+    let previous = -1;
+    await expect
+        .poll(
+            async () => {
+                const height = (await target.boundingBox())?.height ?? 0;
+                const settled = height > 0 && height === previous;
+                previous = height;
+                return settled;
+            },
+            {
+                message: "The opened section kept changing its height",
+                intervals: [250],
+            },
+        )
+        .toBe(true);
+};
+
+const SCROLL_END_READS = 4;
+
+const scrollAncestorsToEnd = (target: Locator): Promise<boolean> =>
+    target.evaluate((node) => {
+        let atEnd = true;
+        let current: Node | null = node;
+        while (current !== null) {
+            if (
+                current instanceof HTMLElement &&
+                current.scrollHeight > current.clientHeight &&
+                ["auto", "scroll"].includes(getComputedStyle(current).overflowY)
+            ) {
+                current.scrollTop = current.scrollHeight;
+                atEnd =
+                    atEnd &&
+                    current.scrollTop + current.clientHeight >=
+                        current.scrollHeight - 1;
+            }
+            const slot: HTMLSlotElement | null =
+                current instanceof Element ? current.assignedSlot : null;
+            if (slot === null) {
+                current =
+                    current.parentNode instanceof ShadowRoot
+                        ? current.parentNode.host
+                        : current.parentNode;
+            } else {
+                current = slot;
+            }
+        }
+        return atEnd;
+    });
+
+const scrollToEnd = async (target: Locator): Promise<void> => {
+    let reads = 0;
+    await expect
+        .poll(
+            async () => {
+                reads = (await scrollAncestorsToEnd(target)) ? reads + 1 : 0;
+                return reads >= SCROLL_END_READS;
+            },
+            {
+                message: "The dialog did not stay at the end of its form",
+                intervals: [250],
+            },
+        )
+        .toBe(true);
 };
 
 const hasReading = async (page: Page, entityId: string): Promise<boolean> => {
@@ -386,18 +615,38 @@ const entryIdOf = async (page: Page, prefix: string): Promise<string> => {
     return entry?.config_entry_id ?? "";
 };
 
-const waitForSolarPower = async (page: Page): Promise<void> => {
+const showsSolarPower = async (
+    page: Page,
+    entity: string,
+    watts: number,
+): Promise<boolean> => {
+    if (!(await hasReading(page, entity))) {
+        return false;
+    }
+    const shown = Number(await hassState(page, entity));
+    return Math.abs(shown - watts) < 1;
+};
+
+const waitForSolarPower = async (
+    page: Page,
+    stopped: StoppedReadings,
+): Promise<void> => {
     await expect
         .poll(
             async () =>
-                (await hasReading(page, entityId("sensor", "pv_power"))) &&
-                (await hasReading(
+                (await showsSolarPower(
+                    page,
+                    entityId("sensor", "pv_power"),
+                    stopped.hs3,
+                )) &&
+                (await showsSolarPower(
                     page,
                     entityId("sensor", "pv_power", H2_PREFIX),
+                    stopped.h2,
                 )),
             {
                 message:
-                    "Neither the HS3 nor the H2 reported solar power within two minutes",
+                    "Home Assistant did not show the solar power of the stopped HS3 and H2 simulators within two minutes",
                 timeout: READING_TIMEOUT_MS,
                 intervals: [2000],
             },
@@ -519,10 +768,16 @@ const submitFlow = async (page: Page): Promise<void> => {
 const captureConfigureForms = async (page: Page): Promise<void> => {
     await openConfigure(page);
     // The equipment section is the only collapsible section of the form.
-    await flowForm(page).locator("ha-expansion-panel").first().click();
-    await capture("optional-equipment-equipment-section", flowDialog(page), {
-        tall: true,
-    });
+    const equipment = flowForm(page).locator("ha-expansion-panel").first();
+    await equipment.click();
+    await expect(equipment.locator('[aria-expanded="true"]')).toBeVisible();
+    await page.setViewportSize(TALL_VIEWPORT);
+    await waitForTwoFrames(page);
+    await waitForSettledHeight(equipment);
+    await releasePointer(page);
+    await scrollToEnd(equipment);
+    await capture("optional-equipment-equipment-section", flowDialog(page));
+    await page.setViewportSize(VIEWPORT);
     await flowField(page, "prefix").fill("house");
     await submitFlow(page);
     await expect(
@@ -541,6 +796,15 @@ const captureConfigureForms = async (page: Page): Promise<void> => {
     await closeFlowDialog(page);
 };
 
+const pickSystem = async (page: Page): Promise<void> => {
+    const system = page
+        .locator("dialog-pick-config-entry")
+        .getByText(HS3_TITLE, { exact: true });
+    await expect(system).toBeVisible();
+    await waitForTwoFrames(page);
+    await system.click();
+};
+
 const capturePollingGroup = async (page: Page): Promise<void> => {
     await optionsEntryPage(page);
     await page
@@ -551,8 +815,7 @@ const capturePollingGroup = async (page: Page): Promise<void> => {
             ),
         })
         .click();
-    // The picker is the last element on the page, after the hub row of the same title.
-    await page.getByText(HS3_TITLE, { exact: true }).last().click();
+    await pickSystem(page);
     await flowField(page, "name").fill("Fast");
     await capture("polling-polling-group", flowDialog(page), { tall: true });
     await closeFlowDialog(page);
@@ -678,8 +941,7 @@ const capturePowerSchedule = async (page: Page): Promise<void> => {
             ),
         })
         .click();
-    // The picker is the last element on the page, after the hub row of the same title.
-    await page.getByText(HS3_TITLE, { exact: true }).last().click();
+    await pickSystem(page);
     const dialog = flowDialog(page);
     const form = flowForm(page);
     // Battery is the first function, so it is already chosen.
@@ -772,19 +1034,20 @@ const captureRepair = async (
             },
         ],
     });
+    let created = "";
     await expect
         .poll(
             async () => {
                 const { issues } = (await hassWebSocket(page, {
                     type: "repairs/list_issues",
-                })) as {
-                    issues: { domain: string; translation_key: string }[];
-                };
-                return issues.some(
-                    (issue) =>
-                        issue.domain === "saj_local" &&
-                        issue.translation_key === "registers_refused",
-                );
+                })) as { issues: RepairIssue[] };
+                created =
+                    issues.find(
+                        (issue) =>
+                            issue.domain === "saj_local" &&
+                            issue.translation_key === "registers_refused",
+                    )?.created ?? "";
+                return created !== "";
             },
             {
                 message: "SAJ Local repair issue registers_refused is missing",
@@ -793,6 +1056,9 @@ const captureRepair = async (
             },
         )
         .toBe(true);
+    await page.clock.setFixedTime(
+        Date.parse(created) + REPAIR_ISSUE_AGE_SECONDS * MILLISECONDS,
+    );
     await page.goto("/config/repairs");
     await capture(
         "faults-and-repairs-repair-issue",
@@ -802,7 +1068,6 @@ const captureRepair = async (
 };
 
 const SIMULATOR_PREFIX = "developer-simulator-page";
-const H2_PANEL = "http://mock-h2:8080";
 const SIMULATOR_FAULT = "Fan 1 fault";
 // The simulator page names each view by the key of its tab link.
 const SIMULATOR_VIEWS = [
@@ -813,18 +1078,42 @@ const SIMULATOR_VIEWS = [
     "link",
     "scenario",
 ] as const;
+const NO_TRANSITIONS =
+    "*, *::before, *::after { transition: none !important; }";
 const FAULT_SEARCH = "section.view:visible input[type=search]";
+
+const waitForIcons = async (page: Page): Promise<void> => {
+    await page.waitForFunction(
+        () =>
+            document.querySelectorAll("span.icon:empty, svg.diagram g:empty")
+                .length === 0,
+    );
+};
+
+const captureSimulatorPart = async (
+    name: string,
+    target: Locator,
+    { tall = false }: { tall?: boolean } = {},
+): Promise<void> => {
+    await waitForIcons(target.page());
+    await capture(name, target, { tall });
+};
 
 const capturePageView = async (
     page: Page,
     name: string,
     { tall = false }: { tall?: boolean } = {},
 ): Promise<void> => {
+    await waitForIcons(page);
     await page.setViewportSize(tall ? TALL_VIEWPORT : VIEWPORT);
     await waitForTwoFrames(page);
+    await releasePointer(page);
     screenshots.set(
         `${SIMULATOR_PREFIX}-${name}`,
-        await page.screenshot({ animations: "disabled" }),
+        await page.screenshot({
+            animations: "disabled",
+            style: NO_TRANSITIONS,
+        }),
     );
     await page.setViewportSize(VIEWPORT);
 };
@@ -842,7 +1131,258 @@ const waitForOverview = async (page: Page): Promise<void> => {
     await expect(page.locator("article.card").first()).toBeVisible();
 };
 
-const captureSimulatorPages = async (page: Page): Promise<void> => {
+const simulatorGet = async <T>(
+    request: APIRequestContext,
+    panel: string,
+    path: string,
+): Promise<T> => {
+    const response = await request.get(`${panel}${path}`);
+    expect(
+        response.ok(),
+        `GET ${panel}${path} failed with ${String(response.status())}: ${await response.text()}`,
+    ).toBe(true);
+    return (await response.json()) as T;
+};
+
+const fixedClientCounters = (
+    entries: TrafficEntry[],
+    now: number,
+): ClientCounters => {
+    const counters: ClientCounters = {
+        connections_opened: 0,
+        connections_closed: 0,
+        connections_refused: 0,
+        requests: 0,
+        reads: 0,
+        writes: 0,
+        registers_read: 0,
+        registers_written: 0,
+        exceptions: {},
+        no_answers: 0,
+        dropped_connections: 0,
+        requests_last_10_seconds: REQUESTS_LAST_10_SECONDS,
+        requests_last_60_seconds: REQUESTS_LAST_60_SECONDS,
+        registers_last_60_seconds: REGISTERS_LAST_60_SECONDS,
+        peak_requests_per_60_seconds: PEAK_REQUESTS_PER_60_SECONDS,
+        last_request_at: now - LAST_REQUEST_AGE_SECONDS,
+    };
+    for (const entry of entries) {
+        if (entry.kind === "connection") {
+            if (entry.event === "opened") {
+                counters.connections_opened += 1;
+            } else if (entry.event === "refused") {
+                counters.connections_refused += 1;
+            } else {
+                counters.connections_closed += 1;
+            }
+            continue;
+        }
+        counters.requests += 1;
+        const words =
+            entry.answer === "answered" ? (entry.detail?.words.length ?? 0) : 0;
+        if (entry.operation === "read") {
+            counters.reads += 1;
+            counters.registers_read += words;
+        } else if (entry.operation === "write") {
+            counters.writes += 1;
+            counters.registers_written += words;
+        }
+        if (
+            entry.exception_code !== null &&
+            entry.exception_code !== undefined
+        ) {
+            const code = String(entry.exception_code);
+            counters.exceptions[code] = (counters.exceptions[code] ?? 0) + 1;
+        }
+        if (entry.answer === "no_answer" || entry.answer === "ignored") {
+            counters.no_answers += 1;
+        }
+        if (entry.answer === "dropped") {
+            counters.dropped_connections += 1;
+        }
+    }
+    return counters;
+};
+
+const fixedHistory = (now: number, bucketSeconds: number): HistoryBucket[] => {
+    const newestStart = Math.floor(now / bucketSeconds) * bucketSeconds;
+    const periods = HISTORY_SECONDS / bucketSeconds;
+    return Array.from({ length: periods }, (_, index) => ({
+        start: newestStart - (periods - 1 - index) * bucketSeconds,
+        answered: ANSWERED_PER_PERIOD,
+        exception: EXCEPTIONS_PER_PERIOD,
+        unanswered: 0,
+    }));
+};
+
+const realRequestLines = (requests: TrafficEntry[]): string => {
+    const occurrences = new Map<string, number>();
+    for (const entry of requests) {
+        const line = `function ${String(entry.function)}, start address ${String(entry.start)}, count ${String(entry.count)}`;
+        occurrences.set(line, (occurrences.get(line) ?? 0) + 1);
+    }
+    return [...occurrences]
+        .map(([line, times]) => `${line}: ${String(times)} times`)
+        .join("\n");
+};
+
+const fixedPollCycle = (real: SimulatorTraffic): TrafficEntry[] => {
+    const requests = real.entries
+        .filter((entry) => entry.kind === "request")
+        .sort((first, second) => second.sequence - first.sequence);
+    return POLL_CYCLE.map((wanted) => {
+        const entry = requests.find(
+            (candidate) =>
+                candidate.function === wanted.function &&
+                candidate.start === wanted.start &&
+                candidate.count === wanted.count,
+        );
+        if (entry === undefined) {
+            throw new Error(
+                `The traffic log holds no request with function ${String(wanted.function)}, start address ${String(wanted.start)} and count ${String(wanted.count)}. The traffic log holds these requests:\n${realRequestLines(requests)}`,
+            );
+        }
+        return entry;
+    });
+};
+
+const fixedTraffic = (
+    real: SimulatorTraffic,
+    now: number,
+    withCycle: boolean,
+): SimulatorTraffic => {
+    const address = `${FIXED_CLIENT_ADDRESS_PREFIX}${String(FIXED_CLIENT_FIRST_HOST)}`;
+    const cycle = withCycle ? fixedPollCycle(real) : [];
+    const repeated: TrafficEntry[] = [];
+    while (cycle.length > 0 && repeated.length < KEPT_ENTRIES) {
+        repeated.push(...cycle);
+    }
+    const entries = repeated.slice(0, KEPT_ENTRIES).map((entry, index) => ({
+        ...entry,
+        sequence: index + 1,
+        at:
+            now -
+            NEWEST_ENTRY_AGE_SECONDS -
+            (KEPT_ENTRIES - 1 - index) * ENTRY_SPACING_SECONDS,
+        client: address,
+        port: FIXED_CLIENT_PORT,
+        connection: Math.floor(index / cycle.length) + 1,
+        transaction_id: (index % cycle.length) + 1,
+        late_duplicate: false,
+        duration_ms: REQUEST_DURATION_MS,
+    }));
+    const newestConnection = entries.at(-1)?.connection ?? 1;
+    const counters = fixedClientCounters(entries, now);
+    const history = fixedHistory(now, real.history.bucket_seconds);
+    return {
+        ...real,
+        now,
+        latest: KEPT_ENTRIES,
+        entries,
+        counters: {
+            total: counters,
+            clients: { [address]: counters },
+            connected: [
+                {
+                    connection: newestConnection,
+                    client: address,
+                    port: FIXED_CLIENT_PORT,
+                    since: now - CONNECTED_AGE_SECONDS,
+                },
+            ],
+        },
+        history: {
+            bucket_seconds: real.history.bucket_seconds,
+            total: history,
+            clients: { [address]: history },
+        },
+    };
+};
+
+const fixedRegisters = (
+    real: SimulatorRegisters,
+    now: number,
+): SimulatorRegisters => ({
+    ...real,
+    blocks: real.blocks.map((block) => ({
+        ...block,
+        fields: block.fields.map((field) => ({
+            ...field,
+            last_read:
+                field.last_read === null ? null : now - LAST_READ_AGE_SECONDS,
+        })),
+    })),
+});
+
+const routeSimulatorData = async (
+    page: Page,
+    panel: string,
+    path: string,
+    body: (url: URL) => unknown,
+): Promise<void> => {
+    const origin = new URL(panel).origin;
+    await page.route(
+        (url) => url.origin === origin && url.pathname === path,
+        (route) => {
+            if (route.request().method() !== "GET") {
+                return route.fallback();
+            }
+            return route.fulfill({
+                json: body(new URL(route.request().url())),
+            });
+        },
+    );
+};
+
+const freezeSimulatorPage = async (
+    page: Page,
+    request: APIRequestContext,
+    panel: string,
+    withCycle: boolean,
+): Promise<void> => {
+    const state = await simulatorGet<SimulatorState>(
+        request,
+        panel,
+        "/api/state",
+    );
+    const traffic = await simulatorGet<SimulatorTraffic>(
+        request,
+        panel,
+        "/api/traffic?after=0",
+    );
+    const registers = await simulatorGet<SimulatorRegisters>(
+        request,
+        panel,
+        "/api/registers",
+    );
+    const now = new Date(state.time).getTime() / MILLISECONDS;
+    const frozenTraffic = fixedTraffic(traffic, now, withCycle);
+    const frozenRegisters = fixedRegisters(registers, now);
+    await page.clock.setFixedTime(now * MILLISECONDS);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await routeSimulatorData(page, panel, "/api/state", () => state);
+    await routeSimulatorData(
+        page,
+        panel,
+        "/api/registers",
+        () => frozenRegisters,
+    );
+    await routeSimulatorData(page, panel, "/api/traffic", (url) => {
+        const after = Number(url.searchParams.get("after") ?? 0);
+        return {
+            ...frozenTraffic,
+            entries: frozenTraffic.entries.filter(
+                (entry) => entry.sequence > after,
+            ),
+        };
+    });
+};
+
+const captureSimulatorPages = async (
+    page: Page,
+    request: APIRequestContext,
+): Promise<void> => {
+    await freezeSimulatorPage(page, request, H2_PANEL, false);
     await page.goto(H2_PANEL);
     await waitForOverview(page);
     await capturePageView(page, "overview-h2", { tall: true });
@@ -857,6 +1397,9 @@ const captureSimulatorPages = async (page: Page): Promise<void> => {
     await page.locator(FAULT_SEARCH).fill("");
     await expect(page.locator(".toast")).toHaveCount(0, { timeout: 15_000 });
 
+    await freezeSimulatorPage(page, request, SIMULATOR_PANEL, true);
+    await page.goto(`${SIMULATOR_PANEL}/`);
+    await waitForOverview(page);
     await openSimulatorView(page, "overview");
     await expect(page.locator("article.card.faulted")).toHaveCount(1);
     await expect(
@@ -864,11 +1407,11 @@ const captureSimulatorPages = async (page: Page): Promise<void> => {
     ).toBeVisible();
     await expect(page.locator("header.statusbar .chip").first()).toBeVisible();
     await capturePageView(page, "overview", { tall: true });
-    await capture(
+    await captureSimulatorPart(
         `${SIMULATOR_PREFIX}-status-bar`,
         page.locator("header.statusbar"),
     );
-    await capture(
+    await captureSimulatorPart(
         `${SIMULATOR_PREFIX}-equipment-card`,
         page.locator("article.card.faulted"),
         { tall: true },
@@ -904,7 +1447,40 @@ const captureSimulatorPages = async (page: Page): Promise<void> => {
     await log.getByRole("switch").first().check({ force: true });
     await log.locator(".row.log-row.error-row").first().click();
     await expect(log.locator(".log-detail")).toBeVisible();
-    await capture(`${SIMULATOR_PREFIX}-traffic-log-detail`, log);
+    await captureSimulatorPart(`${SIMULATOR_PREFIX}-traffic-log-detail`, log);
+};
+
+const simulatorState = async (
+    request: APIRequestContext,
+    panel: string,
+    path: string,
+    body?: Record<string, unknown>,
+): Promise<SimulatorState> => {
+    const response =
+        body === undefined
+            ? await request.post(`${panel}${path}`)
+            : await request.post(`${panel}${path}`, { data: body });
+    expect(
+        response.ok(),
+        `${panel}${path} was refused: ${await response.text()}`,
+    ).toBe(true);
+    return (await response.json()) as SimulatorState;
+};
+
+const stopSimulator = async (
+    request: APIRequestContext,
+    panel: string,
+): Promise<number> => {
+    const scenario = await simulatorState(request, panel, "/api/reset");
+    const stopped = await simulatorState(request, panel, "/api/clock", {
+        time: scenario.time,
+        speed: 0,
+    });
+    const power = stopped.readings.find(
+        (reading) => reading.label === "PV power",
+    );
+    expect(power, `${panel} reports no PV power`).toBeDefined();
+    return Number(power?.value);
 };
 
 const weekdaysTile = (entity: string): DashboardElement => ({
@@ -923,6 +1499,10 @@ test("takes every documentation screenshot", async ({
 }) => {
     test.setTimeout(1_500_000);
     expect(baseURL).toBeDefined();
+    const stopped: StoppedReadings = {
+        hs3: await stopSimulator(request, SIMULATOR_PANEL),
+        h2: await stopSimulator(request, H2_PANEL),
+    };
     await completeOnboarding(request, baseURL ?? "");
     await logIn(page);
     await selectUserLanguage(page);
@@ -936,7 +1516,7 @@ test("takes every documentation screenshot", async ({
     });
     await addHs3(page);
     await addH2(page);
-    await waitForSolarPower(page);
+    await waitForSolarPower(page, stopped);
     await expectEntityNamesInLanguage(page);
 
     const hs3Entry = await entryIdOf(page, "");
@@ -974,7 +1554,7 @@ test("takes every documentation screenshot", async ({
     await capturePowerSchedule(page);
     await captureDiagnostics(page);
     await captureRepair(page, request, hs3Entry);
-    await captureSimulatorPages(page);
+    await captureSimulatorPages(page, request);
 
     mkdirSync(imageDirectory, { recursive: true });
     for (const [name, image] of screenshots) {

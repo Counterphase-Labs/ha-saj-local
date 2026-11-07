@@ -5,6 +5,8 @@ playwright_repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 playwright_compose_file="$playwright_repository_root/compose.playwright.yaml"
 playwright_project_name="saj-local-playwright-$$"
 playwright_result_directory="$playwright_repository_root/frontend/test-results/home-assistant"
+export PLAYWRIGHT_HOME_ASSISTANT_IMAGE="$playwright_project_name-home-assistant"
+export PLAYWRIGHT_RUNNER_IMAGE="$playwright_project_name-runner"
 
 playwright_cleanup() {
     playwright_exit_status=$?
@@ -15,8 +17,9 @@ playwright_cleanup() {
             >"$playwright_result_directory/home-assistant.log" 2>&1 || true
     fi
     docker compose --project-name "$playwright_project_name" \
-        --file "$playwright_compose_file" down --volumes --remove-orphans \
-        --rmi local || true
+        --file "$playwright_compose_file" down --volumes --remove-orphans || true
+    docker image rm --force "$PLAYWRIGHT_HOME_ASSISTANT_IMAGE" \
+        "$PLAYWRIGHT_RUNNER_IMAGE" >/dev/null 2>&1 || true
     exit "$playwright_exit_status"
 }
 

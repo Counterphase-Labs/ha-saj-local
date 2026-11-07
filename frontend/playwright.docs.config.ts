@@ -1,13 +1,21 @@
 import { defineConfig } from "@playwright/test";
 
+const locale = process.env.DOCS_LOCALE ?? "en-GB";
+
 export default defineConfig({
     testDir: "tests/browser/docs",
     fullyParallel: false,
     forbidOnly: true,
-    outputDir: "test-results/docs",
+    outputDir: `test-results/docs/${locale.toLowerCase()}`,
     reporter: [
         ["dot"],
-        ["html", { open: "never", outputFolder: "playwright-report/docs" }],
+        [
+            "html",
+            {
+                open: "never",
+                outputFolder: `playwright-report/docs/${locale.toLowerCase()}`,
+            },
+        ],
     ],
     timeout: 900_000,
     expect: { timeout: 15_000 },

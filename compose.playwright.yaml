@@ -15,8 +15,17 @@ x-mock: &mock
     retries: 20
     start_period: 5s
 
+x-runner-user: &runner-user
+  user: "${PLAYWRIGHT_RESULT_UID:-1000}:${PLAYWRIGHT_RESULT_GID:-1000}"
+  tmpfs:
+    - /home/playwright:mode=1777
+  environment: &runner-environment
+    HOME: /home/playwright
+    HOME_ASSISTANT_URL: http://homeassistant:8123
+
 services:
   homeassistant:
+    image: ${PLAYWRIGHT_HOME_ASSISTANT_IMAGE:-saj-local-playwright-home-assistant}
     build:
       context: .
       dockerfile: Dockerfile.playwright-home-assistant
@@ -53,6 +62,8 @@ services:
       - ./mock/scenarios/hs3-full-house.yaml:/config/config.yaml:ro
 
   playwright:
+    <<: *runner-user
+    image: ${PLAYWRIGHT_RUNNER_IMAGE:-saj-local-playwright-runner}
     build:
       context: .
       dockerfile: Dockerfile.playwright-runner
@@ -63,10 +74,6 @@ services:
         condition: service_healthy
       mock-h2:
         condition: service_healthy
-    environment:
-      HOME_ASSISTANT_URL: http://homeassistant:8123
-      PLAYWRIGHT_RESULT_GID: ${PLAYWRIGHT_RESULT_GID:-1000}
-      PLAYWRIGHT_RESULT_UID: ${PLAYWRIGHT_RESULT_UID:-1000}
     init: true
     ipc: host
     volumes:
@@ -74,6 +81,8 @@ services:
       - ./frontend/test-results:/workspace/frontend/test-results
 
   playwright-docs:
+    <<: *runner-user
+    image: ${PLAYWRIGHT_RUNNER_IMAGE:-saj-local-playwright-runner}
     build:
       context: .
       dockerfile: Dockerfile.playwright-runner
@@ -85,20 +94,12 @@ services:
       mock-h2:
         condition: service_healthy
     command:
-      - sh
-      - -c
-      - >-
-        mkdir -p playwright-report/docs test-results/docs;
-        npm run test:docs;
-        docs_status=$$?;
-        chown -R "$${PLAYWRIGHT_RESULT_UID}:$${PLAYWRIGHT_RESULT_GID}"
-        playwright-report/docs test-results/docs /workspace/docs/images;
-        exit "$$docs_status"
+      - npm
+      - run
+      - test:docs
     environment:
+      <<: *runner-environment
       DOCS_LOCALE: ${DOCS_LOCALE:-en-GB}
-      HOME_ASSISTANT_URL: http://homeassistant:8123
-      PLAYWRIGHT_RESULT_GID: ${PLAYWRIGHT_RESULT_GID:-1000}
-      PLAYWRIGHT_RESULT_UID: ${PLAYWRIGHT_RESULT_UID:-1000}
     init: true
     ipc: host
     volumes:

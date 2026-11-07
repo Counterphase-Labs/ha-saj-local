@@ -81,6 +81,9 @@ _PLAYWRIGHT_RESULT = re.compile(
 _PLAYWRIGHT_FAILURE = re.compile(
     r"^\s+\d+\) (?P<file>\S+\.ts):(?P<line>\d+):\d+ \u203a (?P<name>.*?)(?: \u2500+)?$"
 )
+_DOCS_LANGUAGE = re.compile(
+    r"^=== language (?P<code>\S+) (?P<state>passed|failed) ===$"
+)
 _VITE_ASSET = re.compile(r"^\S*?(?P<name>[\w.-]+\.(?:js|json|css))\s+[\d.]+ k?B")
 _HASSFEST_INTEGRATION = re.compile(r"^Integration \S+ - (?P<path>\S+):$")
 _HASSFEST_ERROR = re.compile(r"^\* \[ERROR\] \[(?P<check>\w+)\] (?P<message>.*)$")
@@ -507,6 +510,42 @@ def playwright(report: str) -> Parser:
             if (m := _PLAYWRIGHT_FAILURE.match(line))
         )
         return Parsed(counts, tuple(details), findings)
+
+    return parse
+
+
+def _language_sections(output: str) -> list[tuple[str, bool, str]]:
+    sections: list[tuple[str, bool, list[str]]] = []
+    for line in output.splitlines():
+        if match := _DOCS_LANGUAGE.match(line.rstrip()):
+            sections.append((match["code"], match["state"] == "passed", []))
+        elif sections:
+            sections[-1][2].append(line)
+    return [(code, passed, "\n".join(lines)) for code, passed, lines in sections]
+
+
+def docs_images(report_root: str) -> Parser:
+    def parse(output: str, return_code: int) -> Parsed:
+        sections = _language_sections(output)
+        failed = [section for section in sections if not section[1]]
+        if return_code == 0:
+            count = len(sections)
+            return Parsed(f"{count} languages passed" if count > 1 else "passed")
+        if not failed:
+            return Parsed("failed", tuple(_lines(output)))
+        details: list[str] = []
+        findings: list[Finding] = []
+        for code, _passed, text in failed:
+            parsed = playwright(f"{report_root}/{code.lower()}")(text, return_code)
+            details.append(f"language {code}:")
+            details.extend(f"  {line}" for line in parsed.details)
+            findings.extend(
+                Finding(found.file, found.line, f"{code}: {found.message}")
+                for found in parsed.findings
+            )
+        codes = ", ".join(section[0] for section in failed)
+        summary = f"{len(failed)} of {len(sections)} languages failed: {codes}"
+        return Parsed(summary, tuple(details), tuple(findings))
 
     return parse
 

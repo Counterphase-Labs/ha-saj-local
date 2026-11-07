@@ -387,7 +387,7 @@ def _docs_images(invocation: Invocation) -> tuple[Command, ...]:
                 *options,
                 *invocation.args,
             ),
-            check_parsers.playwright(DOCS_IMAGES_REPORT),
+            check_parsers.docs_images(DOCS_IMAGES_REPORT),
             timeout=BROWSER_TIMEOUT_SECONDS,
         ),
     )
@@ -913,14 +913,16 @@ SUPPORT_STEPS: tuple[Step, ...] = (
             runs=(
                 "build and mock-build first, so the image copies the card bundle "
                 "built from the working tree and uses the saj-local-mock image, "
-                "then Playwright against a fresh throwaway Home Assistant in "
-                "Docker once for each language, English first, writing "
+                "then one build of the Home Assistant image and the Playwright "
+                "runner image, then Playwright against a fresh throwaway Home "
+                "Assistant in Docker for each language, all languages at the "
+                "same time (one for each four processors, at least one), writing "
                 "docs/images/<code>"
             ),
-            success="pass count",
+            success="the number of languages that passed",
             failure=(
-                "failing steps with assertion messages, plus the report path "
-                f"{DOCS_IMAGES_REPORT}"
+                "each failed language with its failing steps and assertion "
+                f"messages, plus its report folder {DOCS_IMAGES_REPORT}/<code>"
             ),
             args=(
                 "one language code (en-GB, de, nl, fr, zh-Hans, es, it, pl or "

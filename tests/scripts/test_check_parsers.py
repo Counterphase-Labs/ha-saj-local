@@ -518,6 +518,87 @@ def test_playwright_success():
     assert parsed.summary == "2 passed"
 
 
+DOCS_REPORT = "frontend/playwright-report/docs"
+
+
+def docs_language(code: str, *, passed: bool, body: str) -> str:
+    state = "passed" if passed else "failed"
+    return f"=== language {code} {state} ===\n{body}"
+
+
+def docs_failure(name: str) -> str:
+    return (
+        "  1) tests/browser/docs/shot.spec.ts:9:5 "
+        "\N{SINGLE RIGHT-POINTING ANGLE QUOTATION MARK} "
+        f"{name} \N{BOX DRAWINGS LIGHT HORIZONTAL}\n"
+        "    Error: expect(locator).toBeVisible() failed\n"
+        "  1 failed\n"
+    )
+
+
+def test_docs_images_one_failed_language_names_its_steps_and_report_folder():
+    output = (
+        "build output\n"
+        + docs_language("en-GB", passed=True, body="  33 passed (4.0m)\n")
+        + docs_language("de", passed=False, body=docs_failure("takes a shot"))
+    )
+
+    parsed = check_parsers.docs_images(DOCS_REPORT)(output, 1)
+
+    assert parsed.summary == "1 of 2 languages failed: de"
+    assert parsed.details[0] == "language de:"
+    assert "      Error: expect(locator).toBeVisible() failed" in parsed.details
+    assert parsed.details[-1] == f"  report: {DOCS_REPORT}/de"
+    assert parsed.findings == (
+        Finding("frontend/tests/browser/docs/shot.spec.ts", 9, "de: takes a shot"),
+    )
+
+
+def test_docs_images_two_failed_languages_are_both_named():
+    output = (
+        docs_language("de", passed=False, body=docs_failure("first"))
+        + docs_language("nl", passed=True, body="  1 passed (1.0s)\n")
+        + docs_language("zh-Hans", passed=False, body=docs_failure("second"))
+    )
+
+    parsed = check_parsers.docs_images(DOCS_REPORT)(output, 1)
+
+    assert parsed.summary == "2 of 3 languages failed: de, zh-Hans"
+    assert "language de:" in parsed.details
+    assert "language zh-Hans:" in parsed.details
+    assert f"  report: {DOCS_REPORT}/de" in parsed.details
+    assert f"  report: {DOCS_REPORT}/zh-hans" in parsed.details
+    assert [finding.message for finding in parsed.findings] == [
+        "de: first",
+        "zh-Hans: second",
+    ]
+
+
+def test_docs_images_passed_run_of_several_languages():
+    output = docs_language("en-GB", passed=True, body="  33 passed\n") + docs_language(
+        "de", passed=True, body="  33 passed\n"
+    )
+
+    parsed = check_parsers.docs_images(DOCS_REPORT)(output, 0)
+
+    assert parsed.summary == "2 languages passed"
+    assert parsed.details == ()
+
+
+def test_docs_images_passed_run_of_one_language_or_none_reported():
+    one = docs_language("de", passed=True, body="  33 passed\n")
+
+    assert check_parsers.docs_images(DOCS_REPORT)(one, 0).summary == "passed"
+    assert check_parsers.docs_images(DOCS_REPORT)("", 0).summary == "passed"
+
+
+def test_docs_images_without_a_language_report_shows_the_raw_output():
+    parsed = check_parsers.docs_images(DOCS_REPORT)("failed to build\n\nboom\n", 1)
+
+    assert parsed.summary == "failed"
+    assert parsed.details == ("failed to build", "boom")
+
+
 def test_vite_build_lists_the_built_asset_names():
     output = (
         "vite v8.3.0 building for production...\n"

@@ -2,36 +2,9 @@
 set -eu
 
 docs_repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-docs_compose_file="$docs_repository_root/compose.playwright.yaml"
-docs_project_name="saj-local-docs-$$"
-docs_result_directory="$docs_repository_root/frontend/test-results/docs"
-
-docs_cleanup() {
-    docs_exit_status=$?
-    trap - EXIT HUP INT TERM
-    if [ "$docs_exit_status" -ne 0 ]; then
-        docker compose --project-name "$docs_project_name" \
-            --file "$docs_compose_file" logs --no-color homeassistant \
-            >"$docs_result_directory/home-assistant.log" 2>&1 || true
-    fi
-    docker compose --project-name "$docs_project_name" \
-        --file "$docs_compose_file" down --volumes --remove-orphans \
-        --rmi local || true
-    exit "$docs_exit_status"
-}
-
-trap docs_cleanup EXIT HUP INT TERM
-mkdir -p "$docs_result_directory" \
-    "$docs_repository_root/frontend/playwright-report/docs" \
-    "$docs_repository_root/docs/images"
-export PLAYWRIGHT_RESULT_UID="$(id -u)"
-export PLAYWRIGHT_RESULT_GID="$(id -g)"
-docker compose --project-name "$docs_project_name" \
-    --file "$docs_compose_file" build homeassistant playwright-docs
-
-# One language code from the arguments selects that language; options are not
-# used by the run. Without a code every language runs, English first.
+docs_worker="$docs_repository_root/tests/playwright/run-docs-language.sh"
 docs_languages="en-GB de nl fr zh-Hans es it pl sv"
+
 docs_selected=""
 for docs_argument in "$@"; do
     case "$docs_argument" in
@@ -49,12 +22,74 @@ if [ -n "$docs_selected" ]; then
     esac
 fi
 
+docs_count=0
 for docs_language in $docs_languages; do
-    # Fresh containers for each language, so no state carries over.
-    docker compose --project-name "$docs_project_name" \
-        --file "$docs_compose_file" down --volumes --remove-orphans || true
-    docker compose --project-name "$docs_project_name" \
-        --file "$docs_compose_file" up --detach --wait homeassistant mock-docs mock-h2
-    DOCS_LOCALE="$docs_language" docker compose --project-name "$docs_project_name" \
-        --file "$docs_compose_file" run --rm playwright-docs
+    docs_count=$((docs_count + 1))
 done
+docs_processors=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+docs_parallel=$((docs_processors / 4))
+if [ "$docs_parallel" -lt 1 ]; then
+    docs_parallel=1
+fi
+if [ "$docs_parallel" -gt "$docs_count" ]; then
+    docs_parallel="$docs_count"
+fi
+
+export DOCS_REPOSITORY_ROOT="$docs_repository_root"
+export DOCS_COMPOSE_FILE="$docs_repository_root/compose.playwright.yaml"
+export DOCS_PROJECT_NAME="saj-local-docs-$$"
+export PLAYWRIGHT_HOME_ASSISTANT_IMAGE="$DOCS_PROJECT_NAME-home-assistant"
+export PLAYWRIGHT_RUNNER_IMAGE="$DOCS_PROJECT_NAME-runner"
+export PLAYWRIGHT_RESULT_UID="$(id -u)"
+export PLAYWRIGHT_RESULT_GID="$(id -g)"
+docs_log_directory=$(mktemp -d)
+export DOCS_LOG_DIRECTORY="$docs_log_directory"
+docs_xargs_pid=""
+
+docs_cleanup() {
+    docs_exit_status=$?
+    trap - EXIT HUP INT TERM
+    if [ -n "$docs_xargs_pid" ]; then
+        kill "$docs_xargs_pid" 2>/dev/null || true
+    fi
+    for docs_language in $docs_languages; do
+        docs_lower=$(printf '%s' "$docs_language" | tr 'A-Z' 'a-z')
+        docker compose --project-name "$DOCS_PROJECT_NAME-$docs_lower" \
+            --file "$DOCS_COMPOSE_FILE" down --volumes --remove-orphans \
+            >/dev/null 2>&1 &
+    done
+    wait || true
+    docker image rm --force "$PLAYWRIGHT_HOME_ASSISTANT_IMAGE" \
+        "$PLAYWRIGHT_RUNNER_IMAGE" >/dev/null 2>&1 || true
+    rm -rf "$docs_log_directory"
+    exit "$docs_exit_status"
+}
+
+trap docs_cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+mkdir -p "$docs_repository_root/docs/images"
+
+docker compose --project-name "$DOCS_PROJECT_NAME-build" \
+    --file "$DOCS_COMPOSE_FILE" build homeassistant playwright-docs
+
+printf '%s\n' $docs_languages |
+    xargs -P "$docs_parallel" -n 1 sh "$docs_worker" &
+docs_xargs_pid=$!
+wait "$docs_xargs_pid" || true
+docs_xargs_pid=""
+
+docs_failed=0
+for docs_language in $docs_languages; do
+    docs_status=$(cat "$docs_log_directory/$docs_language.status" 2>/dev/null || echo 1)
+    if [ "$docs_status" -eq 0 ]; then
+        docs_state=passed
+    else
+        docs_state=failed
+        docs_failed=1
+    fi
+    echo "=== language $docs_language $docs_state ==="
+    cat "$docs_log_directory/$docs_language.log" 2>/dev/null || true
+done
+exit "$docs_failed"
