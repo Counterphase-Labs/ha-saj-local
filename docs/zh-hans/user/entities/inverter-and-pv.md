@@ -6,7 +6,7 @@
 
 集成功能列表在 [设备与实体](../../../../custom_components/saj_local/docs/features.md#devices-and-entities) 中说明了逆变器与光伏实体。
 
-241 个实体。由 `make docs` 生成，请勿手动编辑。
+244 个实体。由 `make docs` 生成，请勿手动编辑。
 
 在“配置”中设置的前缀会加在每个逆变器与光伏实体 ID 中 `saj_` 之后，例如前缀为 `house` 时为 `sensor.saj_house_ethernet_protocol_version`。
 
@@ -194,6 +194,9 @@
 | 电表 B 状态 | `sensor.saj_meter_b_status` | 传感器 | - | HS3, H2 | - | 否 |
 | 备用负载功率 | `sensor.saj_backup_load_power` | 传感器 | W | HS3, H2 | - | 是 |
 | 家庭负载功率 | `sensor.saj_load_power` | 传感器 | W | HS3, H2 | - | 是 |
+| 今日自用率 | `sensor.saj_self_consumption_today` | 传感器 | % | HS3, H2 | - | 否 |
+| 今日自给率 | `sensor.saj_self_sufficiency_today` | 传感器 | % | HS3, H2 | - | 否 |
+| 光伏盈余功率 | `sensor.saj_solar_surplus_power` | 传感器 | W | HS3, H2 | - | 否 |
 | 逆流模式 | `sensor.saj_reverse_flow_mode` | 传感器 | - | H2 | - | 否 |
 | FCAS 频率回差 | `sensor.saj_fcas_frequency_hysteresis` | 传感器 | Hz | H2 | - | 否 |
 | 并机角色 | `sensor.saj_parallel_role` | 传感器 | - | H2 | - | 否 |

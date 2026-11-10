@@ -28,6 +28,19 @@ On the HS3, Grid power is the Meter A total, and the grid phase power, apparent 
 
 The [power control](power-control.md) targets follow the signs of the readings.
 
+## Computed sensors
+
+Eight sensors are computed from the readings of the system itself. They exist on every model.
+
+- **Battery time to full** and **battery time to empty** are durations in minutes. Each divides the remaining battery energy by the battery power averaged over the last 10 minutes, so a short change of the household load does not make the value jump. Time to full has a value only while the average power charges the battery, and time to empty only while the average power discharges the battery. The value is unknown at zero average power and when the result is longer than 48 hours. The average starts again after a reload or a restart.
+- **Battery stored energy** and **battery available energy** are in kWh. The stored energy is the state of charge times the battery energy. The available energy is the energy above the empty limit, and never below 0.
+- **Full and empty.** Full is the charge limit. Empty is the backup reserve in backup mode and the on-grid discharge limit in the other application modes. Off grid, empty is the off-grid discharge limit on a model that has one.
+- **Battery energy.** The H2 reports a usable capacity, and SAJ Local multiplies it by the battery voltage. The HS3 does not report a usable capacity, so SAJ Local learns the capacity from the battery power and the change in state of charge. On an HS3 the four battery energy sensors stay unknown until the state of charge has changed between two polls, and the learned capacity gets more accurate as the battery charges and discharges. SAJ Local keeps the learned capacity across restarts.
+- **Self-sufficiency today** is the share of today's load energy that did not come from the grid. **Self-consumption today** is the share of today's solar energy that was not exported. **Battery round-trip efficiency** is the total battery discharge energy over the total battery charge energy. Each is a percentage from 0 to 100 and is unknown when the divisor is 0.
+- **Solar surplus power** is solar power minus household load power, in watts. The value is negative when the load is larger than the solar power.
+- **Defaults.** The four battery sensors above are enabled by default. The other four are created disabled. The time, energy and round-trip efficiency sensors exist only when a battery is fitted.
+- **Reads.** Enabling a computed sensor reads every reading that the sensor needs, also when the entities of those readings are disabled. [Polling](polling.md) counts these reads in the load.
+
 ## The prefix
 
 Every entity ID has the form `<type>.saj_<key>`, for example `sensor.saj_pv_power`. Renaming an entity's display name does not change the ID.

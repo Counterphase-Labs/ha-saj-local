@@ -28,6 +28,19 @@ På HS3 är näteffekten summan från Mätare A, och nätets fraseffekt, skenbar
 
 Målen för [effektstyrning](power-control.md) följer avläsningarnas tecken.
 
+## Beräknade sensorer
+
+Åtta sensorer beräknas från systemets egna avläsningar. De finns på alla modeller.
+
+- **Tid till fullt batteri** och **tid till tomt batteri** är varaktigheter i minuter. Varje värde delar den återstående batterienergin med batterieffekten, medelvärdesbildad över de senaste 10 minuterna, så en kort ändring av hushållets last får inte värdet att hoppa. Tiden till fullt batteri har ett värde bara medan medeleffekten laddar batteriet, och tiden till tomt batteri bara medan medeleffekten laddar ur batteriet. Värdet är okänt vid medeleffekt noll och när resultatet är längre än 48 timmar. Medelvärdet börjar om efter en omladdning eller en omstart.
+- **Lagrad batterienergi** och **tillgänglig batterienergi** anges i kWh. Den lagrade energin är laddningsnivån gånger batterienergin. Den tillgängliga energin är energin över gränsen för tomt, och aldrig under 0.
+- **Fullt och tomt.** Fullt är laddningsgränsen. Tomt är reserven i reservläget och urladdningsgränsen när nätet är anslutet i de andra tillämpningslägena. Utan nät är tomt urladdningsgränsen utan nät, på en modell som har en sådan.
+- **Batterienergi.** H2 anger en användbar kapacitet, och SAJ Local multiplicerar den med batterispänningen. HS3 anger ingen användbar kapacitet, så SAJ Local lär sig kapaciteten från batterieffekten och ändringen av laddningsnivån. På en HS3 förblir de fyra sensorerna för batterienergi okända tills laddningsnivån har ändrats mellan två avläsningar. Den inlärda kapaciteten blir noggrannare ju mer batteriet laddas och laddas ur. SAJ Local behåller den inlärda kapaciteten över omstarter.
+- **Självförsörjning idag** är den andel av dagens lastenergi som inte kom från nätet. **Egenanvändning idag** är den andel av dagens solenergi som inte exporterades. **Batteriets tur-och-retur-verkningsgrad** är batteriets totala urladdningsenergi delad med batteriets totala laddningsenergi. Varje värde är en procentsats från 0 till 100 och är okänt när delaren är 0.
+- **Solöverskottseffekt** är soleffekten minus hushållets last, i watt. Värdet är negativt när lasten är större än soleffekten.
+- **Standardvärden.** De fyra batterisensorerna ovan är aktiverade som standard. De andra fyra skapas inaktiverade. Sensorerna för tid, energi och tur-och-retur-verkningsgrad finns bara när ett batteri är installerat.
+- **Avläsningar.** Att aktivera en beräknad sensor läser varje avläsning som sensorn behöver, även när entiteterna för de avläsningarna är inaktiverade. [Avfrågning](polling.md) räknar dessa avläsningar i belastningen.
+
 ## Prefixet
 
 Varje entitets-ID har formen `<type>.saj_<key>`, till exempel `sensor.saj_pv_power`. Att byta namn på en entitets visningsnamn ändrar inte ID:t.

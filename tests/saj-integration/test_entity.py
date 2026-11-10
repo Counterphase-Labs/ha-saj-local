@@ -460,7 +460,7 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
             HS3,
             0x1610,
             {
-                "sensor": 425,
+                "sensor": 433,
                 "binary_sensor": 129,
                 "number": 65,
                 "select": 13,
@@ -469,7 +469,7 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
                 "button": 4,
             },
             {
-                "sensor": 47,
+                "sensor": 51,
                 "binary_sensor": 129,
                 "number": 4,
                 "select": 2,
@@ -482,7 +482,7 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
             H2,
             0x005A,
             {
-                "sensor": 309,
+                "sensor": 317,
                 "binary_sensor": 73,
                 "number": 44,
                 "select": 4,
@@ -491,7 +491,7 @@ async def test_free_entity_ids_log_no_warning(registry, rows, caplog):
                 "button": 3,
             },
             {
-                "sensor": 41,
+                "sensor": 45,
                 "binary_sensor": 73,
                 "number": 4,
                 "select": 1,

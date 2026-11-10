@@ -6,7 +6,7 @@ La batteria nel suo insieme.
 
 Le entità dell'area «Batteria» sono descritte nell'elenco delle funzionalità dell'integrazione, in [Apparecchiature opzionali](../../../../custom_components/saj_local/docs/features.md#optional-equipment).
 
-133 entità. Generato da `make docs`. Non modificare a mano.
+138 entità. Generato da `make docs`. Non modificare a mano.
 
 Un prefisso impostato in Configura va dopo `saj_` nell'ID di ogni entità dell'area «Batteria», per esempio `switch.saj_house_charge_slot_1_enabled` con il prefisso `house`.
 
@@ -126,6 +126,11 @@ Un prefisso impostato in Configura va dopo `saj_` nell'ID di ogni entità dell'a
 | Codice online della batteria | `sensor.saj_battery_online_code` | Sensore | - | HS3, H2 | Batteria | No |
 | Limite della corrente di scarica della batteria | `sensor.saj_battery_discharge_current_limit` | Sensore | A | HS3, H2 | Batteria | No |
 | Limite della corrente di carica della batteria | `sensor.saj_battery_charge_current_limit` | Sensore | A | HS3, H2 | Batteria | No |
+| Energia disponibile nella batteria | `sensor.saj_battery_available_energy` | Sensore | kWh | HS3, H2 | Batteria | Sì |
+| Efficienza di andata e ritorno della batteria | `sensor.saj_battery_round_trip_efficiency` | Sensore | % | HS3, H2 | Batteria | No |
+| Energia immagazzinata nella batteria | `sensor.saj_battery_stored_energy` | Sensore | kWh | HS3, H2 | Batteria | Sì |
+| Tempo alla batteria scarica | `sensor.saj_battery_time_to_empty` | Sensore | min | HS3, H2 | Batteria | Sì |
+| Tempo alla batteria piena | `sensor.saj_battery_time_to_full` | Sensore | min | HS3, H2 | Batteria | Sì |
 | Tensione di interruzione della scarica off-grid piombo-acido | `sensor.saj_lead_acid_off_grid_discharge_cutoff_voltage` | Sensore | V | H2 | Batteria | No |
 | Tensione di interruzione della carica piombo-acido | `sensor.saj_lead_acid_charge_cutoff_voltage` | Sensore | V | H2 | Batteria | No |
 | Tensione di interruzione della scarica on-grid piombo-acido | `sensor.saj_lead_acid_on_grid_discharge_cutoff_voltage` | Sensore | V | H2 | Batteria | No |

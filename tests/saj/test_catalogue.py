@@ -17,6 +17,7 @@ from saj.catalogue import (
     device_read_registers,
     device_registers,
     device_unread_registers,
+    estimate_keys,
     hidden_sources,
     known_keys,
     pack_maximum,
@@ -36,6 +37,7 @@ from saj.definitions import (
     Role,
     Unit,
 )
+from saj.estimator import estimate_sources
 from saj.models import (
     ALL_EQUIPMENT,
     Comparison,
@@ -699,10 +701,10 @@ def test_a_device_gets_the_registers_of_its_types_shape():
 
 
 SHIPPED_SHAPES = [
-    ("hs3", Shape(phases=3, strings=2), 533, 746, 182),
-    ("h2", Shape(phases=1, strings=2), 390, 486, 119),
-    ("h2", Shape(phases=1, strings=3), 398, 494, 122),
-    ("h2", Shape(phases=3, strings=4, assumed=True), 482, 578, 119),
+    ("hs3", Shape(phases=3, strings=2), 533, 754, 186),
+    ("h2", Shape(phases=1, strings=2), 390, 494, 123),
+    ("h2", Shape(phases=1, strings=3), 398, 502, 126),
+    ("h2", Shape(phases=3, strings=4, assumed=True), 482, 586, 123),
 ]
 
 
@@ -738,7 +740,7 @@ def test_the_two_shipped_models_share_328_catalogued_rows():
     h2_keys = {r.key for r in CATALOGUES["h2"].registers if r.readable}
 
     assert len(hs3 & h2) == 328
-    assert len(hs3_keys & h2_keys) == 433
+    assert len(hs3_keys & h2_keys) == 441
 
 
 @pytest.mark.parametrize("period", ["today", "month", "year", "total"])
@@ -1221,7 +1223,6 @@ def test_a_register_reports_the_equipment_of_its_definition():
     ("total_equipment", "source_equipment"),
     [
         (None, Equipment.BATTERY),
-        (Equipment.BATTERY, None),
         (Equipment.METER_B, Equipment.BATTERY),
     ],
 )
@@ -1238,6 +1239,20 @@ def test_a_combined_row_whose_sources_have_another_equipment_is_rejected(
             total,
             profile=_profile(_at("part", 0x1010), _at("total", None)),
         )
+
+
+def test_a_combined_row_of_equipment_may_use_a_source_without_equipment():
+    total = replace(
+        _combined("total", Operation.SUM, "part"), equipment=Equipment.BATTERY
+    )
+
+    catalogue = _build(
+        _definition("part", equipment=None),
+        total,
+        profile=_profile(_at("part", 0x1010), _at("total", None)),
+    )
+
+    assert {register.key for register in catalogue.registers} == {"part", "total"}
 
 
 def _probing(key: str) -> Probe:
@@ -1914,6 +1929,59 @@ def test_the_hidden_sources_of_enabled_keys_are_the_words_nobody_shows():
         frozenset()
     )
     assert hidden_sources(fit=fit, keys=set()) == frozenset()
+
+
+@pytest.mark.parametrize(
+    ("profile_under_test", "device_type"), [(HS3, 0x1610), (H2, 0x005A)]
+)
+def test_the_estimates_read_the_sources_that_the_model_gives(
+    profile_under_test: Profile, device_type: int
+):
+    fit = Fit(
+        profile=profile_under_test, device_type=device_type, equipment=ALL_EQUIPMENT
+    )
+
+    sources = hidden_sources(fit=fit, keys={"battery_time_to_full"})
+
+    assert sources == set(estimate_sources(profile=profile_under_test))
+    assert estimate_keys(fit=fit) == {
+        "battery_time_to_full",
+        "battery_time_to_empty",
+        "battery_stored_energy",
+        "battery_available_energy",
+    }
+
+
+def test_the_estimates_exist_only_with_a_battery():
+    fit = Fit(profile=HS3, device_type=0x1610, equipment=frozenset())
+
+    assert estimate_keys(fit=fit) == frozenset()
+    assert "battery_round_trip_efficiency" not in device_keys(fit=fit)
+    assert {"solar_surplus_power", "self_consumption_today"} <= device_keys(fit=fit)
+
+
+@pytest.mark.parametrize(
+    ("key", "enabled"),
+    [
+        ("battery_time_to_full", True),
+        ("battery_time_to_empty", True),
+        ("battery_stored_energy", True),
+        ("battery_available_energy", True),
+        ("self_sufficiency_today", False),
+        ("self_consumption_today", False),
+        ("solar_surplus_power", False),
+        ("battery_round_trip_efficiency", False),
+    ],
+)
+def test_only_the_battery_estimates_are_enabled_by_default(key: str, *, enabled: bool):
+    registers = {
+        register.key: register
+        for register in device_registers(
+            fit=Fit(profile=HS3, device_type=0x1610, equipment=ALL_EQUIPMENT)
+        )
+    }
+
+    assert registers[key].core is enabled
 
 
 @pytest.mark.parametrize(

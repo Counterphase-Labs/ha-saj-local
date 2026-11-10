@@ -52,6 +52,13 @@ def _sensor(*, value=None, **changes) -> SajSensor:
             SensorStateClass.MEASUREMENT,
         ),
         (Quantity.DURATION, Unit.SECOND, "duration", SensorStateClass.MEASUREMENT),
+        (Quantity.DURATION, Unit.MINUTE, "duration", SensorStateClass.MEASUREMENT),
+        (
+            Quantity.STORED_ENERGY,
+            Unit.KILOWATT_HOUR,
+            "energy_storage",
+            SensorStateClass.MEASUREMENT,
+        ),
         (
             Quantity.STATE_OF_CHARGE,
             Unit.PERCENT,

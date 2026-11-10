@@ -7,6 +7,7 @@ from homeassistant.const import CONF_HOST, CONF_PORT, EVENT_HOMEASSISTANT_STOP
 from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 
+from .battery import battery_store
 from .const import (
     CONF_ALLOW_CONTROL,
     CONF_MODEL,
@@ -122,7 +123,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             ),
             entry=entry,
         )
-        await coordinator.async_load_power_state()
+        await coordinator.async_load_stored_state()
         await coordinator.async_config_entry_first_refresh()
     except HANDLED_ERRORS as err:
         await client.close(reason=ConnectionReason.SETUP)
@@ -175,12 +176,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     entry.async_on_unload(start_control_listener(hass=hass, entry=entry))
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-    entry.async_on_unload(
-        hass.bus.async_listen_once(
-            EVENT_HOMEASSISTANT_STOP,
-            _release_power_control_on_stop(coordinator=coordinator),
-        )
-    )
+    _follow_home_assistant_stop(hass=hass, entry=entry, coordinator=coordinator)
     return True
 
 
@@ -196,6 +192,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     remove_issues(hass=hass, entry=entry)
     await power_control_store(hass=hass, entry_id=entry.entry_id).async_remove()
+    await battery_store(hass=hass, entry_id=entry.entry_id).async_remove()
+
+
+def _follow_home_assistant_stop(
+    *, hass: HomeAssistant, entry: ConfigEntry, coordinator: SajCoordinator
+) -> None:
+    for on_stop in (
+        _release_power_control_on_stop(coordinator=coordinator),
+        _save_battery_on_stop(coordinator=coordinator),
+    ):
+        entry.async_on_unload(
+            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, on_stop)
+        )
 
 
 def _release_power_control_on_stop(
@@ -206,6 +215,16 @@ def _release_power_control_on_stop(
         await coordinator.async_release_power_control()
 
     return release
+
+
+def _save_battery_on_stop(
+    *, coordinator: SajCoordinator
+) -> Callable[[Event], Coroutine[Any, Any, None]]:
+    async def save(event: Event) -> None:
+        del event
+        await coordinator.async_save_battery()
+
+    return save
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:

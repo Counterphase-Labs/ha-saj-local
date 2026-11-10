@@ -6,7 +6,7 @@ Bateria jako całość.
 
 Lista funkcji integracji wyjaśnia encje obszaru Bateria w [Wyposażenie opcjonalne](../../../../custom_components/saj_local/docs/features.md#optional-equipment).
 
-Liczba encji: 133. Wygenerowano poleceniem `make docs`. Nie edytuj ręcznie.
+Liczba encji: 138. Wygenerowano poleceniem `make docs`. Nie edytuj ręcznie.
 
 Prefiks ustawiony w Skonfiguruj trafia po `saj_` w ID każdej encji: Bateria, na przykład `switch.saj_house_charge_slot_1_enabled` z prefiksem `house`.
 
@@ -126,6 +126,11 @@ Prefiks ustawiony w Skonfiguruj trafia po `saj_` w ID każdej encji: Bateria, na
 | Kod obecności baterii online | `sensor.saj_battery_online_code` | Sensor | - | HS3, H2 | Bateria | Nie |
 | Limit prądu rozładowania baterii | `sensor.saj_battery_discharge_current_limit` | Sensor | A | HS3, H2 | Bateria | Nie |
 | Limit prądu ładowania baterii | `sensor.saj_battery_charge_current_limit` | Sensor | A | HS3, H2 | Bateria | Nie |
+| Energia dostępna w baterii | `sensor.saj_battery_available_energy` | Sensor | kWh | HS3, H2 | Bateria | Tak |
+| Sprawność cyklu ładowania i rozładowania baterii | `sensor.saj_battery_round_trip_efficiency` | Sensor | % | HS3, H2 | Bateria | Nie |
+| Energia zmagazynowana w baterii | `sensor.saj_battery_stored_energy` | Sensor | kWh | HS3, H2 | Bateria | Tak |
+| Czas do rozładowania baterii | `sensor.saj_battery_time_to_empty` | Sensor | min | HS3, H2 | Bateria | Tak |
+| Czas do pełnego naładowania baterii | `sensor.saj_battery_time_to_full` | Sensor | min | HS3, H2 | Bateria | Tak |
 | Napięcie odcięcia rozładowania baterii kwasowo-ołowiowej poza siecią | `sensor.saj_lead_acid_off_grid_discharge_cutoff_voltage` | Sensor | V | H2 | Bateria | Nie |
 | Napięcie odcięcia ładowania baterii kwasowo-ołowiowej | `sensor.saj_lead_acid_charge_cutoff_voltage` | Sensor | V | H2 | Bateria | Nie |
 | Napięcie odcięcia rozładowania baterii kwasowo-ołowiowej w sieci | `sensor.saj_lead_acid_on_grid_discharge_cutoff_voltage` | Sensor | V | H2 | Bateria | Nie |

@@ -608,6 +608,30 @@
       "battery_soc": {
         "name": "Batterijlaadniveau"
       },
+      "battery_time_to_full": {
+        "name": "Tijd tot batterij vol"
+      },
+      "battery_time_to_empty": {
+        "name": "Tijd tot batterij leeg"
+      },
+      "battery_stored_energy": {
+        "name": "Opgeslagen batterij-energie"
+      },
+      "battery_available_energy": {
+        "name": "Beschikbare batterij-energie"
+      },
+      "self_sufficiency_today": {
+        "name": "Zelfvoorziening vandaag"
+      },
+      "self_consumption_today": {
+        "name": "Eigen verbruik vandaag"
+      },
+      "solar_surplus_power": {
+        "name": "Zonne-overschotvermogen"
+      },
+      "battery_round_trip_efficiency": {
+        "name": "Round-trip-rendement van de batterij"
+      },
       "pv1_voltage": {
         "name": "PV1-spanning"
       },

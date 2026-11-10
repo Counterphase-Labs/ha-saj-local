@@ -608,6 +608,30 @@
       "battery_soc": {
         "name": "Batteriladdningsnivå"
       },
+      "battery_time_to_full": {
+        "name": "Tid till fullt batteri"
+      },
+      "battery_time_to_empty": {
+        "name": "Tid till tomt batteri"
+      },
+      "battery_stored_energy": {
+        "name": "Lagrad batterienergi"
+      },
+      "battery_available_energy": {
+        "name": "Tillgänglig batterienergi"
+      },
+      "self_sufficiency_today": {
+        "name": "Självförsörjning idag"
+      },
+      "self_consumption_today": {
+        "name": "Egenanvändning idag"
+      },
+      "solar_surplus_power": {
+        "name": "Solöverskottseffekt"
+      },
+      "battery_round_trip_efficiency": {
+        "name": "Batteriets tur-och-retur-verkningsgrad"
+      },
       "pv1_voltage": {
         "name": "PV1-spänning"
       },

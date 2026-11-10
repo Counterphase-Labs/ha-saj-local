@@ -10,6 +10,18 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 SINGLE_WORD_REQUEST = 1
+DERIVED_PLACEMENTS: Mapping[str, None] = dict.fromkeys(
+    (
+        "battery_time_to_full",
+        "battery_time_to_empty",
+        "battery_stored_energy",
+        "battery_available_energy",
+        "self_sufficiency_today",
+        "self_consumption_today",
+        "solar_surplus_power",
+        "battery_round_trip_efficiency",
+    )
+)
 
 
 class Equipment(StrEnum):
@@ -267,6 +279,8 @@ class Profile:
     display_name: str
     device_types: Mapping[int, Shape]
     hand_verified: bool
+    usable_capacity: bool = False
+    off_grid_discharge_limit: bool = False
     maximum_shape: Shape = SINGLE_PHASE_SINGLE_STRING
     largest_request: int = SINGLE_WORD_REQUEST
     spans: tuple[Span, ...] = field(default_factory=tuple)

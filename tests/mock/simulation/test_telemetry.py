@@ -40,6 +40,7 @@ class StubBattery:
         self.modules = modules
         self.soc = soc
         self.capacity_ah = modules * 100
+        self.capacity_wh = modules * 100 * 51.2
 
     def pack_voltage_v(self):
         return 400.0
@@ -294,6 +295,14 @@ def test_battery_modules_are_reported_individually_and_absent_ones_read_zero():
     assert out["battery_online_mask"] == 0b11
     assert out["battery_capacity_ah"] == 200.0
     assert out["battery_half_a"] == pytest.approx(out["battery_a"] / 2)
+
+
+def test_the_usable_capacity_times_the_battery_voltage_is_the_fixed_battery_energy():
+    out = telemetry(modules=2)
+
+    assert out["battery_user_capacity_ah"] * out["battery_v"] == pytest.approx(
+        2 * 100 * 51.2
+    )
 
 
 def test_a_bank_without_modules_reports_no_voltage_or_capacity():

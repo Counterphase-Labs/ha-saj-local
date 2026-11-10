@@ -177,6 +177,26 @@ class FakeStore:
         self.saved.append(data)
 
 
+class FakeBatteryEstimates:
+    def __init__(self, **_) -> None:
+        self.estimates: dict[str, object] = {}
+        self.updates: list[dict] = []
+        self.saves: list[bool] = []
+        self.loads = 0
+
+    async def async_load(self) -> None:
+        self.loads += 1
+
+    async def async_save(self, *, force: bool = False) -> None:
+        self.saves.append(force)
+
+    def update(self, *, read, values, enabled) -> dict[str, object]:
+        self.updates.append(
+            {"read": frozenset(read), "values": dict(values), "enabled": set(enabled)}
+        )
+        return dict(self.estimates)
+
+
 class FakeFunctionControl:
     method_name = "fake"
 
@@ -406,6 +426,7 @@ def build(recorder, *, contexts=READ_KEYS, functions=None, rows=None):
     coordinator._schedule_trackers = []
     coordinator._stop_retry = None
     coordinator._store = FakeStore()
+    coordinator.battery = FakeBatteryEstimates()
 
     def reschedule() -> None:
         recorder.rescheduled += 1

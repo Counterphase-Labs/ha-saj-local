@@ -11,6 +11,7 @@ La pagina Scheda batteria spiega la scheda batteria, che mostra la carica, la po
 - Un anello mostra lo stato di carica. I segni sull'anello indicano la riserva per il backup, il limite di carica e il limite di scarica con rete collegata.
 - La potenza della batteria appare con l'indicazione se la batteria è in carica o in scarica, e sotto la potenza la tensione, la corrente, la temperatura e la capacità utilizzabile. Le direzioni seguono il [segno della potenza](../entities-and-prefix.md#segno-della-potenza).
 - Con Mostra i moduli batteria attivo, che è il valore predefinito, ogni modulo ha un gruppo di righe con lo stato di carica, la salute, la tensione, la corrente, la temperatura, i cicli, il guasto e l'avviso. La lettura di un modulo compare solo quando l'entità della lettura è abilitata. La maggior parte delle letture dei moduli viene creata disabilitata, ed è per questo che la schermata mostra solo il nome del modulo. Abilita in Home Assistant le entità che vuoi. Le [entità dei moduli batteria](../entities/battery-packs.md) sono nel riferimento delle entità.
+- Una riga mostra il tempo alla batteria piena mentre la batteria si carica e il tempo alla batteria scarica mentre la batteria si scarica. La riga manca quando la batteria è ferma o quando il sistema non ha quell'entità. I [sensori calcolati](../entities-and-prefix.md#sensori-calcolati) spiegano le stime.
 - Un sistema senza batteria lo dice.
 
 ## Differenze tra i modelli

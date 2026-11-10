@@ -1,4 +1,5 @@
 from . import (
+    DERIVED_PLACEMENTS,
     METER_A_PROBE,
     METER_B_PROBE,
     PARALLEL_PROBE,
@@ -136,6 +137,7 @@ PROFILE = Profile(
     ),
     placements=placements_by_evidence(
         groups={
+            Evidence.IMPLEMENTED: DERIVED_PLACEMENTS,
             Evidence.VERIFIED: {
                 "ethernet_protocol_version": 0x0F03,
                 "ethernet_mac_address": 0x0F04,

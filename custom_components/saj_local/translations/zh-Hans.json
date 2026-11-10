@@ -608,6 +608,30 @@
       "battery_soc": {
         "name": "电池荷电状态"
       },
+      "battery_time_to_full": {
+        "name": "电池充满所需时间"
+      },
+      "battery_time_to_empty": {
+        "name": "电池放空所需时间"
+      },
+      "battery_stored_energy": {
+        "name": "电池储存能量"
+      },
+      "battery_available_energy": {
+        "name": "电池可用能量"
+      },
+      "self_sufficiency_today": {
+        "name": "今日自给率"
+      },
+      "self_consumption_today": {
+        "name": "今日自用率"
+      },
+      "solar_surplus_power": {
+        "name": "光伏盈余功率"
+      },
+      "battery_round_trip_efficiency": {
+        "name": "电池往返效率"
+      },
       "pv1_voltage": {
         "name": "PV1 电压"
       },

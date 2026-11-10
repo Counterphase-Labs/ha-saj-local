@@ -6,7 +6,7 @@ Uitgang van de omvormer, zonnestrings, back-uppoort, energietellers, versies en 
 
 De functielijst van de integratie legt de Omvormer en PV-entiteiten uit in [Apparaten en entiteiten](../../../../custom_components/saj_local/docs/features.md#devices-and-entities).
 
-241 entiteiten. Gegenereerd door `make docs`. Niet met de hand bewerken.
+244 entiteiten. Gegenereerd door `make docs`. Niet met de hand bewerken.
 
 Een voorvoegsel dat in Configureren is ingesteld komt na `saj_` in de ID van elke Omvormer en PV-entiteit, bijvoorbeeld `sensor.saj_house_ethernet_protocol_version` met het voorvoegsel `house`.
 
@@ -194,6 +194,9 @@ Een voorvoegsel dat in Configureren is ingesteld komt na `saj_` in de ID van elk
 | Meter B status | `sensor.saj_meter_b_status` | Sensor | - | HS3, H2 | - | Nee |
 | Back-upbelastingvermogen | `sensor.saj_backup_load_power` | Sensor | W | HS3, H2 | - | Ja |
 | Huisvermogen | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Ja |
+| Eigen verbruik vandaag | `sensor.saj_self_consumption_today` | Sensor | % | HS3, H2 | - | Nee |
+| Zelfvoorziening vandaag | `sensor.saj_self_sufficiency_today` | Sensor | % | HS3, H2 | - | Nee |
+| Zonne-overschotvermogen | `sensor.saj_solar_surplus_power` | Sensor | W | HS3, H2 | - | Nee |
 | Terugstroommodus | `sensor.saj_reverse_flow_mode` | Sensor | - | H2 | - | Nee |
 | FCAS-frequentiehysterese | `sensor.saj_fcas_frequency_hysteresis` | Sensor | Hz | H2 | - | Nee |
 | Parallelrol | `sensor.saj_parallel_role` | Sensor | - | H2 | - | Nee |

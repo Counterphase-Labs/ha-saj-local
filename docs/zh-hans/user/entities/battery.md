@@ -6,7 +6,7 @@
 
 集成功能列表在 [可选设备](../../../../custom_components/saj_local/docs/features.md#optional-equipment) 中说明了电池实体。
 
-133 个实体。由 `make docs` 生成，请勿手动编辑。
+138 个实体。由 `make docs` 生成，请勿手动编辑。
 
 在“配置”中设置的前缀会加在每个电池实体 ID 中 `saj_` 之后，例如前缀为 `house` 时为 `switch.saj_house_charge_slot_1_enabled`。
 
@@ -126,6 +126,11 @@
 | 电池在线码 | `sensor.saj_battery_online_code` | 传感器 | - | HS3, H2 | 电池 | 否 |
 | 电池放电电流限制 | `sensor.saj_battery_discharge_current_limit` | 传感器 | A | HS3, H2 | 电池 | 否 |
 | 电池充电电流限制 | `sensor.saj_battery_charge_current_limit` | 传感器 | A | HS3, H2 | 电池 | 否 |
+| 电池可用能量 | `sensor.saj_battery_available_energy` | 传感器 | kWh | HS3, H2 | 电池 | 是 |
+| 电池往返效率 | `sensor.saj_battery_round_trip_efficiency` | 传感器 | % | HS3, H2 | 电池 | 否 |
+| 电池储存能量 | `sensor.saj_battery_stored_energy` | 传感器 | kWh | HS3, H2 | 电池 | 是 |
+| 电池放空所需时间 | `sensor.saj_battery_time_to_empty` | 传感器 | min | HS3, H2 | 电池 | 是 |
+| 电池充满所需时间 | `sensor.saj_battery_time_to_full` | 传感器 | min | HS3, H2 | 电池 | 是 |
 | 铅酸电池离网放电截止电压 | `sensor.saj_lead_acid_off_grid_discharge_cutoff_voltage` | 传感器 | V | H2 | 电池 | 否 |
 | 铅酸电池充电截止电压 | `sensor.saj_lead_acid_charge_cutoff_voltage` | 传感器 | V | H2 | 电池 | 否 |
 | 铅酸电池并网放电截止电压 | `sensor.saj_lead_acid_on_grid_discharge_cutoff_voltage` | 传感器 | V | H2 | 电池 | 否 |

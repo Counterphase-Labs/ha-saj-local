@@ -6,7 +6,7 @@ Batteriet som helhet.
 
 Integrationens funktionslista förklarar entiteterna för Batteri i [Valfri utrustning](../../../../custom_components/saj_local/docs/features.md#optional-equipment).
 
-133 entiteter. Genereras av `make docs`. Redigera inte för hand.
+138 entiteter. Genereras av `make docs`. Redigera inte för hand.
 
 Ett prefix som anges i Konfigurera hamnar efter `saj_` i ID:t för varje entitet i Batteri, till exempel `switch.saj_house_charge_slot_1_enabled` med prefixet `house`.
 
@@ -126,6 +126,11 @@ Ett prefix som anges i Konfigurera hamnar efter `saj_` i ID:t för varje entitet
 | Batterionlinekod | `sensor.saj_battery_online_code` | Sensor | - | HS3, H2 | Batteri | Nej |
 | Batteriurladdningsströmgräns | `sensor.saj_battery_discharge_current_limit` | Sensor | A | HS3, H2 | Batteri | Nej |
 | Batteriladdningsströmgräns | `sensor.saj_battery_charge_current_limit` | Sensor | A | HS3, H2 | Batteri | Nej |
+| Tillgänglig batterienergi | `sensor.saj_battery_available_energy` | Sensor | kWh | HS3, H2 | Batteri | Ja |
+| Batteriets tur-och-retur-verkningsgrad | `sensor.saj_battery_round_trip_efficiency` | Sensor | % | HS3, H2 | Batteri | Nej |
+| Lagrad batterienergi | `sensor.saj_battery_stored_energy` | Sensor | kWh | HS3, H2 | Batteri | Ja |
+| Tid till tomt batteri | `sensor.saj_battery_time_to_empty` | Sensor | min | HS3, H2 | Batteri | Ja |
+| Tid till fullt batteri | `sensor.saj_battery_time_to_full` | Sensor | min | HS3, H2 | Batteri | Ja |
 | Blysyraurladdningsgränsspänning fristående | `sensor.saj_lead_acid_off_grid_discharge_cutoff_voltage` | Sensor | V | H2 | Batteri | Nej |
 | Blysyraladdningsgränsspänning | `sensor.saj_lead_acid_charge_cutoff_voltage` | Sensor | V | H2 | Batteri | Nej |
 | Blysyraurladdningsgränsspänning nätansluten | `sensor.saj_lead_acid_on_grid_discharge_cutoff_voltage` | Sensor | V | H2 | Batteri | Nej |

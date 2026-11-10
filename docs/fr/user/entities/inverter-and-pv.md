@@ -6,7 +6,7 @@ Sortie de l'onduleur, chaînes solaires, port de secours, compteurs d'énergie, 
 
 La liste des fonctionnalités de l'intégration explique les entités de Onduleur et solaire dans [Appareils et entités](../../../../custom_components/saj_local/docs/features.md#devices-and-entities).
 
-241 entités. Généré par `make docs`. Ne pas modifier à la main.
+244 entités. Généré par `make docs`. Ne pas modifier à la main.
 
 Un préfixe défini dans Configurer se place après `saj_` dans l'ID de chaque entité de Onduleur et solaire, par exemple `sensor.saj_house_ethernet_protocol_version` avec le préfixe `house`.
 
@@ -194,6 +194,9 @@ Un préfixe défini dans Configurer se place après `saj_` dans l'ID de chaque e
 | État du compteur B | `sensor.saj_meter_b_status` | Capteur | - | HS3, H2 | - | Non |
 | Puissance du circuit de secours | `sensor.saj_backup_load_power` | Capteur | W | HS3, H2 | - | Oui |
 | Puissance de la charge domestique | `sensor.saj_load_power` | Capteur | W | HS3, H2 | - | Oui |
+| Autoconsommation du jour | `sensor.saj_self_consumption_today` | Capteur | % | HS3, H2 | - | Non |
+| Autosuffisance du jour | `sensor.saj_self_sufficiency_today` | Capteur | % | HS3, H2 | - | Non |
+| Puissance du surplus solaire | `sensor.saj_solar_surplus_power` | Capteur | W | HS3, H2 | - | Non |
 | Mode de flux inverse | `sensor.saj_reverse_flow_mode` | Capteur | - | H2 | - | Non |
 | Hystérésis de fréquence FCAS | `sensor.saj_fcas_frequency_hysteresis` | Capteur | Hz | H2 | - | Non |
 | Rôle en parallèle | `sensor.saj_parallel_role` | Capteur | - | H2 | - | Non |

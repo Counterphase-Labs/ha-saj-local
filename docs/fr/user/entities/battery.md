@@ -6,7 +6,7 @@ La batterie dans son ensemble.
 
 La liste des fonctionnalités de l'intégration explique les entités de Batterie dans [Équipement optionnel](../../../../custom_components/saj_local/docs/features.md#optional-equipment).
 
-133 entités. Généré par `make docs`. Ne pas modifier à la main.
+138 entités. Généré par `make docs`. Ne pas modifier à la main.
 
 Un préfixe défini dans Configurer se place après `saj_` dans l'ID de chaque entité de Batterie, par exemple `switch.saj_house_charge_slot_1_enabled` avec le préfixe `house`.
 
@@ -126,6 +126,11 @@ Un préfixe défini dans Configurer se place après `saj_` dans l'ID de chaque e
 | Code de connexion de la batterie | `sensor.saj_battery_online_code` | Capteur | - | HS3, H2 | Batterie | Non |
 | Limite de courant de décharge de la batterie | `sensor.saj_battery_discharge_current_limit` | Capteur | A | HS3, H2 | Batterie | Non |
 | Limite de courant de charge de la batterie | `sensor.saj_battery_charge_current_limit` | Capteur | A | HS3, H2 | Batterie | Non |
+| Énergie disponible dans la batterie | `sensor.saj_battery_available_energy` | Capteur | kWh | HS3, H2 | Batterie | Oui |
+| Rendement aller-retour de la batterie | `sensor.saj_battery_round_trip_efficiency` | Capteur | % | HS3, H2 | Batterie | Non |
+| Énergie stockée dans la batterie | `sensor.saj_battery_stored_energy` | Capteur | kWh | HS3, H2 | Batterie | Oui |
+| Temps avant batterie vide | `sensor.saj_battery_time_to_empty` | Capteur | min | HS3, H2 | Batterie | Oui |
+| Temps avant batterie pleine | `sensor.saj_battery_time_to_full` | Capteur | min | HS3, H2 | Batterie | Oui |
 | Tension de coupure de décharge hors réseau plomb-acide | `sensor.saj_lead_acid_off_grid_discharge_cutoff_voltage` | Capteur | V | H2 | Batterie | Non |
 | Tension de coupure de charge plomb-acide | `sensor.saj_lead_acid_charge_cutoff_voltage` | Capteur | V | H2 | Batterie | Non |
 | Tension de coupure de décharge sur réseau plomb-acide | `sensor.saj_lead_acid_on_grid_discharge_cutoff_voltage` | Capteur | V | H2 | Batterie | Non |

@@ -28,6 +28,19 @@ W HS3 moc sieci to suma Licznika A, a moc fazowa sieci, moc pozorna, prąd i wsp
 
 Wartości zadane [sterowania mocą](power-control.md) stosują znaki odczytów.
 
+## Czujniki obliczane
+
+Osiem czujników jest obliczanych z odczytów samego systemu. Istnieją w każdym modelu.
+
+- **Czas do pełnego naładowania baterii** i **czas do rozładowania baterii** to czasy trwania w minutach. Każda wartość dzieli pozostałą energię baterii przez moc baterii uśrednioną z ostatnich 10 minut, więc krótka zmiana obciążenia domu nie powoduje skoku wartości. Czas do pełnego naładowania ma wartość tylko wtedy, gdy średnia moc ładuje baterię, a czas do rozładowania tylko wtedy, gdy średnia moc rozładowuje baterię. Wartość jest nieznana przy zerowej średniej mocy i gdy wynik jest dłuższy niż 48 godzin. Średnia zaczyna się od nowa po ponownym wczytaniu lub restarcie.
+- **Energia zmagazynowana w baterii** i **energia dostępna w baterii** są w kWh. Energia zmagazynowana to stan naładowania razy energia baterii. Energia dostępna to energia powyżej limitu pustej baterii, nigdy mniejsza niż 0.
+- **Pełna i pusta.** Pełna to limit ładowania. Pusta to rezerwa awaryjna w trybie awaryjnym i limit rozładowania przy sieci w pozostałych trybach aplikacji. Bez sieci pusta to limit rozładowania bez sieci w modelu, który go ma.
+- **Energia baterii.** H2 podaje pojemność użyteczną, a SAJ Local mnoży ją przez napięcie baterii. HS3 nie podaje pojemności użytecznej, więc SAJ Local uczy się pojemności z mocy baterii i zmiany stanu naładowania. W HS3 cztery czujniki energii baterii pozostają nieznane, dopóki stan naładowania nie zmieni się między dwoma odpytaniami. Nauczona pojemność staje się dokładniejsza, im więcej bateria się ładuje i rozładowuje. SAJ Local zachowuje nauczoną pojemność po restartach.
+- **Samowystarczalność dzisiaj** to udział dzisiejszej energii obciążenia, który nie pochodził z sieci. **Autokonsumpcja dzisiaj** to udział dzisiejszej energii słonecznej, który nie został wyeksportowany. **Sprawność cyklu ładowania i rozładowania baterii** to całkowita energia rozładowania baterii podzielona przez całkowitą energię ładowania baterii. Każda wartość jest procentem od 0 do 100 i jest nieznana, gdy dzielnik wynosi 0.
+- **Nadwyżka mocy z fotowoltaiki** to moc słoneczna minus obciążenie domu, w watach. Wartość jest ujemna, gdy obciążenie jest większe niż moc słoneczna.
+- **Ustawienia domyślne.** Cztery czujniki baterii powyżej są domyślnie włączone. Pozostałe cztery są tworzone jako wyłączone. Czujniki czasu, energii i sprawności cyklu istnieją tylko wtedy, gdy zamontowano baterię.
+- **Odczyty.** Włączenie czujnika obliczanego odczytuje każdy odczyt, którego czujnik potrzebuje, także gdy encje tych odczytów są wyłączone. [Odpytywanie](polling.md) wlicza te odczyty do obciążenia.
+
 ## Prefiks
 
 Każde ID encji ma postać `<type>.saj_<key>`, na przykład `sensor.saj_pv_power`. Zmiana wyświetlanej nazwy encji nie zmienia ID.

@@ -6,7 +6,7 @@ De batterij als geheel.
 
 De functielijst van de integratie legt de Batterij-entiteiten uit in [Optionele apparatuur](../../../../custom_components/saj_local/docs/features.md#optional-equipment).
 
-133 entiteiten. Gegenereerd door `make docs`. Niet met de hand bewerken.
+138 entiteiten. Gegenereerd door `make docs`. Niet met de hand bewerken.
 
 Een voorvoegsel dat in Configureren is ingesteld komt na `saj_` in de ID van elke Batterij-entiteit, bijvoorbeeld `switch.saj_house_charge_slot_1_enabled` met het voorvoegsel `house`.
 
@@ -126,6 +126,11 @@ Een voorvoegsel dat in Configureren is ingesteld komt na `saj_` in de ID van elk
 | Batterijonlinecode | `sensor.saj_battery_online_code` | Sensor | - | HS3, H2 | Batterij | Nee |
 | Limiet ontlaadstroom batterij | `sensor.saj_battery_discharge_current_limit` | Sensor | A | HS3, H2 | Batterij | Nee |
 | Limiet oplaadstroom batterij | `sensor.saj_battery_charge_current_limit` | Sensor | A | HS3, H2 | Batterij | Nee |
+| Beschikbare batterij-energie | `sensor.saj_battery_available_energy` | Sensor | kWh | HS3, H2 | Batterij | Ja |
+| Round-trip-rendement van de batterij | `sensor.saj_battery_round_trip_efficiency` | Sensor | % | HS3, H2 | Batterij | Nee |
+| Opgeslagen batterij-energie | `sensor.saj_battery_stored_energy` | Sensor | kWh | HS3, H2 | Batterij | Ja |
+| Tijd tot batterij leeg | `sensor.saj_battery_time_to_empty` | Sensor | min | HS3, H2 | Batterij | Ja |
+| Tijd tot batterij vol | `sensor.saj_battery_time_to_full` | Sensor | min | HS3, H2 | Batterij | Ja |
 | Ontlaadafschakelspanning loodzuur off-grid | `sensor.saj_lead_acid_off_grid_discharge_cutoff_voltage` | Sensor | V | H2 | Batterij | Nee |
 | Loodzuuroplaadafschakelspanning | `sensor.saj_lead_acid_charge_cutoff_voltage` | Sensor | V | H2 | Batterij | Nee |
 | Ontlaadafschakelspanning loodzuur on-grid | `sensor.saj_lead_acid_on_grid_discharge_cutoff_voltage` | Sensor | V | H2 | Batterij | Nee |

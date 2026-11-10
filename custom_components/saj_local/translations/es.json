@@ -608,6 +608,30 @@
       "battery_soc": {
         "name": "Estado de carga de la batería"
       },
+      "battery_time_to_full": {
+        "name": "Tiempo hasta batería llena"
+      },
+      "battery_time_to_empty": {
+        "name": "Tiempo hasta batería vacía"
+      },
+      "battery_stored_energy": {
+        "name": "Energía almacenada en la batería"
+      },
+      "battery_available_energy": {
+        "name": "Energía disponible en la batería"
+      },
+      "self_sufficiency_today": {
+        "name": "Autosuficiencia de hoy"
+      },
+      "self_consumption_today": {
+        "name": "Autoconsumo de hoy"
+      },
+      "solar_surplus_power": {
+        "name": "Potencia del excedente solar"
+      },
+      "battery_round_trip_efficiency": {
+        "name": "Eficiencia de ida y vuelta de la batería"
+      },
       "pv1_voltage": {
         "name": "Tensión PV1"
       },

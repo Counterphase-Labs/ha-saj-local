@@ -5,6 +5,7 @@ from homeassistant.const import Platform
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.translation import async_get_translations
 
+from .saj.catalogue import is_estimate
 from .saj.guard import EndpointGuard
 from .saj.models import PowerFunction
 from .saj.schedule import Cadence
@@ -57,6 +58,8 @@ FUNCTION_SELECTOR = "power_function"
 SCHEDULE_ON = "on"
 SCHEDULE_POWER_ATTRIBUTE = "power"
 POWER_STORAGE_VERSION = 1
+BATTERY_STORAGE_VERSION = 1
+BATTERY_SAVE_INTERVAL = 10 * 60
 STORED_TARGETS = "targets"
 STORED_MODES = "remembered_modes"
 DEFAULT_PORT = 502
@@ -146,14 +149,20 @@ def enabled_entity_keys(
 def enabled_keys(
     *, registered: Mapping[str, er.RegistryEntry], registers: Iterable[Register]
 ) -> frozenset[str]:
-    return frozenset(
-        register.key
+    shown = [
+        register
         for register in registers
         if (
             register.core
             if register.key not in registered
             else registered[register.key].disabled_by is None
         )
+    ]
+    return frozenset(register.key for register in shown) | frozenset(
+        source
+        for register in shown
+        if is_estimate(register=register)
+        for source in register.sources
     )
 
 

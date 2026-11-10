@@ -11,6 +11,7 @@ Sidan Batterikort förklarar batterikortet, som visar batteriets laddning, effek
 - En ring visar laddningsnivån. Markeringar på ringen visar reserven, laddningsgränsen och urladdningsgränsen när nätet är anslutet.
 - Batteriets effekt visas med om batteriet laddar eller laddar ur, och under effekten spänningen, strömmen, temperaturen och den användbara kapaciteten. Riktningarna följer [effektens tecken](../entities-and-prefix.md#effektens-tecken).
 - Med Visa batteripack på, vilket är standard, får varje pack en radgrupp med laddningsnivå, hälsa, spänning, ström, temperatur, cykler, fel och varning. En avläsning för ett pack visas bara när avläsningens entitet är aktiverad. De flesta packavläsningar skapas inaktiverade, vilket är anledningen till att skärmbilden bara visar packets namn. Aktivera de entiteter du vill ha i Home Assistant. [Batteripackentiteterna](../entities/battery-packs.md) finns i entitetsreferensen.
+- En rad visar tiden till fullt batteri medan batteriet laddas och tiden till tomt batteri medan batteriet laddas ur. Raden utelämnas när batteriet vilar eller när systemet saknar en sådan entitet. De [beräknade sensorerna](../entities-and-prefix.md#beräknade-sensorer) förklarar uppskattningarna.
 - Ett system utan batteri säger det.
 
 ## Skillnader mellan modellerna

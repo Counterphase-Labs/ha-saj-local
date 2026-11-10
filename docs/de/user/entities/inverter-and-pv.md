@@ -6,7 +6,7 @@ Wechselrichterleistung, Solar-Strings, Notstromanschluss, Energiezähler, Versio
 
 Die Funktionsliste der Integration erklärt die Entitäten (Wechselrichter und PV) in [Geräte und Entitäten](../../../../custom_components/saj_local/docs/features.md#devices-and-entities).
 
-241 Entitäten. Erzeugt von `make docs`. Nicht von Hand bearbeiten.
+244 Entitäten. Erzeugt von `make docs`. Nicht von Hand bearbeiten.
 
 Ein in Konfigurieren gesetztes Präfix steht nach `saj_` in der ID jeder Entität (Wechselrichter und PV), zum Beispiel `sensor.saj_house_ethernet_protocol_version` mit dem Präfix `house`.
 
@@ -194,6 +194,9 @@ Ein in Konfigurieren gesetztes Präfix steht nach `saj_` in der ID jeder Entitä
 | Zähler B Status | `sensor.saj_meter_b_status` | Sensor | - | HS3, H2 | - | Nein |
 | Notstromlastleistung | `sensor.saj_backup_load_power` | Sensor | W | HS3, H2 | - | Ja |
 | Hauslastleistung | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Ja |
+| Eigenverbrauch heute | `sensor.saj_self_consumption_today` | Sensor | % | HS3, H2 | - | Nein |
+| Autarkie heute | `sensor.saj_self_sufficiency_today` | Sensor | % | HS3, H2 | - | Nein |
+| Solarüberschussleistung | `sensor.saj_solar_surplus_power` | Sensor | W | HS3, H2 | - | Nein |
 | Rückstrommodus | `sensor.saj_reverse_flow_mode` | Sensor | - | H2 | - | Nein |
 | FCAS-Frequenzhysterese | `sensor.saj_fcas_frequency_hysteresis` | Sensor | Hz | H2 | - | Nein |
 | Parallelrolle | `sensor.saj_parallel_role` | Sensor | - | H2 | - | Nein |

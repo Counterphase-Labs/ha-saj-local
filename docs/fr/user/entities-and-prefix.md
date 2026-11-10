@@ -28,6 +28,19 @@ Sur le HS3, la puissance du réseau est le total du compteur A, et la puissance 
 
 Les cibles du [pilotage de puissance](power-control.md) suivent les signes des mesures.
 
+## Capteurs calculés
+
+Huit capteurs sont calculés à partir des mesures du système lui-même. Ils existent sur chaque modèle.
+
+- **Temps avant batterie pleine** et **temps avant batterie vide** sont des durées en minutes. Chaque valeur divise l'énergie restante de la batterie par la puissance de la batterie moyennée sur les 10 dernières minutes. Une brève variation de la charge du foyer ne fait donc pas sauter la valeur. Le temps avant batterie pleine a une valeur seulement tant que la puissance moyenne charge la batterie, et le temps avant batterie vide seulement tant que la puissance moyenne décharge la batterie. La valeur est inconnue à puissance moyenne nulle et quand le résultat dépasse 48 heures. La moyenne repart de zéro après un rechargement ou un redémarrage.
+- **Énergie stockée dans la batterie** et **énergie disponible dans la batterie** sont en kWh. L'énergie stockée est l'état de charge multiplié par l'énergie de la batterie. L'énergie disponible est l'énergie au-dessus de la limite de batterie vide, et jamais inférieure à 0.
+- **Pleine et vide.** Pleine est la limite de charge. Vide est la réserve en mode secours et la limite de décharge sur le réseau dans les autres modes d'application. Hors réseau, vide est la limite de décharge hors réseau sur un modèle qui en a une.
+- **Énergie de la batterie.** Le H2 indique une capacité utile, et SAJ Local la multiplie par la tension de la batterie. Le HS3 n'indique pas de capacité utile, donc SAJ Local apprend la capacité à partir de la puissance de la batterie et de la variation de l'état de charge. Sur un HS3, les quatre capteurs d'énergie de la batterie restent inconnus tant que l'état de charge n'a pas varié entre deux lectures. La capacité apprise devient plus précise quand la batterie se charge et se décharge. SAJ Local conserve la capacité apprise après un redémarrage.
+- **Autosuffisance du jour** est la part de l'énergie de la charge du jour qui ne venait pas du réseau. **Autoconsommation du jour** est la part de l'énergie solaire du jour qui n'a pas été exportée. **Rendement aller-retour de la batterie** est l'énergie totale de décharge de la batterie divisée par l'énergie totale de charge de la batterie. Chaque valeur est un pourcentage de 0 à 100 et est inconnue quand le diviseur est 0.
+- **Puissance du surplus solaire** est la puissance solaire moins la charge du foyer, en watts. La valeur est négative quand la charge dépasse la puissance solaire.
+- **Valeurs par défaut.** Les quatre capteurs de batterie ci-dessus sont activés par défaut. Les quatre autres sont créés désactivés. Les capteurs de temps, d'énergie et de rendement aller-retour existent seulement quand une batterie est installée.
+- **Lectures.** Activer un capteur calculé lit chaque mesure dont le capteur a besoin, même quand les entités de ces mesures sont désactivées. L'[interrogation](polling.md) compte ces lectures dans la charge.
+
 ## Le préfixe
 
 Chaque ID d'entité a la forme `<type>.saj_<key>`, par exemple `sensor.saj_pv_power`. Renommer le nom affiché d'une entité ne change pas l'ID.

@@ -11,6 +11,7 @@ La página Tarjeta de batería explica la tarjeta de batería, que muestra la ca
 - Un anillo muestra el estado de carga. Unas marcas en el anillo muestran la reserva de respaldo, el límite de carga y el límite de descarga conectada a la red.
 - La potencia de la batería se muestra con si la batería se está cargando o descargando, y debajo de la potencia la tensión, la corriente, la temperatura y la capacidad utilizable. Las direcciones siguen el [signo de la potencia](../entities-and-prefix.md#signo-de-la-potencia).
 - Con Mostrar módulos de batería activado, que es el valor por defecto, cada módulo recibe un grupo de filas con el estado de carga, el estado de salud, la tensión, la corriente, la temperatura, los ciclos, el fallo y la advertencia. Una lectura de módulo aparece solo cuando la entidad de la lectura está habilitada. La mayoría de las lecturas de módulo se crean deshabilitadas, por eso la captura de pantalla muestra solo el nombre del módulo. Habilita en Home Assistant las entidades que quieras. Las [entidades de los módulos de batería](../entities/battery-packs.md) están en la referencia de entidades.
+- Una fila muestra el tiempo hasta batería llena mientras la batería se carga y el tiempo hasta batería vacía mientras la batería se descarga. La fila no aparece cuando la batería está en reposo o cuando el sistema no tiene esa entidad. Los [sensores calculados](../entities-and-prefix.md#sensores-calculados) explican las estimaciones.
 - Un sistema sin batería lo indica.
 
 ## Diferencias entre los modelos

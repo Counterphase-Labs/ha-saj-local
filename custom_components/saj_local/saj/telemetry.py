@@ -24,6 +24,8 @@ LOAD_POWER = "load_power"
 PV_POWER = "pv_power"
 BATTERY_POWER = "battery_power"
 GRID_POWER = "grid_power"
+PERCENT = 100
+SHARE_DECIMALS = 1
 SETUP_KEYS = frozenset(
     {OPERATING_MODE, BATTERY_SOC, LOAD_POWER, PV_POWER, BATTERY_POWER, GRID_POWER}
 )
@@ -167,9 +169,20 @@ def _needed(
 ) -> list[Register]:
     by_key = {register.key: register for register in registers}
     wanted = set(by_key) if enabled is None else set(enabled) & set(by_key)
-    for key in tuple(wanted):
-        wanted.update(by_key[key].sources)
+    pending = list(wanted)
+    while pending:
+        for source in by_key[pending.pop()].sources:
+            if source not in wanted:
+                wanted.add(source)
+                pending.append(source)
     return [register for register in registers if register.key in wanted]
+
+
+def _leaves_of(*, key: str, by_key: Mapping[str, Register]) -> frozenset[str]:
+    sources = by_key[key].sources
+    if not sources:
+        return frozenset({key})
+    return frozenset().union(*(_leaves_of(key=s, by_key=by_key) for s in sources))
 
 
 def plan_requests(
@@ -202,6 +215,22 @@ def plan_reads(
     )
 
 
+def _share(*, part: float, whole: float) -> float | None:
+    if whole == 0:
+        return None
+    return round(min(PERCENT, max(0, part / whole * PERCENT)), SHARE_DECIMALS)
+
+
+def _arithmetic(*, operation: Operation, numbers: Sequence[float]) -> Value:
+    if operation is Operation.DIFFERENCE:
+        return numbers[0] - numbers[1]
+    if operation is Operation.SHARE_PERCENT:
+        return _share(part=numbers[0], whole=numbers[1])
+    if operation is Operation.REMAINDER_PERCENT:
+        return _share(part=numbers[0] - numbers[1], whole=numbers[0])
+    return sum(numbers)
+
+
 def _combined_value(
     *,
     register: Register,
@@ -212,6 +241,8 @@ def _combined_value(
     if combination.operation is Operation.WORDS:
         words = [word for source in combination.sources for word in raw[source]]
         return decode(words=words, encoding_format=register.format)
+    if combination.operation is Operation.ESTIMATE:
+        return None
     parts = [decoded[source] for source in combination.sources]
     numbers = [part for part in parts if isinstance(part, int | float)]
     if len(numbers) != len(parts):
@@ -223,39 +254,54 @@ def _combined_value(
                 for source, number in zip(combination.sources, numbers, strict=True)
             )
         )
-    return sum(numbers)
+    return _arithmetic(operation=combination.operation, numbers=numbers)
 
 
 def decode_values(
     *, registers: Iterable[Register], raw: Mapping[str, Sequence[int]]
 ) -> dict[str, Value]:
     registers = list(registers)
-    decoded = {
+    values: dict[str, Value] = {
         register.key: decode(words=raw[register.key], encoding_format=register.format)
         for register in registers
         if register.combination is None and register.key in raw
     }
-    combined = {
-        register.key: _combined_value(
-            register=register, combination=combination, raw=raw, decoded=decoded
+    pending = [register for register in registers if register.combination is not None]
+    while ready := [
+        register
+        for register in pending
+        if register.combination is not None
+        and all(
+            source in values or source in raw for source in register.combination.sources
         )
-        for register in registers
-        if (combination := register.combination) is not None
-        and all(source in raw for source in combination.sources)
-    }
-    return {**decoded, **combined}
+    ]:
+        combined = {
+            register.key: _combined_value(
+                register=register,
+                combination=combination,
+                raw=raw,
+                decoded=values,
+            )
+            for register in ready
+            if (combination := register.combination) is not None
+        }
+        values.update(combined)
+        pending = [register for register in pending if register.key not in combined]
+    return values
 
 
 def _outcome_keys(
     *,
     read_range: ReadRange,
-    needed: Iterable[Register],
+    needed: Collection[Register],
     requested: Collection[str],
 ) -> frozenset[str]:
+    by_key = {register.key: register for register in needed}
     dependents = {
         register.key
         for register in needed
-        if any(source in read_range.keys for source in register.sources)
+        if register.sources
+        and not _leaves_of(key=register.key, by_key=by_key).isdisjoint(read_range.keys)
     }
     return frozenset((set(read_range.keys) | dependents) & set(requested))
 

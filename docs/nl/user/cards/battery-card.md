@@ -11,6 +11,7 @@ De pagina Batterijkaart legt de batterijkaart uit, die de lading, het vermogen e
 - Een ring toont het laadniveau. Markeringen op de ring tonen de back-upreserve, de oplaadlimiet en de ontlaadlimiet aan het net.
 - Het batterijvermogen verschijnt met of de batterij oplaadt of ontlaadt, en onder het vermogen de spanning, de stroom, de temperatuur en de bruikbare capaciteit. De richtingen volgen het [teken van het vermogen](../entities-and-prefix.md#teken-van-het-vermogen).
 - Met Batterijpacks tonen aan, wat de standaard is, krijgt elk pack een rijgroep met het laadniveau, de gezondheid, de spanning, de stroom, de temperatuur, de cycli, de storing en de waarschuwing. Een packmeting verschijnt alleen wanneer de entiteit van de meting is ingeschakeld. De meeste packmetingen worden uitgeschakeld aangemaakt, en daarom toont de schermafbeelding alleen de naam van het pack. Schakel de entiteiten die u wilt in Home Assistant in. De [batterijpackentiteiten](../entities/battery-packs.md) staan in het entiteitenoverzicht.
+- Eén rij toont de tijd tot batterij vol zolang de batterij oplaadt en de tijd tot batterij leeg zolang de batterij ontlaadt. De rij vervalt als de batterij stilstaat of als het systeem zo'n entiteit niet heeft. De [berekende sensoren](../entities-and-prefix.md#berekende-sensoren) leggen de schattingen uit.
 - Een systeem zonder batterij zegt dat.
 
 ## Verschillen tussen de modellen

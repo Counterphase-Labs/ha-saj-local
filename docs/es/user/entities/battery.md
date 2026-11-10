@@ -6,7 +6,7 @@ La batería en conjunto.
 
 La lista de funciones de la integración explica las entidades de Batería en [Equipo opcional](../../../../custom_components/saj_local/docs/features.md#optional-equipment).
 
-133 entidades. Generado por `make docs`. No editar a mano.
+138 entidades. Generado por `make docs`. No editar a mano.
 
 Un prefijo definido en Configurar va después de `saj_` en el ID de cada entidad de Batería, por ejemplo `switch.saj_house_charge_slot_1_enabled` con el prefijo `house`.
 
@@ -126,6 +126,11 @@ Un prefijo definido en Configurar va después de `saj_` en el ID de cada entidad
 | Código de batería en línea | `sensor.saj_battery_online_code` | Sensor | - | HS3, H2 | Batería | No |
 | Límite de corriente de descarga de la batería | `sensor.saj_battery_discharge_current_limit` | Sensor | A | HS3, H2 | Batería | No |
 | Límite de corriente de carga de la batería | `sensor.saj_battery_charge_current_limit` | Sensor | A | HS3, H2 | Batería | No |
+| Energía disponible en la batería | `sensor.saj_battery_available_energy` | Sensor | kWh | HS3, H2 | Batería | Sí |
+| Eficiencia de ida y vuelta de la batería | `sensor.saj_battery_round_trip_efficiency` | Sensor | % | HS3, H2 | Batería | No |
+| Energía almacenada en la batería | `sensor.saj_battery_stored_energy` | Sensor | kWh | HS3, H2 | Batería | Sí |
+| Tiempo hasta batería vacía | `sensor.saj_battery_time_to_empty` | Sensor | min | HS3, H2 | Batería | Sí |
+| Tiempo hasta batería llena | `sensor.saj_battery_time_to_full` | Sensor | min | HS3, H2 | Batería | Sí |
 | Tensión de corte de descarga aislada de la red de plomo-ácido | `sensor.saj_lead_acid_off_grid_discharge_cutoff_voltage` | Sensor | V | H2 | Batería | No |
 | Tensión de corte de carga de plomo-ácido | `sensor.saj_lead_acid_charge_cutoff_voltage` | Sensor | V | H2 | Batería | No |
 | Tensión de corte de descarga conectada a la red de plomo-ácido | `sensor.saj_lead_acid_on_grid_discharge_cutoff_voltage` | Sensor | V | H2 | Batería | No |

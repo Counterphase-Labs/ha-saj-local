@@ -203,6 +203,77 @@ describe("battery card power and readings", () => {
     });
 });
 
+describe("battery card time estimate", () => {
+    const toFull = reading("battery_time_to_full", "90");
+    const toEmpty = reading("battery_time_to_empty", "45");
+
+    const mountWithFlow = (
+        state: "charging" | "discharging" | "idle",
+        entities: SystemEntity[],
+    ) => {
+        vi.mocked(wattsOf).mockReturnValue(-1500);
+        vi.mocked(powerFlow).mockReturnValue({ state, line: "none" });
+        return mountBattery(entities);
+    };
+
+    it("shows time to full while the battery charges", async () => {
+        const card = await mountWithFlow("charging", [
+            soc,
+            power,
+            toFull,
+            toEmpty,
+        ]);
+
+        expect(requiredRowFor({ card, entity: toFull }).icon).toBe("battery");
+        expect(rowFor({ card, entity: toEmpty })).toBeUndefined();
+    });
+
+    it("shows time to empty while the battery discharges", async () => {
+        const card = await mountWithFlow("discharging", [
+            soc,
+            power,
+            toFull,
+            toEmpty,
+        ]);
+
+        expect(requiredRowFor({ card, entity: toEmpty }).icon).toBe("battery");
+        expect(rowFor({ card, entity: toFull })).toBeUndefined();
+    });
+
+    it("shows neither estimate while the battery is idle", async () => {
+        const card = await mountWithFlow("idle", [soc, power, toFull, toEmpty]);
+
+        expect(rowFor({ card, entity: toFull })).toBeUndefined();
+        expect(rowFor({ card, entity: toEmpty })).toBeUndefined();
+    });
+
+    it("shows no estimate row when the system has no estimate entity", async () => {
+        const card = await mountWithFlow("charging", [soc, power]);
+
+        expect(rowsOf(card)).toHaveLength(1);
+    });
+
+    it("shows no estimate row without battery power or its watts", async () => {
+        const withoutPower = await mountBattery([soc, toFull, toEmpty]);
+        vi.mocked(wattsOf).mockReturnValue(null);
+        const withoutWatts = await mountBattery([soc, power, toFull, toEmpty]);
+
+        expect(rowsOf(withoutPower)).toEqual([]);
+        expect(rowFor({ card: withoutWatts, entity: toFull })).toBeUndefined();
+        expect(rowFor({ card: withoutWatts, entity: toEmpty })).toBeUndefined();
+    });
+
+    it("includes the estimate entities in what the card shows", async () => {
+        const card = await mountBattery([soc]);
+
+        expect(card.shownEntities(entityMap([soc, toFull, toEmpty]))).toEqual([
+            soc,
+            toFull,
+            toEmpty,
+        ]);
+    });
+});
+
 describe("battery card packs", () => {
     const packs = [
         reading("battery_pack10_soc", "70"),

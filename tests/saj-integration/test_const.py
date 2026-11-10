@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from custom_components.saj_local import const
+from custom_components.saj_local.saj.definitions import Combination, Operation
 
 
 @pytest.mark.parametrize(
@@ -103,8 +104,35 @@ def _registry_of(monkeypatch, *entries):
     )
 
 
-def _register(key, *, core):
-    return SimpleNamespace(key=key, core=core)
+def _register(key, *, core, combination=None):
+    return SimpleNamespace(
+        key=key,
+        core=core,
+        combination=combination,
+        sources=() if combination is None else combination.sources,
+    )
+
+
+def test_an_enabled_estimate_enables_the_readings_it_needs_whatever_their_entities_do(
+    monkeypatch,
+):
+    _registry_of(monkeypatch, _registry_entry("input_row", disabled_by="user"))
+    estimate = Combination(operation=Operation.ESTIMATE, sources=("input_row", "other"))
+    registers = [
+        _register("estimate_row", core=True, combination=estimate),
+        _register("input_row", core=False),
+        _register(
+            "sum_row",
+            core=True,
+            combination=Combination(operation=Operation.SUM, sources=("summed",)),
+        ),
+    ]
+
+    enabled = const.enabled_entity_keys(
+        hass=None, entry_id="entry-1", registers=registers
+    )
+
+    assert enabled == {"estimate_row", "sum_row", "input_row", "other"}
 
 
 def test_the_installation_entities_are_the_registry_entries_of_the_entry_by_key(

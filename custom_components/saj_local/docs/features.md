@@ -22,7 +22,7 @@ Requirements: [Setup and detection](requirements.md#setup-and-detection)
 
 Each system is one Home Assistant device, and every reading, setting and command the integration knows for the model is one of its entities.
 
-Files: [entity.py](../entity.py), [sensor.py](../sensor.py), [binary_sensor.py](../binary_sensor.py), [number.py](../number.py), [select.py](../select.py), [switch.py](../switch.py), [time.py](../time.py), [button.py](../button.py), [catalogue.py](../saj/catalogue.py), [definitions.py](../saj/definitions.py)
+Files: [entity.py](../entity.py), [sensor.py](../sensor.py), [binary_sensor.py](../binary_sensor.py), [number.py](../number.py), [select.py](../select.py), [switch.py](../switch.py), [time.py](../time.py), [button.py](../button.py), [catalogue.py](../saj/catalogue.py), [definitions.py](../saj/definitions.py), [battery.py](../battery.py), [estimator.py](../saj/estimator.py), [learner.py](../saj/learner.py)
 
 Requirements: [Devices and entities](requirements.md#devices-and-entities)
 
@@ -42,6 +42,18 @@ Requirements: [Devices and entities](requirements.md#devices-and-entities)
 - On the HS3, household load power is the sum of the three on-grid output phase powers.
 - The EV charger readings of the HS3 are read as input registers, and the EV charger settings as holding registers.
 - An option code with no known name shows as unknown, and diagnostics list the code so it can be reported.
+- Eight sensors are computed from the readings of the system itself: battery time to full, battery time to empty, battery stored energy, battery available energy, self-sufficiency today, self-consumption today, solar surplus power and battery round-trip efficiency. They exist on every model.
+- Battery time to full, battery time to empty, battery stored energy and battery available energy are enabled by default. The other four are created disabled.
+- Battery time to full, battery time to empty, battery stored energy, battery available energy and battery round-trip efficiency exist only when a battery is fitted.
+- Enabling a computed sensor reads every reading it needs, also when the entities of those readings are disabled. The load shown in the polling group and Configure forms counts these reads.
+- The two time estimates are durations in minutes. They divide the remaining energy by the battery power averaged over the last 10 minutes, so a short change of the household load does not make an estimate jump. The average starts again from the first reading after a reload or a restart.
+- Battery time to full has a value only while the averaged power charges the battery, and battery time to empty only while the averaged power discharges the battery. An estimate is unknown at zero average power and when the result is longer than 48 hours. An estimate is 0 when the state of charge is at or past its limit.
+- Full is the charge state-of-charge limit. Empty is the backup reserve in backup mode and the on-grid discharge limit in the other application modes. Off grid, empty is the off-grid discharge limit on a model that gives one, and the on-grid discharge limit on a model that does not.
+- Battery stored energy is the state of charge times the battery energy, in kWh. Battery available energy is the energy above the empty limit, in kWh, and never below 0.
+- The H2 gives the battery energy as its usable capacity times the battery voltage. The HS3 does not give a usable capacity, so the integration learns the capacity from the battery power and the change in state of charge. Until the state of charge has changed between two polls, the four battery energy sensors are unknown.
+- The learned capacity is kept across restarts in a store of the system, saved at most every 10 minutes, when the system unloads and when Home Assistant stops. A store that cannot be read starts the learning again, and a store that cannot be written is kept in memory with a warning. Removing the system removes the store.
+- Self-sufficiency today is the share of today's load energy that did not come from the grid. Self-consumption today is the share of today's solar energy that was not exported. Battery round-trip efficiency is the total battery discharge energy over the total battery charge energy. Each is a percentage from 0 to 100 and is unknown when the divisor is 0.
+- Solar surplus power is solar power minus household load power, in watts, and is negative when the load is larger.
 
 ## Optional equipment
 

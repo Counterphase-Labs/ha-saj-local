@@ -66,6 +66,7 @@ PRESENTATIONS: Mapping[Quantity, Presentation] = {
     Quantity.PERCENTAGE: _measurement(),
     Quantity.RESISTANCE: _measurement(),
     Quantity.CAPACITY: _measurement(),
+    Quantity.STORED_ENERGY: _measurement(device_class="energy_storage"),
     Quantity.ENERGY: Presentation(
         device_class="energy", state_class=SensorStateClass.TOTAL_INCREASING
     ),

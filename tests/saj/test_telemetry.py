@@ -870,3 +870,135 @@ async def test_an_h2_reads_a_parallel_power_from_one_register_and_signs_the_batt
         "parallel_backup_load_power": 700,
     }
     assert [address for address, _ in client.reads] == [0x4204]
+
+
+def _decoded(operation: Operation, first: int, second: int) -> object:
+    sources = [
+        _register(key, address, encoding=Encoding.I16)
+        for key, address in (("a", 1), ("b", 2))
+    ]
+    combined = _combined("result", operation, "a", "b")
+
+    values = decode_values(
+        registers=[*sources, combined],
+        raw={"a": [first & 0xFFFF], "b": [second & 0xFFFF]},
+    )
+
+    return values["result"]
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "expected"),
+    [(3000, 1200, 1800), (1000, 1500, -500), (0, 0, 0)],
+)
+def test_a_difference_subtracts_the_second_source_from_the_first(
+    first: int, second: int, expected: int
+):
+    assert _decoded(Operation.DIFFERENCE, first, second) == expected
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "expected"),
+    [
+        (80, 100, 80.0),
+        (1, 3, 33.3),
+        (150, 100, 100.0),
+        (-5, 100, 0.0),
+        (5, 0, None),
+    ],
+)
+def test_a_share_is_the_first_source_over_the_second_as_a_percentage_from_0_to_100(
+    first: int, second: int, expected: float | None
+):
+    assert _decoded(Operation.SHARE_PERCENT, first, second) == expected
+
+
+@pytest.mark.parametrize(
+    ("whole", "taken", "expected"),
+    [
+        (100, 25, 75.0),
+        (100, 0, 100.0),
+        (100, 100, 0.0),
+        (100, 130, 0.0),
+        (100, -20, 100.0),
+        (0, 0, None),
+    ],
+)
+def test_a_remainder_is_the_share_of_the_first_source_left_after_the_second(
+    whole: int, taken: int, expected: float | None
+):
+    assert _decoded(Operation.REMAINDER_PERCENT, whole, taken) == expected
+
+
+def test_an_estimate_has_a_placeholder_value_once_its_sources_are_read():
+    sources = [_register("a", 1), _register("b", 2)]
+    estimate = _combined("estimate", Operation.ESTIMATE, "a", "b")
+
+    values = decode_values(registers=[*sources, estimate], raw={"a": [1], "b": [2]})
+
+    assert values["estimate"] is None
+    assert "estimate" in values
+
+
+def test_a_combined_value_may_use_another_combined_value():
+    sources = [
+        _register(key, address, encoding=Encoding.I16)
+        for key, address in (("a", 1), ("b", 2), ("c", 3))
+    ]
+    registers = [
+        *sources,
+        _combined("surplus", Operation.DIFFERENCE, "a", "load"),
+        _combined("load", Operation.SUM, "b", "c"),
+    ]
+
+    values = decode_values(
+        registers=registers, raw={"a": [3000], "b": [400], "c": [600]}
+    )
+
+    assert values["surplus"] == 2000
+
+
+HS3_DEVICE = Device(
+    serial="S", device_type=0x1610, rated_power=6000, profile=HS3, detected=True
+)
+LOAD_PHASES = tuple(f"grid_output_l{phase}_power" for phase in (1, 2, 3))
+
+
+def _hs3_addresses() -> dict[str, int | None]:
+    return {
+        register.key: register.address
+        for register in device_registers(fit=HS3_DEVICE.fit)
+    }
+
+
+def _hs3_memory() -> dict[int, int]:
+    address = _hs3_addresses()
+    return {
+        address["pv_power"]: 3000,
+        address[LOAD_PHASES[0]]: 400,
+        address[LOAD_PHASES[1]]: 500,
+        address[LOAD_PHASES[2]]: 600,
+    }
+
+
+async def test_solar_surplus_reads_the_sources_of_the_load_it_subtracts():
+    readout = await read_telemetry(
+        client=MemoryClient(_hs3_memory()),
+        device=HS3_DEVICE,
+        enabled={"solar_surplus_power"},
+    )
+
+    assert readout.values == {"solar_surplus_power": 1500}
+
+
+async def test_solar_surplus_is_refused_with_a_refused_source_of_the_load():
+    client = MemoryClient(
+        _hs3_memory(), bad_addresses=frozenset({_hs3_addresses()[LOAD_PHASES[1]]})
+    )
+
+    readout = await read_telemetry(
+        client=client, device=HS3_DEVICE, enabled={"solar_surplus_power"}
+    )
+
+    assert readout.values == {}
+    assert readout.refusals == {"solar_surplus_power": 2}

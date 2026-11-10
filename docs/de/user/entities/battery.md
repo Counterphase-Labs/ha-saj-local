@@ -6,7 +6,7 @@ Die Batterie als Ganzes.
 
 Die Funktionsliste der Integration erklärt die Entitäten (Batterie) in [Optionale Ausstattung](../../../../custom_components/saj_local/docs/features.md#optional-equipment).
 
-133 Entitäten. Erzeugt von `make docs`. Nicht von Hand bearbeiten.
+138 Entitäten. Erzeugt von `make docs`. Nicht von Hand bearbeiten.
 
 Ein in Konfigurieren gesetztes Präfix steht nach `saj_` in der ID jeder Entität (Batterie), zum Beispiel `switch.saj_house_charge_slot_1_enabled` mit dem Präfix `house`.
 
@@ -126,6 +126,11 @@ Ein in Konfigurieren gesetztes Präfix steht nach `saj_` in der ID jeder Entitä
 | Batterie-Online-Code | `sensor.saj_battery_online_code` | Sensor | - | HS3, H2 | Batterie | Nein |
 | Batterie-Entladestromgrenze | `sensor.saj_battery_discharge_current_limit` | Sensor | A | HS3, H2 | Batterie | Nein |
 | Batterie-Ladestromgrenze | `sensor.saj_battery_charge_current_limit` | Sensor | A | HS3, H2 | Batterie | Nein |
+| Verfügbare Batterieenergie | `sensor.saj_battery_available_energy` | Sensor | kWh | HS3, H2 | Batterie | Ja |
+| Round-Trip-Wirkungsgrad der Batterie | `sensor.saj_battery_round_trip_efficiency` | Sensor | % | HS3, H2 | Batterie | Nein |
+| Gespeicherte Batterieenergie | `sensor.saj_battery_stored_energy` | Sensor | kWh | HS3, H2 | Batterie | Ja |
+| Zeit bis Batterie leer | `sensor.saj_battery_time_to_empty` | Sensor | min | HS3, H2 | Batterie | Ja |
+| Zeit bis Batterie voll | `sensor.saj_battery_time_to_full` | Sensor | min | HS3, H2 | Batterie | Ja |
 | Blei-Säure-Entlade-Abschaltspannung (netzunabhängig) | `sensor.saj_lead_acid_off_grid_discharge_cutoff_voltage` | Sensor | V | H2 | Batterie | Nein |
 | Blei-Säure-Ladeschlussspannung | `sensor.saj_lead_acid_charge_cutoff_voltage` | Sensor | V | H2 | Batterie | Nein |
 | Blei-Säure-Entlade-Abschaltspannung (netzgekoppelt) | `sensor.saj_lead_acid_on_grid_discharge_cutoff_voltage` | Sensor | V | H2 | Batterie | Nein |

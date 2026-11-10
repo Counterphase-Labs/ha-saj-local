@@ -11,6 +11,7 @@ La page Carte de batterie explique la carte de batterie, qui affiche la charge, 
 - Un anneau affiche l'état de charge. Des repères sur l'anneau montrent la réserve, la limite de charge et la limite de décharge sur le réseau.
 - La puissance de la batterie s'affiche avec l'indication que la batterie se charge ou se décharge, et sous la puissance la tension, le courant, la température et la capacité utilisable. Les sens suivent le [signe de la puissance](../entities-and-prefix.md#signe-de-la-puissance).
 - Avec Afficher les modules de batterie activé, ce qui est la valeur par défaut, chaque module obtient un groupe de lignes avec l'état de charge, la santé, la tension, le courant, la température, les cycles, le défaut et l'avertissement. Une mesure de module n'apparaît que lorsque l'entité de la mesure est activée. La plupart des mesures de module sont créées désactivées, c'est pourquoi la capture d'écran n'affiche que le nom du module. Activez les entités que vous voulez dans Home Assistant. Les [entités des modules de batterie](../entities/battery-packs.md) figurent dans la référence des entités.
+- Une ligne affiche le temps avant batterie pleine pendant que la batterie se charge et le temps avant batterie vide pendant que la batterie se décharge. La ligne disparaît quand la batterie est au repos ou quand le système n'a pas cette entité. Les [capteurs calculés](../entities-and-prefix.md#capteurs-calculés) expliquent les estimations.
 - Un système sans batterie le dit.
 
 ## Différences entre les modèles

@@ -1,4 +1,5 @@
 from . import (
+    DERIVED_PLACEMENTS,
     METER_A_PROBE,
     METER_B_PROBE,
     PARALLEL_PROBE,
@@ -71,6 +72,8 @@ PROFILE = Profile(
         0x005B: Shape(phases=1, strings=3),
     },
     hand_verified=False,
+    usable_capacity=True,
+    off_grid_discharge_limit=True,
     maximum_shape=Shape(phases=3, strings=4),
     largest_request=56,
     spans=(
@@ -85,6 +88,7 @@ PROFILE = Profile(
     placements=placements_by_evidence(
         groups={
             Evidence.IMPLEMENTED: {
+                **DERIVED_PLACEMENTS,
                 "passive_mode": 0x3636,
                 "passive_grid_charge_power": 0x3637,
                 "passive_grid_discharge_power": 0x3638,

@@ -6,7 +6,7 @@ Växelriktarens utgång, solcellssträngar, reservport, energiräknare, versione
 
 Integrationens funktionslista förklarar entiteterna för Växelriktare och PV i [Enheter och entiteter](../../../../custom_components/saj_local/docs/features.md#devices-and-entities).
 
-241 entiteter. Genereras av `make docs`. Redigera inte för hand.
+244 entiteter. Genereras av `make docs`. Redigera inte för hand.
 
 Ett prefix som anges i Konfigurera hamnar efter `saj_` i ID:t för varje entitet i Växelriktare och PV, till exempel `sensor.saj_house_ethernet_protocol_version` med prefixet `house`.
 
@@ -194,6 +194,9 @@ Ett prefix som anges i Konfigurera hamnar efter `saj_` i ID:t för varje entitet
 | Mätare B status | `sensor.saj_meter_b_status` | Sensor | - | HS3, H2 | - | Nej |
 | Reservlast effekt | `sensor.saj_backup_load_power` | Sensor | W | HS3, H2 | - | Ja |
 | Hushållslasteffekt | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Ja |
+| Egenanvändning idag | `sensor.saj_self_consumption_today` | Sensor | % | HS3, H2 | - | Nej |
+| Självförsörjning idag | `sensor.saj_self_sufficiency_today` | Sensor | % | HS3, H2 | - | Nej |
+| Solöverskottseffekt | `sensor.saj_solar_surplus_power` | Sensor | W | HS3, H2 | - | Nej |
 | Läge för omvänt flöde | `sensor.saj_reverse_flow_mode` | Sensor | - | H2 | - | Nej |
 | FCAS frekvenshysteres | `sensor.saj_fcas_frequency_hysteresis` | Sensor | Hz | H2 | - | Nej |
 | Parallellroll | `sensor.saj_parallel_role` | Sensor | - | H2 | - | Nej |

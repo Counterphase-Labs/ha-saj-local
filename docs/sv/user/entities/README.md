@@ -10,10 +10,10 @@ Genereras av `make docs`. Redigera inte för hand.
 
 | Område | Entiteter | Vad området innehåller |
 | --- | --- | --- |
-| [Växelriktare och PV](inverter-and-pv.md) | 241 | Växelriktarens utgång, solcellssträngar, reservport, energiräknare, versioner och hushållets last |
+| [Växelriktare och PV](inverter-and-pv.md) | 244 | Växelriktarens utgång, solcellssträngar, reservport, energiräknare, versioner och hushållets last |
 | [Nät och Mätare A](grid-and-meter-a.md) | 101 | Nätanslutningen och Mätare A, nätmätaren |
 | [Mätare B](meter-b.md) | 22 | Mätare B, den andra mätaren som mäter en solcellsväxelriktare |
-| [Batteri](battery.md) | 133 | Batteriet som helhet |
+| [Batteri](battery.md) | 138 | Batteriet som helhet |
 | [Batteripack](battery-packs.md) | 58 | Avläsningar och identitet för varje batteripack |
 | [Elbilsladdare](ev-charger.md) | 87 | Elbilsladdaren och dess laddningsstyrningar |
 | [Parallellsystem](parallel-system.md) | 63 | Avläsningarna från ett parallellt maskinsystem |

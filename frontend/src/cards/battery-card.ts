@@ -25,6 +25,16 @@ const SOC_KEY = "battery_soc";
 const POWER_KEY = "battery_power";
 const POWER_SEPARATOR = " · ";
 
+const ESTIMATE_KEYS: readonly string[] = [
+    "battery_time_to_full",
+    "battery_time_to_empty",
+];
+
+const ESTIMATE_KEY_BY_STATE: Readonly<Record<string, string>> = {
+    charging: "battery_time_to_full",
+    discharging: "battery_time_to_empty",
+};
+
 const MARKER_KEYS: readonly string[] = [
     "backup_reserve_soc",
     "battery_charge_soc_limit",
@@ -148,6 +158,7 @@ export class SajLocalBatteryCard extends SystemCard<BatteryCardConfig> {
             SOC_KEY,
             ...MARKER_KEYS,
             POWER_KEY,
+            ...ESTIMATE_KEYS,
             ...READING_KEYS.map(({ key }) => key),
         ];
         const plain = presentEntities({ entities, keys });
@@ -173,6 +184,7 @@ export class SajLocalBatteryCard extends SystemCard<BatteryCardConfig> {
         ${presentEntities({ entities, keys: [POWER_KEY] }).map((power) =>
             this.renderPower({ context, power }),
         )}
+        ${this.renderEstimate(context)}
         ${READING_KEYS.map(({ key, icon }) =>
             presentEntities({ entities, keys: [key] }).map((entity) =>
                 this.valueRow({ context, entity, icon }),
@@ -251,6 +263,26 @@ export class SajLocalBatteryCard extends SystemCard<BatteryCardConfig> {
             icon: "battery",
             value,
         });
+    }
+
+    private renderEstimate(
+        context: CardContext,
+    ): TemplateResult | typeof nothing {
+        const power = context.entities.get(POWER_KEY);
+        const watts = power === undefined ? null : wattsOf(power);
+        const estimateKey =
+            watts === null
+                ? undefined
+                : ESTIMATE_KEY_BY_STATE[
+                      powerFlow({ kind: "battery", watts }).state
+                  ];
+        const entity =
+            estimateKey === undefined
+                ? undefined
+                : context.entities.get(estimateKey);
+        return entity === undefined
+            ? nothing
+            : this.valueRow({ context, entity, icon: "battery" });
     }
 
     private renderPack({

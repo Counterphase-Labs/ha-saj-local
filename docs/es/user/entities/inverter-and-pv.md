@@ -6,7 +6,7 @@ Salida del inversor, strings solares, puerto de respaldo, contadores de energía
 
 La lista de funciones de la integración explica las entidades de Inversor y PV en [Dispositivos y entidades](../../../../custom_components/saj_local/docs/features.md#devices-and-entities).
 
-241 entidades. Generado por `make docs`. No editar a mano.
+244 entidades. Generado por `make docs`. No editar a mano.
 
 Un prefijo definido en Configurar va después de `saj_` en el ID de cada entidad de Inversor y PV, por ejemplo `sensor.saj_house_ethernet_protocol_version` con el prefijo `house`.
 
@@ -194,6 +194,9 @@ Un prefijo definido en Configurar va después de `saj_` en el ID de cada entidad
 | Estado del contador B | `sensor.saj_meter_b_status` | Sensor | - | HS3, H2 | - | No |
 | Potencia de la carga de respaldo | `sensor.saj_backup_load_power` | Sensor | W | HS3, H2 | - | Sí |
 | Potencia de la carga doméstica | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Sí |
+| Autoconsumo de hoy | `sensor.saj_self_consumption_today` | Sensor | % | HS3, H2 | - | No |
+| Autosuficiencia de hoy | `sensor.saj_self_sufficiency_today` | Sensor | % | HS3, H2 | - | No |
+| Potencia del excedente solar | `sensor.saj_solar_surplus_power` | Sensor | W | HS3, H2 | - | No |
 | Modo de flujo inverso | `sensor.saj_reverse_flow_mode` | Sensor | - | H2 | - | No |
 | Histéresis de frecuencia FCAS | `sensor.saj_fcas_frequency_hysteresis` | Sensor | Hz | H2 | - | No |
 | Función en paralelo | `sensor.saj_parallel_role` | Sensor | - | H2 | - | No |

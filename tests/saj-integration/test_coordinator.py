@@ -44,6 +44,7 @@ from custom_components.saj_local.saj.telemetry import Telemetry
 from tests.coordinators import (
     ROOF_ENTRY,
     ROOF_LABEL,
+    FakeBatteryEstimates,
     FakeStore,
     coordinator_logger,
     statements,
@@ -151,6 +152,7 @@ def every_supported_entity_is_enabled(monkeypatch):
     monkeypatch.setattr(
         coordinator_module, "power_control_store", lambda **_: FakeStore()
     )
+    monkeypatch.setattr(coordinator_module, "BatteryEstimates", FakeBatteryEstimates)
 
 
 @pytest.fixture(autouse=True)
@@ -208,6 +210,7 @@ def _coordinator(
     )
     coordinator.async_request_refresh = _no_refresh
     coordinator._values = {}
+    coordinator.battery = FakeBatteryEstimates()
     coordinator._cycle_lock = asyncio.Lock()
     coordinator._initial_refresh = True
     coordinator._update_task = None
@@ -532,6 +535,62 @@ async def test_unavailable_sensors_are_removed_from_the_snapshot_and_reported():
 
     assert snapshot == Telemetry(values={"pv_power": 5})
     assert coordinator.unavailable_keys == {"grid_power"}
+
+
+async def test_the_battery_estimates_join_the_snapshot_and_count_as_read():
+    coordinator, _client, poller = _coordinator(
+        contexts={"battery_power", "battery_time_to_empty"}
+    )
+    coordinator._initial_refresh = False
+    coordinator.battery.estimates = {"battery_time_to_empty": 90}
+    poller.outcomes = [_result({"battery_power": 1500})]
+
+    snapshot = await coordinator._async_update_data()
+
+    assert snapshot == Telemetry(
+        values={"battery_power": 1500, "battery_time_to_empty": 90}
+    )
+    assert coordinator.last_read == {"battery_power", "battery_time_to_empty"}
+    (update,) = coordinator.battery.updates
+    assert update["read"] == {"battery_power"}
+    assert update["values"] == {"battery_power": 1500}
+    assert update["enabled"] == {"battery_power", "battery_time_to_empty"}
+
+
+async def test_the_stored_state_is_the_power_state_and_then_the_battery_totals():
+    coordinator, _client, _poller = _coordinator()
+    loaded = []
+
+    async def load_power_state() -> None:
+        loaded.append("power")
+
+    coordinator.async_load_power_state = load_power_state
+
+    await coordinator.async_load_stored_state()
+
+    assert loaded == ["power"]
+    assert coordinator.battery.loads == 1
+
+
+async def test_the_battery_totals_are_offered_for_saving_after_every_poll():
+    coordinator, _client, poller = _coordinator(contexts={"pv_power"})
+    poller.outcomes = [_result({"pv_power": 1}), _result({"pv_power": 2})]
+
+    await coordinator._async_update_data()
+    await coordinator._async_update_data()
+
+    assert coordinator.battery.saves == [False, False]
+
+
+async def test_the_battery_totals_are_saved_at_once_when_the_coordinator_shuts_down(
+    monkeypatch,
+):
+    coordinator, _client, _poller = _coordinator()
+    _replace_framework_shutdown(monkeypatch)
+
+    await coordinator.async_shutdown()
+
+    assert coordinator.battery.saves == [True]
 
 
 async def test_a_failed_cycle_never_lets_old_values_mix_with_new_ones():

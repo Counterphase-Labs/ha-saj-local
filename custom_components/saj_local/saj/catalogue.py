@@ -19,6 +19,7 @@ from .definitions import (
     fault_summary_key,
     fault_unrecognised_key,
 )
+from .estimator import estimate_sources
 from .models import (
     ENABLED_WITHOUT_EVIDENCE,
     ENABLING_EVIDENCE,
@@ -185,7 +186,10 @@ class Catalogue:
     ) -> None:
         self.profile = profile
         by_key = _definitions_by_key(definitions=definitions)
-        effective = _apply_replacements(profile=profile, definitions=by_key)
+        effective = _with_estimate_sources(
+            profile=profile,
+            definitions=_apply_replacements(profile=profile, definitions=by_key),
+        )
         placements = _placements(profile=profile, families=families)
         fault_placements, fault_definitions = _fault_rows(
             profile=profile, definitions=effective, placements=placements
@@ -312,6 +316,22 @@ def _apply_replacements(
             original=original, replacement=replacement
         )
     return effective
+
+
+def _with_estimate_sources(
+    *, profile: Profile, definitions: Mapping[str, Definition]
+) -> dict[str, Definition]:
+    sources = estimate_sources(profile=profile)
+    return {
+        key: replace(
+            definition,
+            combination=Combination(operation=Operation.ESTIMATE, sources=sources),
+        )
+        if definition.combination is not None
+        and definition.combination.operation is Operation.ESTIMATE
+        else definition
+        for key, definition in definitions.items()
+    }
 
 
 def _replaced(*, original: Definition, replacement: Replacement) -> Definition:
@@ -614,7 +634,7 @@ def _require_combination_equipment(*, registers: Sequence[Register]) -> None:
         mixed = [
             source
             for source in register.sources
-            if by_key[source].equipment != register.equipment
+            if by_key[source].equipment not in (None, register.equipment)
         ]
         if mixed:
             message = (
@@ -836,7 +856,22 @@ def hidden_sources(*, fit: Fit, keys: Collection[str]) -> frozenset[str]:
         for register in registers
         if register.key in keys
         for source in register.sources
-        if source in hidden
+        if source in hidden or is_estimate(register=register)
+    )
+
+
+def is_estimate(*, register: Register) -> bool:
+    return (
+        register.combination is not None
+        and register.combination.operation is Operation.ESTIMATE
+    )
+
+
+def estimate_keys(*, fit: Fit) -> frozenset[str]:
+    return frozenset(
+        register.key
+        for register in device_read_registers(fit=fit)
+        if is_estimate(register=register)
     )
 
 

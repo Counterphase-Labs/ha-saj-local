@@ -11,6 +11,7 @@ Die Seite Batterie-Karte erklärt die Batterie-Karte, die die Ladung, die Leistu
 - Ein Ring zeigt den Ladezustand. Markierungen auf dem Ring zeigen die Notstrom-Reserve, die Ladegrenze und die Entladegrenze am Netz.
 - Die Batterieleistung erscheint mit der Angabe, ob die Batterie lädt oder entlädt, und unter der Leistung die Spannung, der Strom, die Temperatur und die nutzbare Kapazität. Die Richtungen folgen dem [Vorzeichen der Leistung](../entities-and-prefix.md#vorzeichen-der-leistung).
 - Bei eingeschaltetem Batteriepacks anzeigen, was der Standard ist, bekommt jedes Pack eine Zeilengruppe mit Ladezustand, Gesundheit, Spannung, Strom, Temperatur, Zyklen, Fehler und Warnung. Ein Pack-Messwert erscheint nur, wenn die Entität des Messwerts aktiviert ist. Die meisten Pack-Messwerte werden deaktiviert erstellt, weshalb der Screenshot nur den Namen des Packs zeigt. Aktiviere die gewünschten Entitäten in Home Assistant. Die [Batteriepack-Entitäten](../entities/battery-packs.md) stehen in der Entitätsreferenz.
+- Eine Zeile zeigt die Zeit bis Batterie voll, solange die Batterie lädt, und die Zeit bis Batterie leer, solange die Batterie entlädt. Die Zeile entfällt, wenn die Batterie ruht oder das System keine solche Entität hat. Die [berechneten Sensoren](../entities-and-prefix.md#berechnete-sensoren) erklären die Schätzwerte.
 - Ein System ohne Batterie sagt das.
 
 ## Unterschiede zwischen den Modellen

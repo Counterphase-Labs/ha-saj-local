@@ -65,6 +65,7 @@ class Quantity(StrEnum):
     PERCENTAGE = "percentage"
     STATE_OF_CHARGE = "state_of_charge"
     CAPACITY = "capacity"
+    STORED_ENERGY = "stored_energy"
     COUNT = "count"
     CODE = "code"
     VERSION = "version"
@@ -128,6 +129,10 @@ class Operation(StrEnum):
     SUM = "sum"
     WORDS = "words"
     ANY_BIT = "any_bit"
+    DIFFERENCE = "difference"
+    SHARE_PERCENT = "share_percent"
+    REMAINDER_PERCENT = "remainder_percent"
+    ESTIMATE = "estimate"
 
 
 @dataclass(frozen=True)
@@ -3016,8 +3021,101 @@ FAULT_DEFINITIONS: tuple[Definition, ...] = tuple(
         *(_problem(key=key, equipment=equipment) for key in named),
     )
 )
+ESTIMATE_KEYS = (
+    "battery_time_to_full",
+    "battery_time_to_empty",
+    "battery_stored_energy",
+    "battery_available_energy",
+)
+
+
+def _derived(
+    *,
+    key: str,
+    quantity: Quantity,
+    unit: Unit,
+    combination: Combination,
+    battery: bool = False,
+) -> Definition:
+    return Definition(
+        key=key,
+        quantity=quantity,
+        encoding=Encoding.I32,
+        unit=unit,
+        equipment=Equipment.BATTERY if battery else None,
+        core=key in ESTIMATE_KEYS,
+        combination=combination,
+    )
+
+
+def _estimate(*, key: str, quantity: Quantity, unit: Unit) -> Definition:
+    return _derived(
+        key=key,
+        quantity=quantity,
+        unit=unit,
+        combination=Combination(operation=Operation.ESTIMATE, sources=()),
+        battery=True,
+    )
+
+
+DERIVED_DEFINITIONS: tuple[Definition, ...] = (
+    _estimate(key="battery_time_to_full", quantity=Quantity.DURATION, unit=Unit.MINUTE),
+    _estimate(
+        key="battery_time_to_empty", quantity=Quantity.DURATION, unit=Unit.MINUTE
+    ),
+    _estimate(
+        key="battery_stored_energy",
+        quantity=Quantity.STORED_ENERGY,
+        unit=Unit.KILOWATT_HOUR,
+    ),
+    _estimate(
+        key="battery_available_energy",
+        quantity=Quantity.STORED_ENERGY,
+        unit=Unit.KILOWATT_HOUR,
+    ),
+    _derived(
+        key="self_sufficiency_today",
+        quantity=Quantity.PERCENTAGE,
+        unit=Unit.PERCENT,
+        combination=Combination(
+            operation=Operation.REMAINDER_PERCENT,
+            sources=("load_energy_today", "grid_import_energy_today"),
+        ),
+    ),
+    _derived(
+        key="self_consumption_today",
+        quantity=Quantity.PERCENTAGE,
+        unit=Unit.PERCENT,
+        combination=Combination(
+            operation=Operation.REMAINDER_PERCENT,
+            sources=("pv_energy_today", "grid_export_energy_today"),
+        ),
+    ),
+    _derived(
+        key="solar_surplus_power",
+        quantity=Quantity.POWER,
+        unit=Unit.WATT,
+        combination=Combination(
+            operation=Operation.DIFFERENCE, sources=("pv_power", "load_power")
+        ),
+    ),
+    _derived(
+        key="battery_round_trip_efficiency",
+        quantity=Quantity.PERCENTAGE,
+        unit=Unit.PERCENT,
+        combination=Combination(
+            operation=Operation.SHARE_PERCENT,
+            sources=(
+                "battery_discharge_energy_total",
+                "battery_charge_energy_total",
+            ),
+        ),
+        battery=True,
+    ),
+)
 DEFINITIONS: tuple[Definition, ...] = (
     *SINGLES,
     *(definition for family in FAMILIES for definition in family.definitions()),
     *FAULT_DEFINITIONS,
+    *DERIVED_DEFINITIONS,
 )

@@ -6,7 +6,7 @@ Uscita dell'inverter, stringhe solari, porta di backup, contatori di energia, ve
 
 Le entità dell'area «Inverter e solare» sono descritte nell'elenco delle funzionalità dell'integrazione, in [Dispositivi ed entità](../../../../custom_components/saj_local/docs/features.md#devices-and-entities).
 
-241 entità. Generato da `make docs`. Non modificare a mano.
+244 entità. Generato da `make docs`. Non modificare a mano.
 
 Un prefisso impostato in Configura va dopo `saj_` nell'ID di ogni entità dell'area «Inverter e solare», per esempio `sensor.saj_house_ethernet_protocol_version` con il prefisso `house`.
 
@@ -194,6 +194,9 @@ Un prefisso impostato in Configura va dopo `saj_` nell'ID di ogni entità dell'a
 | Stato del contatore B | `sensor.saj_meter_b_status` | Sensore | - | HS3, H2 | - | No |
 | Potenza dei carichi di backup | `sensor.saj_backup_load_power` | Sensore | W | HS3, H2 | - | Sì |
 | Potenza del carico domestico | `sensor.saj_load_power` | Sensore | W | HS3, H2 | - | Sì |
+| Autoconsumo di oggi | `sensor.saj_self_consumption_today` | Sensore | % | HS3, H2 | - | No |
+| Autosufficienza di oggi | `sensor.saj_self_sufficiency_today` | Sensore | % | HS3, H2 | - | No |
+| Potenza in eccesso del solare | `sensor.saj_solar_surplus_power` | Sensore | W | HS3, H2 | - | No |
 | Modalità di flusso inverso | `sensor.saj_reverse_flow_mode` | Sensore | - | H2 | - | No |
 | Isteresi di frequenza FCAS | `sensor.saj_fcas_frequency_hysteresis` | Sensore | Hz | H2 | - | No |
 | Ruolo in parallelo | `sensor.saj_parallel_role` | Sensore | - | H2 | - | No |

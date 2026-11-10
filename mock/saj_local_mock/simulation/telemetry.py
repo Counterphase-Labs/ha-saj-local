@@ -320,7 +320,6 @@ PROTECT_HIGH_RATIO = 1.1
 WARN_LOW_RATIO = 0.85
 CHARGE_RATIO = 1.05
 CUTOFF_RATIO = 0.8
-USABLE_RATIO = 0.9
 
 
 def _derived_keys(*, plant: Plant, out: Mapping[str, float]) -> dict[str, float]:
@@ -334,7 +333,7 @@ def _derived_keys(*, plant: Plant, out: Mapping[str, float]) -> dict[str, float]
     rated = float(plant.scenario.device.rated_power_w)
     derived["battery_modules"] = float(bank.modules)
     derived["battery_half_a"] = out["battery_a"] / BATTERY_CONTROLLERS
-    derived["battery_user_capacity_ah"] = bank.capacity_ah * USABLE_RATIO
+    derived["battery_user_capacity_ah"] = bank.capacity_wh / nominal if nominal else 0.0
     derived["battery_online_mask"] = float((1 << bank.modules) - 1)
     derived["battery_protect_high_v"] = nominal * PROTECT_HIGH_RATIO
     derived["battery_warn_low_v"] = nominal * WARN_LOW_RATIO

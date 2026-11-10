@@ -19,6 +19,8 @@ Requirements: [Simulated models](requirements.md#simulated-models)
 - Written settings change what the simulated system does: the self-use, time-of-use, backup and EMS application modes, the time-of-use slots, the battery limits, the export limits and EMS control all steer the energy flows.
 - A Docker health check confirms the simulator answers a Modbus read of the device type.
 - Commands act on the simulated system: clear fault clears the current faults, restart takes the inverter offline for 30 seconds, clear power history zeroes the energy counters, factory reset returns the settings to the scenario, and set clock moves the simulated clock.
+- The battery's state of charge moves with the battery power, from a fixed battery energy. Positive battery power discharges and negative battery power charges.
+- The H2 serves a usable battery capacity in ampere hours that, times the simulated battery voltage, equals the fixed battery energy. The HS3 serves 0 for the battery capacity readings, as a real HS3 does.
 - The HS3 takes up to eight battery modules and one battery pack's faults. The H2 takes up to five battery modules and four packs' faults. The EV charger exists on the HS3 only.
 
 ## Scenarios

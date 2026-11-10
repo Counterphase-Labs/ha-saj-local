@@ -11,6 +11,7 @@ The Battery card page explains the battery card, which shows the charge, the pow
 - A ring shows the state of charge. Marks on the ring show the backup reserve, the charge limit and the on-grid discharge limit.
 - The battery power shows with whether the battery is charging or discharging, and below the power the voltage, the current, the temperature and the usable capacity. The directions follow the [sign of power](../entities-and-prefix.md#sign-of-power).
 - With Show battery packs on, which is the default, each pack gets a row group with the state of charge, health, voltage, current, temperature, cycles, fault and warning. A pack reading appears only when the entity of the reading is enabled. Most pack readings are created disabled, which is why the screenshot shows only the name of the pack. Enable the entities you want in Home Assistant. The [battery pack entities](../entities/battery-packs.md) are in the entity reference.
+- One row shows the battery time to full while the battery charges and the battery time to empty while the battery discharges. The row is left out while the battery is idle, and when the system has no such entity. The [computed sensors](../entities-and-prefix.md#computed-sensors) explain the estimates.
 - A system with no battery says so.
 
 ## Differences between the models

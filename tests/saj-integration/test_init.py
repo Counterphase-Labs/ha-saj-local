@@ -58,6 +58,7 @@ class FakeCoordinator:
         self.refreshed = False
         self.shutdown = False
         self.released = 0
+        self.battery_saves = 0
         self.control_allowed = True
         self.events: list[str] = []
         self.setup_events: list[str] = []
@@ -67,7 +68,10 @@ class FakeCoordinator:
         self.released += 1
         self.events.append("release")
 
-    async def async_load_power_state(self) -> None:
+    async def async_save_battery(self) -> None:
+        self.battery_saves += 1
+
+    async def async_load_stored_state(self) -> None:
         self.setup_events.append("load")
 
     async def async_config_entry_first_refresh(self) -> None:
@@ -641,7 +645,7 @@ async def test_ems_is_released_when_home_assistant_stops_and_the_listener_is_rem
     _patch_success(monkeypatch)
     entry = _entry()
     assert await integration.async_setup_entry(hass, entry)
-    ((event_type, listener),) = hass.bus.listeners
+    ((event_type, listener), _) = hass.bus.listeners
 
     await listener(None)
 
@@ -649,7 +653,23 @@ async def test_ems_is_released_when_home_assistant_stops_and_the_listener_is_rem
     assert FakeCoordinator.instances[0].released == 1
     for callback in entry.unload_callbacks:
         callback()
-    assert hass.bus.removed == 1
+    assert hass.bus.removed == 2
+
+
+async def test_the_battery_store_is_saved_when_home_assistant_stops(
+    monkeypatch,
+):
+    hass = _hass()
+    _patch_success(monkeypatch)
+    entry = _entry()
+    assert await integration.async_setup_entry(hass, entry)
+    (_, (event_type, listener)) = hass.bus.listeners
+
+    await listener(None)
+
+    assert event_type == "homeassistant_stop"
+    assert FakeCoordinator.instances[0].battery_saves == 1
+    assert FakeCoordinator.instances[0].released == 0
 
 
 async def test_ems_is_released_before_the_coordinator_shuts_down_on_unload(
@@ -756,20 +776,26 @@ async def test_removing_the_installation_removes_its_repair_issues_and_stored_st
         "remove_issues",
         lambda *, hass, entry: removed.append((hass, entry)),
     )
-    monkeypatch.setattr(
-        integration,
-        "power_control_store",
-        lambda **asked_for: asked.append(asked_for) or FakeStore(),
-    )
+    for store in ("power_control_store", "battery_store"):
+        monkeypatch.setattr(
+            integration,
+            store,
+            lambda *, name=store, **asked_for: (
+                asked.append((name, asked_for)) or FakeStore()
+            ),
+        )
 
     await integration.async_remove_entry(hass, entry)
 
     assert removed == [(hass, entry)]
-    assert asked == [{"hass": hass, "entry_id": entry.entry_id}]
-    assert FakeStore.removed == 1
+    assert asked == [
+        ("power_control_store", {"hass": hass, "entry_id": entry.entry_id}),
+        ("battery_store", {"hass": hass, "entry_id": entry.entry_id}),
+    ]
+    assert FakeStore.removed == 2
 
 
-async def test_power_state_loads_before_the_first_refresh_and_schedules_follow_after_it(
+async def test_stored_state_loads_before_the_first_refresh_and_schedules_follow_up(
     monkeypatch,
 ):
     hass = _hass()

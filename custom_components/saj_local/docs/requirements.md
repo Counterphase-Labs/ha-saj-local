@@ -24,6 +24,10 @@ Features: [Devices and entities](features.md#devices-and-entities)
 
 - Battery and grid power use one sign on every model, in readings and in targets: positive when the battery discharges or the system sends power to the grid, negative when the battery charges or the system takes power from the grid.
 
+- A system with a battery shows the estimated time until the battery is full while the battery charges, and until the battery is empty while the battery discharges.
+
+- A system shows values computed from its own readings: the energy in the battery, the energy the battery can still give, self-sufficiency and self-consumption today, solar surplus power and battery round-trip efficiency.
+
 ## Entity IDs and prefix
 
 Features: [Entity IDs and prefix](features.md#entity-ids-and-prefix)

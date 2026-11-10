@@ -28,6 +28,19 @@ Op de HS3 is het netvermogen het totaal van Meter A, en het netfasevermogen, het
 
 De doelen van [vermogensregeling](power-control.md) volgen de tekens van de metingen.
 
+## Berekende sensoren
+
+Acht sensoren worden berekend uit de metingen van het systeem zelf. Ze bestaan op elk model.
+
+- **Tijd tot batterij vol** en **tijd tot batterij leeg** zijn duren in minuten. Elke waarde deelt de resterende batterij-energie door het batterijvermogen, gemiddeld over de laatste 10 minuten. Een korte verandering van de huishoudbelasting laat de waarde dus niet springen. De tijd tot vol heeft alleen een waarde zolang het gemiddelde vermogen de batterij oplaadt, en de tijd tot leeg alleen zolang het gemiddelde vermogen de batterij ontlaadt. De waarde is onbekend bij een gemiddeld vermogen van nul en als het resultaat langer is dan 48 uur. Het gemiddelde begint opnieuw na een herlaadactie of een herstart.
+- **Opgeslagen batterij-energie** en **beschikbare batterij-energie** zijn in kWh. De opgeslagen energie is het laadniveau maal de batterij-energie. De beschikbare energie is de energie boven de limiet voor leeg, en nooit lager dan 0.
+- **Vol en leeg.** Vol is de oplaadlimiet. Leeg is de back-upreserve in de back-upmodus en de ontlaadlimiet aan het net in de andere toepassingsmodi. Zonder net is leeg de ontlaadlimiet zonder net, bij een model dat die heeft.
+- **Batterij-energie.** De H2 meldt een bruikbare capaciteit, en SAJ Local vermenigvuldigt die met de batterijspanning. De HS3 meldt geen bruikbare capaciteit, dus SAJ Local leert de capaciteit uit het batterijvermogen en de verandering van het laadniveau. Op een HS3 blijven de vier sensoren voor batterij-energie onbekend tot het laadniveau tussen twee uitlezingen is veranderd. De geleerde capaciteit wordt nauwkeuriger naarmate de batterij meer oplaadt en ontlaadt. SAJ Local bewaart de geleerde capaciteit over herstarts heen.
+- **Zelfvoorziening vandaag** is het aandeel van de energie van de belasting van vandaag dat niet van het net kwam. **Eigen verbruik vandaag** is het aandeel van de zonne-energie van vandaag dat niet is teruggeleverd. **Round-trip-rendement van de batterij** is de totale ontlaadenergie van de batterij gedeeld door de totale oplaadenergie van de batterij. Elke waarde is een percentage van 0 tot 100 en is onbekend als de deler 0 is.
+- **Zonne-overschotvermogen** is het zonnevermogen min de huishoudbelasting, in watt. De waarde is negatief als de belasting groter is dan het zonnevermogen.
+- **Standaard.** De vier batterijsensoren hierboven zijn standaard ingeschakeld. De andere vier worden uitgeschakeld aangemaakt. De sensoren voor tijd, energie en round-trip-rendement bestaan alleen als een batterij is geplaatst.
+- **Uitlezingen.** Een berekende sensor inschakelen leest elke meting die de sensor nodig heeft, ook als de entiteiten van die metingen zijn uitgeschakeld. [Polling](polling.md) telt deze uitlezingen mee in de belasting.
+
 ## Het voorvoegsel
 
 Elke entiteits-ID heeft de vorm `<type>.saj_<key>`, bijvoorbeeld `sensor.saj_pv_power`. Een entiteit een andere weergavenaam geven wijzigt de ID niet.

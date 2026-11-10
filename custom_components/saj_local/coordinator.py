@@ -19,6 +19,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
+from .battery import BatteryEstimates
 from .const import (
     CONF_ALLOW_CONTROL,
     CONF_EMS_HEARTBEAT,
@@ -235,6 +236,9 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             label=label,
         )
         self._values: dict[str, Value] = {}
+        self.battery = BatteryEstimates(
+            hass=hass, entry_id=entry.entry_id, device=device, log=self._log
+        )
         self._cycle_lock = asyncio.Lock()
         self._update_task: asyncio.Task[object] | None = None
         self._log_plan()
@@ -283,6 +287,7 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                     self._fail(failure=failure)
                 telemetry = self._publish(result=result, enabled=enabled)
                 await self._release_switched_off(fresh=result.values)
+                await self.battery.async_save()
                 return telemetry
             finally:
                 self._update_task = None
@@ -321,12 +326,16 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
         self.last_error = None
         self._initial_refresh = False
         merged = {**self._values, **result.values}
+        estimated = self.battery.update(
+            read=result.read, values=merged, enabled=enabled
+        )
+        merged.update(estimated)
         self._values = {
             key: value
             for key, value in merged.items()
             if key in enabled and key not in result.unavailable
         }
-        self.last_read = result.read
+        self.last_read = result.read | estimated.keys()
         self.unavailable_keys = result.unavailable
         self._sync_issues(result=result, enabled=enabled)
         self._log_faults()
@@ -643,6 +652,10 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
             for function in self.power_controls
             if self.power_running(function=function)
         )
+
+    async def async_load_stored_state(self) -> None:
+        await self.async_load_power_state()
+        await self.battery.async_load()
 
     async def async_load_power_state(self) -> None:
         stored = await self._store.async_load() or {}
@@ -1072,9 +1085,13 @@ class SajCoordinator(DataUpdateCoordinator[Telemetry]):
                 type(error).__name__,
             )
 
+    async def async_save_battery(self) -> None:
+        await self.battery.async_save(force=True)
+
     async def async_shutdown(self) -> None:
         self._stop_following()
         self._cancel_heartbeat()
+        await self.async_save_battery()
         await super().async_shutdown()
         task = self._update_task
         if task is not None and task is not asyncio.current_task():

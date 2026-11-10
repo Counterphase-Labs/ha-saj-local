@@ -6,7 +6,7 @@ Wyjście falownika, ciągi paneli, port awaryjny, liczniki energii, wersje i obc
 
 Lista funkcji integracji wyjaśnia encje obszaru Falownik i PV w [Urządzenia i encje](../../../../custom_components/saj_local/docs/features.md#devices-and-entities).
 
-Liczba encji: 241. Wygenerowano poleceniem `make docs`. Nie edytuj ręcznie.
+Liczba encji: 244. Wygenerowano poleceniem `make docs`. Nie edytuj ręcznie.
 
 Prefiks ustawiony w Skonfiguruj trafia po `saj_` w ID każdej encji: Falownik i PV, na przykład `sensor.saj_house_ethernet_protocol_version` z prefiksem `house`.
 
@@ -194,6 +194,9 @@ Prefiks ustawiony w Skonfiguruj trafia po `saj_` w ID każdej encji: Falownik i 
 | Stan licznika B | `sensor.saj_meter_b_status` | Sensor | - | HS3, H2 | - | Nie |
 | Moc odbiorów awaryjnych | `sensor.saj_backup_load_power` | Sensor | W | HS3, H2 | - | Tak |
 | Moc obciążenia domu | `sensor.saj_load_power` | Sensor | W | HS3, H2 | - | Tak |
+| Autokonsumpcja dzisiaj | `sensor.saj_self_consumption_today` | Sensor | % | HS3, H2 | - | Nie |
+| Samowystarczalność dzisiaj | `sensor.saj_self_sufficiency_today` | Sensor | % | HS3, H2 | - | Nie |
+| Nadwyżka mocy z fotowoltaiki | `sensor.saj_solar_surplus_power` | Sensor | W | HS3, H2 | - | Nie |
 | Tryb przepływu zwrotnego | `sensor.saj_reverse_flow_mode` | Sensor | - | H2 | - | Nie |
 | Histereza częstotliwości FCAS | `sensor.saj_fcas_frequency_hysteresis` | Sensor | Hz | H2 | - | Nie |
 | Rola w systemie równoległym | `sensor.saj_parallel_role` | Sensor | - | H2 | - | Nie |

@@ -28,6 +28,19 @@ Beim HS3 ist die Netzleistung die Summe von Zähler A, und die Netz-Phasenleistu
 
 Die Ziele der [Leistungssteuerung](power-control.md) folgen den Vorzeichen der Messwerte.
 
+## Berechnete Sensoren
+
+Acht Sensoren werden aus den Messwerten des Systems selbst berechnet. Sie existieren bei jedem Modell.
+
+- **Zeit bis Batterie voll** und **Zeit bis Batterie leer** sind Dauern in Minuten. Jeder Wert teilt die verbleibende Batterieenergie durch die Batterieleistung, die über die letzten 10 Minuten gemittelt ist. Eine kurze Änderung der Haushaltslast lässt den Wert deshalb nicht springen. Die Zeit bis voll hat nur einen Wert, solange die mittlere Leistung die Batterie lädt, und die Zeit bis leer nur, solange die mittlere Leistung die Batterie entlädt. Der Wert ist unbekannt bei einer mittleren Leistung von null und wenn das Ergebnis länger als 48 Stunden ist. Der Mittelwert beginnt nach einem Neuladen oder einem Neustart von vorn.
+- **Gespeicherte Batterieenergie** und **Verfügbare Batterieenergie** haben die Einheit kWh. Die gespeicherte Energie ist der Ladezustand mal die Batterieenergie. Die verfügbare Energie ist die Energie über der Grenze für leer, und nie kleiner als 0.
+- **Voll und leer.** Voll ist die Ladegrenze. Leer ist die Notstrom-Reserve im Notstrombetrieb und die Entladegrenze am Netz in den anderen Anwendungsmodi. Ohne Netz ist leer die Entladegrenze ohne Netz, bei einem Modell, das sie hat.
+- **Batterieenergie.** Der H2 meldet eine nutzbare Kapazität, und SAJ Local multipliziert sie mit der Batteriespannung. Der HS3 meldet keine nutzbare Kapazität, deshalb lernt SAJ Local die Kapazität aus der Batterieleistung und der Änderung des Ladezustands. Beim HS3 bleiben die vier Sensoren für die Batterieenergie unbekannt, bis sich der Ladezustand zwischen zwei Abfragen geändert hat. Die gelernte Kapazität wird genauer, je mehr die Batterie lädt und entlädt. SAJ Local behält die gelernte Kapazität über Neustarts hinweg.
+- **Autarkie heute** ist der Anteil der heutigen Lastenergie, der nicht aus dem Netz kam. **Eigenverbrauch heute** ist der Anteil der heutigen Solarenergie, der nicht eingespeist wurde. **Round-Trip-Wirkungsgrad der Batterie** ist die gesamte Entladeenergie der Batterie geteilt durch die gesamte Ladeenergie der Batterie. Jeder Wert ist ein Prozentsatz von 0 bis 100 und unbekannt, wenn der Teiler 0 ist.
+- **Solarüberschussleistung** ist die Solarleistung minus die Haushaltslast in Watt. Der Wert ist negativ, wenn die Last größer als die Solarleistung ist.
+- **Standard.** Die vier oben genannten Batterie-Sensoren sind standardmäßig aktiviert. Die anderen vier werden deaktiviert angelegt. Die Sensoren für Zeit, Energie und Round-Trip-Wirkungsgrad existieren nur bei einer eingebauten Batterie.
+- **Lesevorgänge.** Das Aktivieren eines berechneten Sensors liest jeden Messwert, den der Sensor braucht, auch wenn die Entitäten dieser Messwerte deaktiviert sind. [Abfrage](polling.md) zählt diese Lesevorgänge zur Last.
+
 ## Das Präfix
 
 Jede Entitäts-ID hat die Form `<type>.saj_<key>`, zum Beispiel `sensor.saj_pv_power`. Das Umbenennen des Anzeigenamens einer Entität ändert die ID nicht.

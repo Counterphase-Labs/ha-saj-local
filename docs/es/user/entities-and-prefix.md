@@ -28,6 +28,19 @@ En el HS3, la potencia de red es el total del Contador A, y la potencia por fase
 
 Los objetivos del [control de potencia](power-control.md) siguen los signos de las lecturas.
 
+## Sensores calculados
+
+Ocho sensores se calculan a partir de las lecturas del propio sistema. Existen en todos los modelos.
+
+- **Tiempo hasta batería llena** y **tiempo hasta batería vacía** son duraciones en minutos. Cada valor divide la energía restante de la batería entre la potencia de la batería promediada durante los últimos 10 minutos, así que un cambio breve de la carga del hogar no hace saltar el valor. El tiempo hasta batería llena tiene valor solo mientras la potencia media carga la batería, y el tiempo hasta batería vacía solo mientras la potencia media descarga la batería. El valor es desconocido con potencia media cero y cuando el resultado supera las 48 horas. El promedio empieza de nuevo tras una recarga o un reinicio.
+- **Energía almacenada en la batería** y **energía disponible en la batería** están en kWh. La energía almacenada es el estado de carga por la energía de la batería. La energía disponible es la energía por encima del límite de batería vacía, y nunca menor que 0.
+- **Llena y vacía.** Llena es el límite de carga. Vacía es la reserva de respaldo en el modo de respaldo y el límite de descarga conectada a la red en los demás modos de aplicación. Sin red, vacía es el límite de descarga sin red en un modelo que lo tiene.
+- **Energía de la batería.** El H2 informa de una capacidad útil, y SAJ Local la multiplica por la tensión de la batería. El HS3 no informa de una capacidad útil, así que SAJ Local aprende la capacidad a partir de la potencia de la batería y del cambio del estado de carga. En un HS3, los cuatro sensores de energía de la batería siguen desconocidos hasta que el estado de carga cambia entre dos sondeos. La capacidad aprendida es más precisa cuanto más se carga y se descarga la batería. SAJ Local conserva la capacidad aprendida tras los reinicios.
+- **Autosuficiencia de hoy** es la parte de la energía de la carga de hoy que no vino de la red. **Autoconsumo de hoy** es la parte de la energía solar de hoy que no se exportó. **Eficiencia de ida y vuelta de la batería** es la energía total de descarga de la batería dividida entre la energía total de carga de la batería. Cada valor es un porcentaje de 0 a 100 y es desconocido cuando el divisor es 0.
+- **Potencia del excedente solar** es la potencia solar menos la carga del hogar, en vatios. El valor es negativo cuando la carga es mayor que la potencia solar.
+- **Valores por defecto.** Los cuatro sensores de batería anteriores están habilitados por defecto. Los otros cuatro se crean deshabilitados. Los sensores de tiempo, energía y eficiencia de ida y vuelta existen solo cuando hay una batería instalada.
+- **Lecturas.** Habilitar un sensor calculado lee cada lectura que el sensor necesita, también cuando las entidades de esas lecturas están deshabilitadas. El [sondeo](polling.md) cuenta estas lecturas en la carga.
+
 ## El prefijo
 
 Cada ID de entidad tiene la forma `<type>.saj_<key>`, por ejemplo `sensor.saj_pv_power`. Cambiar el nombre visible de una entidad no cambia el ID.

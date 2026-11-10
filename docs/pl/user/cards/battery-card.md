@@ -11,6 +11,7 @@ Strona Karta baterii wyjaśnia kartę baterii, która pokazuje naładowanie, moc
 - Pierścień pokazuje stan naładowania. Znaczniki na pierścieniu pokazują rezerwę awaryjną, limit ładowania i limit rozładowania przy sieci.
 - Moc baterii pokazuje się z informacją, czy bateria się ładuje, czy rozładowuje, a pod mocą napięcie, prąd, temperatura i pojemność użytkowa. Kierunki zgadzają się ze [znakiem mocy](../entities-and-prefix.md#znak-mocy).
 - Przy włączonym Pokaż moduły baterii, co jest domyślne, każdy moduł dostaje grupę wierszy ze stanem naładowania, kondycją, napięciem, prądem, temperaturą, cyklami, usterką i ostrzeżeniem. Odczyt modułu pojawia się tylko wtedy, gdy encja odczytu jest włączona. Większość odczytów modułów jest tworzona jako wyłączona, dlatego zrzut ekranu pokazuje tylko nazwę modułu. Włącz w Home Assistancie encje, które chcesz. [Encje modułów baterii](../entities/battery-packs.md) są w opisie encji.
+- Jeden wiersz pokazuje czas do pełnego naładowania baterii, gdy bateria się ładuje, i czas do rozładowania baterii, gdy bateria się rozładowuje. Wiersza nie ma, gdy bateria spoczywa lub gdy system nie ma takiej encji. [Czujniki obliczane](../entities-and-prefix.md#czujniki-obliczane) wyjaśniają szacunki.
 - System bez baterii mówi o tym.
 
 ## Różnice między modelami

@@ -64,6 +64,7 @@ Files: [battery-card.ts](../src/cards/battery-card.ts), [ring-gauge.ts](../src/u
 
 - A ring shows the state of charge, with the backup reserve, the charge limit and the on-grid discharge limit marked on the ring.
 - The battery card shows the battery power with whether the battery is charging or discharging, and the voltage, current, temperature and usable capacity.
+- One row shows the time to full while the battery charges and the time to empty while the battery discharges. The row is left out while the battery is idle, and when the system has no estimate entity.
 - With Show battery packs on, the default, each pack gets a row group with its state of charge, health, voltage, current, temperature, cycles, fault and warning. A pack reading is shown only when its entity is enabled.
 - A system with no battery says so.
 
