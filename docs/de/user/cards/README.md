@@ -15,14 +15,16 @@ SAJ Local liefert die Karten aus und registriert die Karten bei Home Assistant, 
 | [Fehler-Karte](faults-card.md) | Die aktiven Fehler jedes Ausstattungsteils und eine Schaltfläche Fehler quittieren. |
 | [Batterie-Karte](battery-card.md) | Den Ladezustand mit markierten Grenzen, die Batteriewerte und eine Zeilengruppe für jedes Pack. |
 | [Steuerungs-Karte](controls-card.md) | Die Einstellungen des Systems in Abschnitten. |
-| [Zeitplan-Karte](schedule-card.md) | Die Zeitfenster für Laden, Entladen und Wallbox, eine Wochenzeitleiste und einen Zeitfenster-Editor. |
+| [Zeitplan-Karte Laden](schedule-cards.md#zeitplan-karte-laden) | Die Zeitfenster für Laden, eine Wochenzeitleiste und einen Zeitfenster-Editor. |
+| [Zeitplan-Karte Entladen](schedule-cards.md#zeitplan-karte-entladen) | Die Zeitfenster für Entladen, eine Wochenzeitleiste und einen Zeitfenster-Editor. |
+| [Zeitplan-Karte Wallbox](schedule-cards.md#zeitplan-karte-wallbox) | Die Wallbox-Zeitfenster, eine Wochenzeitleiste und einen Zeitfenster-Editor. |
 | [Wochentage-Funktion für Kachel-Karten](weekdays-feature.md) | Sieben Tagesschaltflächen auf einer Kachel-Karte für die Tage eines Zeitfensters. |
 | [Status-Badge](status-badge.md) | Ein Badge mit dem Betriebszustand und der Anzahl der Ausstattungsteile mit einem aktiven Fehler. |
 
 ## Ein Element hinzufügen
 
 1. Bearbeite ein Dashboard und wähle Karte hinzufügen. Für die Wochentage-Funktion fügst du eine Kachel-Karte hinzu und öffnest die Funktionen der Kachel-Karte. Für das Badge bearbeitest du die Badges des Dashboards.
-2. Wähle das SAJ-Local-Element in der Auswahl. Die sechs Karten zeigen eine Live-Vorschau.
+2. Wähle das SAJ-Local-Element in der Auswahl. Die acht Karten zeigen eine Live-Vorschau.
 3. Wähle das System im Feld System des visuellen Editors. Eine neue Karte oder ein neues Badge beginnt mit dem ersten System. Die Wochentage-Funktion hat keinen Editor, weil die Funktion die Entität der Kachel-Karte verwendet.
 
 Ein Zuhause mit zwei Systemen fügt eine Karte einmal je System hinzu. Der Titel einer Karte ist der Gerätename des Systems gefolgt vom Modell, zum Beispiel SAJ HS3 (12000 W). SAJ Local fügt die Seriennummer nur hinzu, wenn zwei Systeme sonst einen identischen Titel hätten. Benenne jedes Gerät in Home Assistant um, wenn du andere Titel möchtest.

@@ -29,7 +29,7 @@ L'ID entità nell'esempio non ha prefisso. Se imposti un [prefisso](../entities-
 - L'inverter memorizza i giorni come un solo numero che non si sposta con il tuo primo giorno della settimana. Il lunedì è il bit più basso e la domenica il più alto su ogni modello, quindi da lunedì a venerdì è 31, come nella schermata, e lunedì, mercoledì e venerdì è 21.
 - I pulsanti sono disabilitati finché [Consenti controllo](../changing-settings.md#consentire-il-controllo) è disattivato per il sistema.
 
-La [scheda pianificazione](schedule-card.md) usa i pulsanti nell'editor delle fasce.
+Le [schede pianificazione](schedule-cards.md) usano i pulsanti nell'editor delle fasce.
 
 ## Non ancora supportato
 

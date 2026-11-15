@@ -29,7 +29,7 @@ ID encji w przykładzie nie ma prefiksu. Jeśli ustawisz [prefiks](../entities-a
 - Falownik przechowuje dni jako jedną liczbę, która nie przesuwa się razem z Twoim pierwszym dniem tygodnia. Poniedziałek to najniższy bit, a niedziela najwyższy na każdym modelu, więc od poniedziałku do piątku to 31, jak na zrzucie ekranu, a poniedziałek, środa i piątek to 21.
 - Przyciski są wyłączone, gdy [Zezwól na sterowanie](../changing-settings.md#zezwól-na-sterowanie) jest wyłączone dla systemu.
 
-[Karta harmonogramu](schedule-card.md) używa przycisków w edytorze przedziału.
+[Karty harmonogramu](schedule-cards.md) używają przycisków w edytorze przedziału.
 
 ## Jeszcze nieobsługiwane
 

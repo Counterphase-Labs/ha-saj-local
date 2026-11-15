@@ -15,14 +15,16 @@ SAJ Local fournit les cartes et les enregistre auprès de Home Assistant au dém
 | [Carte des défauts](faults-card.md) | Les défauts actifs de chaque équipement, et un bouton Effacer le défaut. |
 | [Carte de batterie](battery-card.md) | L'état de charge avec les limites marquées, les mesures de la batterie et un groupe de lignes pour chaque module. |
 | [Carte de contrôle](controls-card.md) | Les réglages du système en sections. |
-| [Carte de programme](schedule-card.md) | Les plages de charge, de décharge et de chargeur de VE, une chronologie de la semaine et un éditeur de plage. |
+| [Carte de programme de charge](schedule-cards.md#carte-de-programme-de-charge) | Les plages de charge, une chronologie de la semaine et un éditeur de plage. |
+| [Carte de programme de décharge](schedule-cards.md#carte-de-programme-de-décharge) | Les plages de décharge, une chronologie de la semaine et un éditeur de plage. |
+| [Carte de programme de chargeur de VE](schedule-cards.md#carte-de-programme-de-chargeur-de-ve) | Les plages de chargeur de VE, une chronologie de la semaine et un éditeur de plage. |
 | [Fonctionnalité de carte tuile Jours de la semaine](weekdays-feature.md) | Sept boutons de jour sur une carte tuile, pour les jours d'une plage. |
 | [Badge d'état](status-badge.md) | Un badge avec l'état de fonctionnement et le nombre d'équipements ayant un défaut actif. |
 
 ## Ajouter un élément
 
 1. Modifiez un tableau de bord et choisissez Ajouter une carte. Pour la fonctionnalité Jours de la semaine, ajoutez une carte tuile et ouvrez les fonctionnalités de la carte tuile. Pour le badge, modifiez les badges du tableau de bord.
-2. Choisissez l'élément SAJ Local dans le sélecteur. Les six cartes affichent un aperçu en direct.
+2. Choisissez l'élément SAJ Local dans le sélecteur. Les huit cartes affichent un aperçu en direct.
 3. Choisissez le système dans le champ Système de l'éditeur visuel. Une nouvelle carte ou un nouveau badge démarre avec le premier système. La fonctionnalité Jours de la semaine n'a pas d'éditeur, car la fonctionnalité utilise l'entité de la carte tuile.
 
 Une maison avec deux systèmes ajoute une carte une fois par système. Le titre d'une carte est le nom de l'appareil du système suivi du modèle, par exemple SAJ HS3 (12000 W). SAJ Local n'ajoute le numéro de série que lorsque deux systèmes auraient sinon un titre identique. Renommez chaque appareil dans Home Assistant si vous voulez d'autres titres.

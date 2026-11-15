@@ -84,7 +84,7 @@ Los términos que usan SAJ Local, las tarjetas del panel y la documentación, ca
 | Tarjeta de fallos | La tarjeta que lista los fallos activos. |
 | Tarjeta de batería | La tarjeta que muestra las lecturas de la batería y una fila por módulo. |
 | Tarjeta de controles | La tarjeta que muestra los controles compartidos del sistema. |
-| Tarjeta de programación | La tarjeta que muestra las franjas con una línea de tiempo semanal. |
+| Tarjetas de programación | Las tres tarjetas que muestran las franjas de carga, de descarga o del cargador de VE con una línea de tiempo semanal. |
 | Función de tarjeta mosaico de días de la semana | Los siete botones de días que se pueden añadir a una tarjeta mosaico. |
 | Insignia de estado | La insignia que muestra el estado de funcionamiento y el número de fallos activos. |
 

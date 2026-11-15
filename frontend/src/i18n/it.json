@@ -68,7 +68,6 @@
   "option_show_groups_without_faults": "Mostra i gruppi senza guasti",
   "option_show_packs": "Mostra i moduli batteria",
   "option_sections": "Sezioni",
-  "option_slot_kinds": "Tipi di fascia",
   "option_kind_charge": "Carica",
   "option_kind_discharge": "Scarica",
   "option_kind_ev_charger": "Caricatore EV",
@@ -83,7 +82,11 @@
   "battery_card_description": "Stato di carica con riserva e limiti, letture della batteria e una riga per ogni modulo",
   "controls_card_name": "Controlli SAJ Local",
   "controls_card_description": "I controlli condivisi offerti dal sistema",
-  "schedule_card_name": "Pianificazione SAJ Local",
-  "schedule_card_description": "Fasce di carica, scarica e del caricatore EV con una linea temporale settimanale",
+  "charge_schedule_card_name": "Pianificazione di carica SAJ Local",
+  "charge_schedule_card_description": "Fasce di carica con una linea temporale settimanale",
+  "discharge_schedule_card_name": "Pianificazione di scarica SAJ Local",
+  "discharge_schedule_card_description": "Fasce di scarica con una linea temporale settimanale",
+  "ev_charger_schedule_card_name": "Pianificazione del caricatore EV SAJ Local",
+  "ev_charger_schedule_card_description": "Fasce del caricatore EV con una linea temporale settimanale",
   "weekdays_feature_name": "Giorni della settimana SAJ Local"
 }

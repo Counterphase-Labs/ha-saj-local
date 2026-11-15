@@ -14,6 +14,7 @@ export const TIME_OF_USE_MODES: readonly string[] = [
 export const APPLICATION_MODE_KEY = "application_mode";
 
 const MINUTES_PER_HOUR = 60;
+const MINIMUM_SLOTS_IN_OVERLAP = 2;
 
 export type SlotKind = "charge" | "discharge" | "ev_charger";
 export const SLOT_KINDS: readonly SlotKind[] = [
@@ -64,6 +65,28 @@ export interface TimelineBar {
     disabled: boolean;
     continuation: boolean;
 }
+
+export interface OverlapPart {
+    day: number;
+    startMinute: number;
+    endMinute: number;
+    slots: Slot[];
+}
+
+const SLOT_COLOURS: readonly string[] = [
+    "#307ce8",
+    "#f42828",
+    "#1a9224",
+    "#b76c20",
+    "#b153e1",
+    "#198c8c",
+    "#f21182",
+];
+
+export const slotColour = (number: number): string => {
+    const index = (number - 1) % SLOT_COLOURS.length;
+    return SLOT_COLOURS.slice(index, index + 1).join("");
+};
 
 const suffixesOf = (kind: SlotKind): readonly string[] =>
     kind === "ev_charger" ? EV_SUFFIXES : SWITCHED_SUFFIXES;
@@ -207,6 +230,45 @@ export const timelineBars = (slots: readonly Slot[]): TimelineBar[] => {
     }
     return bars;
 };
+
+const overlapsOfDay = ({
+    day,
+    bars,
+}: {
+    day: number;
+    bars: readonly TimelineBar[];
+}): OverlapPart[] => {
+    const boundaries = [
+        ...new Set(bars.flatMap((bar) => [bar.startMinute, bar.endMinute])),
+    ].sort((first, second) => first - second);
+    const parts: OverlapPart[] = [];
+    for (const [index, startMinute] of boundaries.entries()) {
+        const endMinute = boundaries[index + 1];
+        if (endMinute === undefined) {
+            break;
+        }
+        const slots = bars
+            .filter(
+                (bar) =>
+                    bar.startMinute <= startMinute &&
+                    bar.endMinute >= endMinute,
+            )
+            .map((bar) => bar.slot)
+            .sort((first, second) => first.number - second.number);
+        if (slots.length >= MINIMUM_SLOTS_IN_OVERLAP) {
+            parts.push({ day, startMinute, endMinute, slots });
+        }
+    }
+    return parts;
+};
+
+export const timelineOverlaps = (bars: readonly TimelineBar[]): OverlapPart[] =>
+    Array.from({ length: WEEKDAY_COUNT }, (_, day) => day).flatMap((day) =>
+        overlapsOfDay({
+            day,
+            bars: bars.filter((bar) => bar.day === day && !bar.disabled),
+        }),
+    );
 
 export const timeOfUseNoticeRequired = ({
     entities,

@@ -2,7 +2,6 @@ import { css, html, nothing, type TemplateResult } from "lit";
 import { styleMap } from "lit/directives/style-map.js";
 
 import type { Hass, SajElementConfig } from "../hass";
-import { registerCard } from "../registration";
 import { setNumberRequest } from "../system/control";
 import {
     isUnavailable,
@@ -15,9 +14,11 @@ import {
     APPLICATION_MODE_KEY,
     MINUTES_PER_DAY,
     scheduleOf,
-    SLOT_KINDS,
+    slotColour,
     timelineBars,
+    timelineOverlaps,
     timeOfUseNoticeRequired,
+    type OverlapPart,
     type Schedule,
     type Slot,
     type SlotKind,
@@ -28,29 +29,35 @@ import { daysOfNumber, weekdayName, weekOrder } from "../system/weekdays";
 import "../ui/icon";
 import "../ui/weekday-buttons";
 import { renderEntityControl } from "./entity-controls";
-import { multiSelectField, SystemCard, type CardContext } from "./system-card";
+import { SystemCard, type CardContext } from "./system-card";
 import { booleanField, configForm, stubConfig } from "./editor";
-
-export const SCHEDULE_CARD_TAG = "saj-local-schedule-card";
 
 const TIMELINE_ROWS_IN_CARD_SIZE = 4;
 const SHOW_TIMELINE = true;
-
-const KIND_COLOURS: Record<SlotKind, string> = {
-    charge: "var(--energy-battery-in-color, #4db6ac)",
-    discharge: "var(--energy-battery-out-color, #a280db)",
-    ev_charger: "var(--energy-grid-consumption-color, #488fc2)",
-};
+const HATCH_STRIPE_WIDTH_PX = 4;
+const HATCH_ANGLE = "-45deg";
 
 export interface ScheduleCardConfig extends SajElementConfig {
-    slot_kinds?: SlotKind[];
     show_timeline?: boolean;
 }
 
 const percentOfDay = (minutes: number): number =>
     (minutes / MINUTES_PER_DAY) * 100;
 
-export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
+const outlinesFirst = (bars: readonly TimelineBar[]): TimelineBar[] => [
+    ...bars.filter((bar) => bar.disabled),
+    ...bars.filter((bar) => !bar.disabled),
+];
+
+const hatchBackground = (colours: readonly string[]): string =>
+    `repeating-linear-gradient(${HATCH_ANGLE}, ${colours
+        .map(
+            (colour, index) =>
+                `${colour} ${String(index * HATCH_STRIPE_WIDTH_PX)}px ${String((index + 1) * HATCH_STRIPE_WIDTH_PX)}px`,
+        )
+        .join(", ")})`;
+
+export abstract class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
     static override properties = {
         ...SystemCard.properties,
         expanded: { state: true },
@@ -94,11 +101,23 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
                 cursor: pointer;
             }
             .bar.disabled {
-                background: repeating-linear-gradient(
-                    45deg,
-                    var(--bar-colour) 0 4px,
-                    transparent 4px 8px
-                );
+                box-sizing: border-box;
+                background: none;
+                border: 2px solid var(--bar-colour);
+            }
+            .overlap {
+                position: absolute;
+                top: 0;
+                height: 100%;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            .colour-mark {
+                flex: none;
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: var(--mark-colour);
             }
             h3 {
                 margin: 12px 0 4px;
@@ -142,14 +161,7 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
     ];
 
     static getConfigForm(): ReturnType<typeof configForm> {
-        return configForm((text) => [
-            multiSelectField({
-                name: "slot_kinds",
-                options: SLOT_KINDS.map((kind) => ({
-                    value: kind,
-                    label: text(`option_kind_${kind}`),
-                })),
-            }),
+        return configForm(() => [
             booleanField({
                 name: "show_timeline",
                 fallback: SHOW_TIMELINE,
@@ -160,15 +172,16 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
     static getStubConfig(
         hass: Pick<Hass, "entities" | "devices">,
     ): Omit<ScheduleCardConfig, "type"> {
-        return { ...stubConfig(hass), slot_kinds: [...SLOT_KINDS] };
+        return stubConfig(hass);
     }
 
     declare expanded: ReadonlySet<string>;
 
+    protected abstract readonly kind: SlotKind;
+
     private scheduled:
         | {
               entities: SystemEntities;
-              kinds: readonly SlotKind[];
               schedule: Schedule;
           }
         | undefined;
@@ -213,48 +226,31 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
         const { slots, leftOut } = this.scheduleFor(context.entities);
         return this.dimmedBody({
             context,
-            content: html`${this.renderLockedBanner(context)}${this.renderNotice(
-                context,
-                slots,
-            )}${
-                this.showTimeline
-                    ? this.renderTimeline(context, slots)
-                    : nothing
-            }${SLOT_KINDS.filter((kind) =>
-                slots.some((slot) => slot.kind === kind),
-            ).map((kind) =>
-                this.renderKind({
+            content: html`<h3>${this.text(`option_kind_${this.kind}`)}</h3>
+                ${this.renderLockedBanner(
                     context,
-                    kind,
-                    slots: slots.filter((slot) => slot.kind === kind),
-                }),
-            )}${
-                leftOut === 0
-                    ? nothing
-                    : html`<div class="left-out">
-                          ${this.text("slots_left_out", { count: leftOut })}
-                      </div>`
-            }`,
+                )}${this.renderNotice(context, slots)}${
+                    this.showTimeline
+                        ? this.renderTimeline(context, slots)
+                        : nothing
+                }${slots.map((slot) => this.renderSlot({ context, slot }))}${
+                    leftOut === 0
+                        ? nothing
+                        : html`<div class="left-out">
+                              ${this.text("slots_left_out", { count: leftOut })}
+                          </div>`
+                }`,
         });
     }
 
     private scheduleFor(entities: SystemEntities): Schedule {
-        const { kinds } = this;
-        if (
-            this.scheduled?.entities !== entities ||
-            this.scheduled.kinds !== kinds
-        ) {
+        if (this.scheduled?.entities !== entities) {
             this.scheduled = {
                 entities,
-                kinds,
-                schedule: scheduleOf({ entities, kinds }),
+                schedule: scheduleOf({ entities, kinds: [this.kind] }),
             };
         }
         return this.scheduled.schedule;
-    }
-
-    private get kinds(): readonly SlotKind[] {
-        return this.config?.slot_kinds ?? SLOT_KINDS;
     }
 
     private get showTimeline(): boolean {
@@ -301,6 +297,7 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
         slots: readonly Slot[],
     ): TemplateResult {
         const bars = timelineBars(slots);
+        const overlaps = timelineOverlaps(bars);
         const { language } = context.hass;
         return html`<div
             class="timeline"
@@ -318,9 +315,11 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
                             })}</span
                         >
                         <div class="track">
-                            ${bars
-                                .filter((bar) => bar.day === day)
-                                .map((bar) => this.renderBar(bar))}
+                            ${outlinesFirst(
+                                bars.filter((bar) => bar.day === day),
+                            ).map((bar) => this.renderBar(bar))}${overlaps
+                                .filter((part) => part.day === day)
+                                .map((part) => this.renderOverlap(part))}
                         </div>
                     </div>`,
             )}
@@ -335,13 +334,30 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
             style=${styleMap({
                 left: `${String(percentOfDay(bar.startMinute))}%`,
                 width: `${String(percentOfDay(bar.endMinute - bar.startMinute))}%`,
-                "--bar-colour": KIND_COLOURS[slot.kind],
+                "--bar-colour": slotColour(slot.number),
             })}
             aria-label=${this.slotName(slot)}
             @click=${() => {
-                this.expand(slot.stem);
+                this.expand([slot.stem]);
             }}
         ></button>`;
+    }
+
+    private renderOverlap(part: OverlapPart): TemplateResult {
+        return html`<div
+            class="overlap"
+            aria-hidden="true"
+            style=${styleMap({
+                left: `${String(percentOfDay(part.startMinute))}%`,
+                width: `${String(percentOfDay(part.endMinute - part.startMinute))}%`,
+                background: hatchBackground(
+                    part.slots.map((slot) => slotColour(slot.number)),
+                ),
+            })}
+            @click=${() => {
+                this.expand(part.slots.slice(0, 1).map(({ stem }) => stem));
+            }}
+        ></div>`;
     }
 
     private slotName(slot: Slot): string {
@@ -349,19 +365,6 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
             "slot_number",
             { number: slot.number },
         )}`;
-    }
-
-    private renderKind({
-        context,
-        kind,
-        slots,
-    }: {
-        context: CardContext;
-        kind: SlotKind;
-        slots: readonly Slot[];
-    }): TemplateResult {
-        return html`<h3>${this.text(`option_kind_${kind}`)}</h3>
-            ${slots.map((slot) => this.renderSlot({ context, slot }))}`;
     }
 
     private renderSlot({
@@ -392,6 +395,13 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
                     }}
                 >
                     <saj-icon name="expand"></saj-icon>
+                    <span
+                        class="colour-mark"
+                        aria-hidden="true"
+                        style=${styleMap({
+                            "--mark-colour": slotColour(slot.number),
+                        })}
+                    ></span>
                     <span class="slot-name"
                         >${this.text("slot_number", {
                             number: slot.number,
@@ -463,22 +473,7 @@ export class SajScheduleCard extends SystemCard<ScheduleCardConfig> {
         this.expanded = next;
     }
 
-    private expand(stem: string): void {
-        this.expanded = new Set([...this.expanded, stem]);
-    }
-}
-
-customElements.define(SCHEDULE_CARD_TAG, SajScheduleCard);
-
-registerCard({
-    type: SCHEDULE_CARD_TAG,
-    nameKey: "schedule_card_name",
-    descriptionKey: "schedule_card_description",
-    preview: true,
-});
-
-declare global {
-    interface HTMLElementTagNameMap {
-        [SCHEDULE_CARD_TAG]: SajScheduleCard;
+    private expand(stems: readonly string[]): void {
+        this.expanded = new Set([...this.expanded, ...stems]);
     }
 }

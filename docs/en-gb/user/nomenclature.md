@@ -84,7 +84,7 @@ The terms that SAJ Local, the dashboard cards and the documentation use, each wi
 | Faults card | The card that lists the active faults. |
 | Battery card | The card that shows the battery readings and one row per pack. |
 | Controls card | The card that shows the shared controls of the system. |
-| Schedule card | The card that shows the slots with a week timeline. |
+| Schedule cards | The three cards that show the charge, discharge or EV charger slots with a week timeline. |
 | Weekdays tile card feature | The seven day buttons that can be added to a tile card. |
 | Status badge | The badge that shows the operating state and the number of active faults. |
 

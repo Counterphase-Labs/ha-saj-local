@@ -10,8 +10,8 @@ Files: [index.ts](../src/index.ts), [registration.ts](../src/registration.ts), [
 
 Requirements: [Elements and setup](requirements.md#elements-and-setup)
 
-- Six cards appear in the card picker: power flow, status, faults, battery, controls and schedule. The weekdays feature appears in the tile card's feature picker and the status badge in the badge picker.
-- The power flow, status, faults, battery, controls and schedule cards show a live preview in the card picker.
+- Eight cards appear in the card picker: power flow, status, faults, battery, controls, charge schedule, discharge schedule and EV charger schedule. The weekdays feature appears in the tile card's feature picker and the status badge in the badge picker.
+- The power flow, status, faults, battery, controls, charge schedule, discharge schedule and EV charger schedule cards show a live preview in the card picker.
 - Each element is set up in Home Assistant's visual editor by choosing one SAJ system, and the first system is chosen for a new card. A home with two systems adds a card once per system.
 - A card's title is the system's device name followed by its model. The serial number is added only when two systems would otherwise have the same title.
 - Elements find a system's entities through Home Assistant's entity registry, so they keep working when the system's prefix changes.
@@ -83,18 +83,23 @@ Files: [controls-card.ts](../src/cards/controls-card.ts), [entity-controls.ts](.
 - While control is not allowed for the system, every control is disabled and a lock above the controls links to the integration's settings, where Allow control is switched on.
 - The controls card has no restart button, so a tap on a dashboard cannot restart the inverter.
 
-## Schedule card
+## Schedule cards
 
-The schedule card shows and edits the charge, discharge and EV charger slots.
+Three schedule cards show and edit the slots of one kind each: the Charge schedule, Discharge schedule and EV charger schedule cards.
 
-Files: [schedule-card.ts](../src/cards/schedule-card.ts), [schedule.ts](../src/system/schedule.ts), [weekdays.ts](../src/system/weekdays.ts), [weekday-buttons.ts](../src/ui/weekday-buttons.ts)
+Files: [schedule-card.ts](../src/cards/schedule-card.ts), [charge-schedule-card.ts](../src/cards/charge-schedule-card.ts), [discharge-schedule-card.ts](../src/cards/discharge-schedule-card.ts), [ev-charger-schedule-card.ts](../src/cards/ev-charger-schedule-card.ts), [schedule.ts](../src/system/schedule.ts), [weekdays.ts](../src/system/weekdays.ts), [weekday-buttons.ts](../src/ui/weekday-buttons.ts)
 
-- The schedule card lists the charge, discharge and EV charger slots, each with its times, power, days and whether the slot is on. The Slot kinds option chooses which kinds are shown.
-- With Show week timeline on, the default, a week timeline draws every slot as a bar. Tapping a bar opens the slot.
+- Each card lists the slots of its kind, each with its times, power, days and whether the slot is on. The options are System and Show week timeline.
+- Below the card title, a heading names the kind of the card.
+- Each slot number has its own colour, the same on all three cards, and each slot row starts with a colour mark in the colour of the slot.
+- With Show week timeline on, the default, a week timeline draws every slot as a bar in the colour of the slot. Tapping a bar opens the slot.
+- A slot that is switched off is an outline in the colour of the slot, with no fill, and the bar of a slot that is switched on hides the part of an outline that it crosses.
+- Where two or more slots that are switched on overlap on a day, the timeline draws the overlap as stripes in the colours of the overlapping slots. A slot that is switched off makes no overlap. Tapping an overlap opens the overlapping slot with the lowest slot number.
 - An open slot has an editor for its start, end, power, days and the slot's other settings.
-- A slot is drawn only when every entity of the slot is enabled, and the schedule card counts the slots left out.
-- When charge or discharge slots are shown and the application mode is not a time-of-use mode, a notice says the slots only run in time-of-use mode, with the mode list beside it.
-- While control is not allowed for the system, every control on the schedule card is disabled and a lock links to the integration's settings.
+- A slot is drawn only when every entity of the slot is enabled, and the card counts the slots left out.
+- A card for a kind that the system does not have, such as the EV charger schedule card on an H2, says which kind of entity to enable.
+- On the charge and discharge schedule cards, when the application mode is not a time-of-use mode, a notice says the slots only run in time-of-use mode, with the mode list beside it. The EV charger schedule card shows no notice.
+- While control is not allowed for the system, every control on a schedule card is disabled and a lock links to the integration's settings.
 
 ## Weekdays tile card feature
 

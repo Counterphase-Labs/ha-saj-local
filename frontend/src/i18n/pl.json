@@ -70,7 +70,6 @@
   "option_show_groups_without_faults": "Pokaż grupy bez usterek",
   "option_show_packs": "Pokaż moduły baterii",
   "option_sections": "Sekcje",
-  "option_slot_kinds": "Rodzaje przedziałów",
   "option_kind_charge": "Ładowanie",
   "option_kind_discharge": "Rozładowanie",
   "option_kind_ev_charger": "Ładowarka EV",
@@ -85,7 +84,11 @@
   "battery_card_description": "Stan naładowania z rezerwą i limitami, odczyty baterii i jeden wiersz dla każdego modułu",
   "controls_card_name": "Sterowanie SAJ Local",
   "controls_card_description": "Wspólne elementy sterowania, które oferuje system",
-  "schedule_card_name": "Harmonogram SAJ Local",
-  "schedule_card_description": "Przedziały ładowania, rozładowania i ładowarki EV z osią czasu tygodnia",
+  "charge_schedule_card_name": "Harmonogram ładowania SAJ Local",
+  "charge_schedule_card_description": "Przedziały ładowania z osią czasu tygodnia",
+  "discharge_schedule_card_name": "Harmonogram rozładowania SAJ Local",
+  "discharge_schedule_card_description": "Przedziały rozładowania z osią czasu tygodnia",
+  "ev_charger_schedule_card_name": "Harmonogram ładowarki EV SAJ Local",
+  "ev_charger_schedule_card_description": "Przedziały ładowarki EV z osią czasu tygodnia",
   "weekdays_feature_name": "Dni tygodnia SAJ Local"
 }

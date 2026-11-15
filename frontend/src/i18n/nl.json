@@ -66,7 +66,6 @@
   "option_show_groups_without_faults": "Groepen zonder storingen tonen",
   "option_show_packs": "Batterijpacks tonen",
   "option_sections": "Secties",
-  "option_slot_kinds": "Soorten tijdvakken",
   "option_kind_charge": "Opladen",
   "option_kind_discharge": "Ontladen",
   "option_kind_ev_charger": "EV-lader",
@@ -81,7 +80,11 @@
   "battery_card_description": "Laadniveau met reserve en limieten, batterijmetingen en één rij per pack",
   "controls_card_name": "SAJ Local-bediening",
   "controls_card_description": "De gedeelde bediening die het systeem biedt",
-  "schedule_card_name": "SAJ Local-schema",
-  "schedule_card_description": "Oplaad-, ontlaad- en EV-ladertijdvakken met een weektijdlijn",
+  "charge_schedule_card_name": "SAJ Local-oplaadschema",
+  "charge_schedule_card_description": "Oplaadtijdvakken met een weektijdlijn",
+  "discharge_schedule_card_name": "SAJ Local-ontlaadschema",
+  "discharge_schedule_card_description": "Ontlaadtijdvakken met een weektijdlijn",
+  "ev_charger_schedule_card_name": "SAJ Local-EV-laderschema",
+  "ev_charger_schedule_card_description": "EV-ladertijdvakken met een weektijdlijn",
   "weekdays_feature_name": "SAJ Local-weekdagen"
 }

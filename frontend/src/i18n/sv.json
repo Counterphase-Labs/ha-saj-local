@@ -66,7 +66,6 @@
   "option_show_groups_without_faults": "Visa grupper utan fel",
   "option_show_packs": "Visa batteripack",
   "option_sections": "Sektioner",
-  "option_slot_kinds": "Typer av tidsluckor",
   "option_kind_charge": "Laddning",
   "option_kind_discharge": "Urladdning",
   "option_kind_ev_charger": "Elbilsladdare",
@@ -81,7 +80,11 @@
   "battery_card_description": "Laddningsnivå med reserv och gränser, batteriavläsningar och en rad per pack",
   "controls_card_name": "SAJ Local-styrning",
   "controls_card_description": "De gemensamma styrningarna som systemet erbjuder",
-  "schedule_card_name": "SAJ Local-schema",
-  "schedule_card_description": "Tidsluckor för laddning, urladdning och elbilsladdare med en veckotidslinje",
+  "charge_schedule_card_name": "SAJ Local-laddningsschema",
+  "charge_schedule_card_description": "Tidsluckor för laddning med en veckotidslinje",
+  "discharge_schedule_card_name": "SAJ Local-urladdningsschema",
+  "discharge_schedule_card_description": "Tidsluckor för urladdning med en veckotidslinje",
+  "ev_charger_schedule_card_name": "SAJ Local-elbilsladdarschema",
+  "ev_charger_schedule_card_description": "Tidsluckor för elbilsladdare med en veckotidslinje",
   "weekdays_feature_name": "SAJ Local-veckodagar"
 }

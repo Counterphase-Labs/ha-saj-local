@@ -57,6 +57,17 @@ const SYSTEM_ENTITIES: readonly EntitySpec[] = [
         unit_of_measurement: "W",
     }),
     entity("charge_slot_1_enabled", "switch", "on"),
+    entity("charge_slot_2_start", "time", "09:00:00"),
+    entity("charge_slot_2_end", "time", "11:00:00"),
+    entity("charge_slot_2_days", "number", "21", {
+        min: 0,
+        max: 127,
+        step: 1,
+    }),
+    entity("charge_slot_2_power", "number", "500", {
+        unit_of_measurement: "W",
+    }),
+    entity("charge_slot_2_enabled", "switch", "on"),
 ];
 
 const bundleAsset = (): string => {
@@ -152,7 +163,9 @@ test.beforeEach(async ({ page }) => {
                 "saj-local-faults-card",
                 "saj-local-battery-card",
                 "saj-local-controls-card",
-                "saj-local-schedule-card",
+                "saj-local-charge-schedule-card",
+                "saj-local-discharge-schedule-card",
+                "saj-local-ev-charger-schedule-card",
                 "saj-local-status-badge",
             ]) {
                 configured(tag);
@@ -208,12 +221,33 @@ test("the controls card shows the backup reserve", async ({ page }) => {
     ).toHaveValue("20");
 });
 
-test("the schedule card shows the charge slot times", async ({ page }) => {
+test("the charge schedule card shows the charge slot times", async ({
+    page,
+}) => {
     await expect(
         page
-            .locator("saj-local-schedule-card .slot-detail")
+            .locator("saj-local-charge-schedule-card .slot-detail")
             .getByText("08:00:00 - 10:30:00"),
     ).toBeVisible();
+});
+
+test("the charge schedule card hatches the overlap of two slots", async ({
+    page,
+}) => {
+    await expect(
+        page.locator("saj-local-charge-schedule-card .overlap").first(),
+    ).toBeVisible();
+});
+
+test("the discharge and EV charger schedule cards show the empty state of a kind the system lacks", async ({
+    page,
+}) => {
+    for (const tag of [
+        "saj-local-discharge-schedule-card",
+        "saj-local-ev-charger-schedule-card",
+    ]) {
+        await expect(page.locator(`${tag} saj-empty-state`)).toBeVisible();
+    }
 });
 
 test("the weekdays feature presses the days of the slot", async ({ page }) => {

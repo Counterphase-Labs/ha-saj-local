@@ -84,7 +84,7 @@ De termer som SAJ Local, instrumentpanelens kort och dokumentationen använder, 
 | Felkort | Kortet som listar de aktiva felen. |
 | Batterikort | Kortet som visar batteriets avläsningar och en rad per pack. |
 | Styrkort | Kortet som visar systemets gemensamma styrningar. |
-| Schemakort | Kortet som visar tidsluckorna med en veckotidslinje. |
+| Schemakort | De tre korten som visar tidsluckorna för laddning, urladdning eller elbilsladdare med en veckotidslinje. |
 | Veckodagar som funktion för bricka | De sju dagknapparna som kan läggas till i ett brickkort. |
 | Statusmärke | Märket som visar driftläget och antalet aktiva fel. |
 

@@ -29,7 +29,7 @@ De entiteits-ID in het voorbeeld heeft geen voorvoegsel. Als u een [voorvoegsel]
 - De omvormer slaat de dagen op als één getal dat niet meebeweegt met uw eerste dag van de week. Maandag is het laagste bit en zondag het hoogste op elk model, dus maandag tot en met vrijdag is 31, zoals in de schermafbeelding, en maandag, woensdag en vrijdag is 21.
 - De knoppen zijn uitgeschakeld zolang [Bediening toestaan](../changing-settings.md#bediening-toestaan) uit staat voor het systeem.
 
-De [schemakaart](schedule-card.md) gebruikt de knoppen in de tijdvakeditor.
+De [schemakaarten](schedule-cards.md) gebruiken de knoppen in de tijdvakeditor.
 
 ## Nog niet ondersteund
 

@@ -84,7 +84,7 @@ Die Begriffe, die SAJ Local, die Dashboard-Karten und die Dokumentation verwende
 | Fehler-Karte | Die Karte, die die aktiven Fehler auflistet. |
 | Batterie-Karte | Die Karte, die die Batteriewerte und eine Zeile pro Pack zeigt. |
 | Steuerungs-Karte | Die Karte, die die gemeinsamen Bedienelemente des Systems zeigt. |
-| Zeitplan-Karte | Die Karte, die die Zeitfenster mit einer Wochenzeitleiste zeigt. |
+| Zeitplan-Karten | Die drei Karten, die die Zeitfenster für Laden, Entladen oder Wallbox mit einer Wochenzeitleiste zeigen. |
 | Wochentage-Funktion für Kachel-Karten | Die sieben Tagesschaltflächen, die zu einer Kachel-Karte hinzugefügt werden können. |
 | Status-Badge | Das Badge, das den Betriebszustand und die Anzahl der aktiven Fehler zeigt. |
 

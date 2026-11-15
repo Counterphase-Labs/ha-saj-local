@@ -144,7 +144,7 @@ Each feature list section is investigated from the `Files:` line of the section 
 | Cards | Faults card | [`user/cards/faults-card.md`](../user/cards/faults-card.md) |
 | Cards | Battery card | [`user/cards/battery-card.md`](../user/cards/battery-card.md) |
 | Cards | Controls card | [`user/cards/controls-card.md`](../user/cards/controls-card.md) |
-| Cards | Schedule card | [`user/cards/schedule-card.md`](../user/cards/schedule-card.md) |
+| Cards | Schedule cards | [`user/cards/schedule-cards.md`](../user/cards/schedule-cards.md) |
 | Cards | Weekdays tile card feature | [`user/cards/weekdays-feature.md`](../user/cards/weekdays-feature.md) |
 | Cards | Status badge | [`user/cards/status-badge.md`](../user/cards/status-badge.md) |
 | Cards | Theme and language | [`user/cards/README.md`](../user/cards/README.md), [`developer/frontend.md`](frontend.md) |

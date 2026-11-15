@@ -29,7 +29,7 @@ The entity ID in the example has no prefix. If you set a [prefix](../entities-an
 - The inverter stores the days as one number that does not move with your first day of the week. Monday is the lowest bit and Sunday the highest on every model, so Monday to Friday is 31, as in the screenshot, and Monday, Wednesday and Friday is 21.
 - The buttons are disabled while [Allow control](../changing-settings.md#allow-control) is off for the system.
 
-The [schedule card](schedule-card.md) uses the buttons in the slot editor.
+The [schedule cards](schedule-cards.md) use the buttons in the slot editor.
 
 ## Not supported yet
 

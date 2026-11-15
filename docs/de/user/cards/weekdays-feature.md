@@ -29,7 +29,7 @@ Die Entitäts-ID im Beispiel hat kein Präfix. Wenn du ein [Präfix](../entities
 - Der Wechselrichter speichert die Tage als eine Zahl, die sich nicht mit deinem ersten Tag der Woche verschiebt. Montag ist auf jedem Modell das niedrigste Bit und Sonntag das höchste, daher ist Montag bis Freitag 31, wie im Screenshot, und Montag, Mittwoch und Freitag ist 21.
 - Die Schaltflächen sind deaktiviert, solange [Steuerung zulassen](../changing-settings.md#steuerung-zulassen) für das System aus ist.
 
-Die [Zeitplan-Karte](schedule-card.md) verwendet die Schaltflächen im Zeitfenster-Editor.
+Die [Zeitplan-Karten](schedule-cards.md) verwenden die Schaltflächen im Zeitfenster-Editor.
 
 ## Noch nicht unterstützt
 

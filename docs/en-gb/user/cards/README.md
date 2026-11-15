@@ -15,14 +15,16 @@ SAJ Local serves the cards and registers the cards with Home Assistant when Home
 | [Faults card](faults-card.md) | The active faults of each piece of equipment, and a Clear fault button. |
 | [Battery card](battery-card.md) | The state of charge with the limits marked, the battery readings and one row group for each pack. |
 | [Controls card](controls-card.md) | The settings of the system in sections. |
-| [Schedule card](schedule-card.md) | The charge, discharge and EV charger slots, a week timeline and a slot editor. |
+| [Charge schedule card](schedule-cards.md#charge-schedule-card) | The charge slots, a week timeline and a slot editor. |
+| [Discharge schedule card](schedule-cards.md#discharge-schedule-card) | The discharge slots, a week timeline and a slot editor. |
+| [EV charger schedule card](schedule-cards.md#ev-charger-schedule-card) | The EV charger slots, a week timeline and a slot editor. |
 | [Weekdays tile card feature](weekdays-feature.md) | Seven day buttons on a tile card, for the days of a slot. |
 | [Status badge](status-badge.md) | A badge with the operating state and the number of pieces of equipment with an active fault. |
 
 ## Add an element
 
 1. Edit a dashboard and choose Add card. For the weekdays feature, add a tile card and open the features of the tile card. For the badge, edit the badges of the dashboard.
-2. Pick the SAJ Local element in the picker. The six cards show a live preview.
+2. Pick the SAJ Local element in the picker. The eight cards show a live preview.
 3. Choose the system in the System field of the visual editor. A new card or badge starts with the first system. The weekdays feature has no editor, because the feature uses the entity of the tile card.
 
 A home with two systems adds a card once per system. A card's title is the device name of the system followed by the model, for example SAJ HS3 (12000 W). SAJ Local adds the serial number only when two systems would otherwise have an identical title. Rename each device in Home Assistant if you want other titles.

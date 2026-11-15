@@ -7,14 +7,16 @@ import {
     MINUTES_PER_DAY,
     scheduleOf,
     SLOT_COUNT,
+    slotColour,
     slotEnabled,
     timelineBars,
+    timelineOverlaps,
     timeOfUseNoticeRequired,
     type Slot,
     type SlotKind,
 } from "../../src/system/schedule";
 import { entity, entityMap } from "../fakes/entities";
-import { slotEntities } from "../fakes/slots";
+import { fakeSlot, slotEntities } from "../fakes/slots";
 
 vi.mock("../../src/system/entities", () => entitiesModule());
 vi.mock("../../src/system/weekdays", () => ({ WEEKDAY_COUNT: 7 }));
@@ -271,6 +273,181 @@ describe("timelineBars", () => {
         );
 
         expect(timelineBars([slot]).every((bar) => bar.disabled)).toBe(true);
+    });
+});
+
+describe("slotColour", () => {
+    const numbers = Array.from({ length: SLOT_COUNT }, (_, index) => index + 1);
+
+    it("gives each slot number its own colour", () => {
+        expect(new Set(numbers.map(slotColour)).size).toBe(SLOT_COUNT);
+    });
+
+    it("gives the same slot number the same colour every time", () => {
+        expect(numbers.map(slotColour)).toEqual(numbers.map(slotColour));
+    });
+});
+
+describe("timelineOverlaps", () => {
+    const slotOf = (options: {
+        number: number;
+        start: string;
+        end: string;
+        days?: string;
+        enabled?: string;
+    }): Slot =>
+        firstSlot(slotEntities({ kind: "charge", days: "1", ...options }));
+    const overlapsOf = (slots: Slot[]) => timelineOverlaps(timelineBars(slots));
+
+    it("gives the minutes where two slots run together", () => {
+        const first = slotOf({ number: 1, start: "08:00:00", end: "10:00:00" });
+        const second = slotOf({
+            number: 2,
+            start: "09:00:00",
+            end: "11:00:00",
+        });
+
+        expect(overlapsOf([first, second])).toEqual([
+            {
+                day: 0,
+                startMinute: 540,
+                endMinute: 600,
+                slots: [first, second],
+            },
+        ]);
+    });
+
+    it("splits three slots into the parts with different covering slots", () => {
+        const first = slotOf({ number: 1, start: "08:00:00", end: "12:00:00" });
+        const second = slotOf({
+            number: 2,
+            start: "09:00:00",
+            end: "11:00:00",
+        });
+        const third = slotOf({
+            number: 3,
+            start: "10:00:00",
+            end: "13:00:00",
+        });
+
+        expect(
+            overlapsOf([third, second, first]).map((part) => ({
+                start: part.startMinute,
+                end: part.endMinute,
+                numbers: part.slots.map((slot) => slot.number),
+            })),
+        ).toEqual([
+            { start: 540, end: 600, numbers: [1, 2] },
+            { start: 600, end: 660, numbers: [1, 2, 3] },
+            { start: 660, end: 720, numbers: [1, 3] },
+        ]);
+    });
+
+    it("gives no overlap for slots that only touch", () => {
+        const first = slotOf({ number: 1, start: "08:00:00", end: "10:00:00" });
+        const second = slotOf({
+            number: 2,
+            start: "10:00:00",
+            end: "12:00:00",
+        });
+
+        expect(overlapsOf([first, second])).toEqual([]);
+    });
+
+    it("gives no overlap for slots on different days or at different times", () => {
+        const first = slotOf({ number: 1, start: "08:00:00", end: "10:00:00" });
+        const otherDay = slotOf({
+            number: 2,
+            start: "08:00:00",
+            end: "10:00:00",
+            days: "2",
+        });
+        const later = slotOf({ number: 3, start: "12:00:00", end: "13:00:00" });
+
+        expect(overlapsOf([first, otherDay, later])).toEqual([]);
+    });
+
+    it("counts each half of a slot that crosses midnight on its own day", () => {
+        const evening = slotOf({
+            number: 1,
+            start: "22:00:00",
+            end: "02:00:00",
+        });
+        const lateNight = slotOf({
+            number: 2,
+            start: "23:00:00",
+            end: "23:30:00",
+        });
+        const earlyMorning = slotOf({
+            number: 3,
+            start: "01:00:00",
+            end: "03:00:00",
+            days: "2",
+        });
+
+        expect(
+            overlapsOf([evening, lateNight, earlyMorning]).map((part) => ({
+                day: part.day,
+                start: part.startMinute,
+                end: part.endMinute,
+                numbers: part.slots.map((slot) => slot.number),
+            })),
+        ).toEqual([
+            { day: 0, start: 1380, end: 1410, numbers: [1, 2] },
+            { day: 1, start: 60, end: 120, numbers: [1, 3] },
+        ]);
+    });
+
+    it("leaves a switched-off slot out of every overlap part", () => {
+        const first = slotOf({ number: 1, start: "08:00:00", end: "10:00:00" });
+        const second = slotOf({
+            number: 2,
+            start: "09:00:00",
+            end: "11:00:00",
+        });
+        const off = slotOf({
+            number: 3,
+            start: "09:30:00",
+            end: "10:30:00",
+            enabled: "off",
+        });
+
+        const parts = overlapsOf([first, second, off]);
+
+        expect(parts).toHaveLength(1);
+        expect(parts[0]?.slots).toEqual([first, second]);
+    });
+
+    it("gives no overlap between a switched-on slot and a switched-off slot", () => {
+        const first = slotOf({ number: 1, start: "08:00:00", end: "10:00:00" });
+        const off = slotOf({
+            number: 2,
+            start: "09:00:00",
+            end: "11:00:00",
+            enabled: "off",
+        });
+
+        expect(overlapsOf([first, off])).toEqual([]);
+    });
+
+    it("counts an EV charger slot, which has no switch, as switched on", () => {
+        const evSlot = (number: number, start: string, end: string): Slot =>
+            fakeSlot({ kind: "ev_charger", number, start, end, days: "1" });
+        const first = evSlot(1, "08:00:00", "10:00:00");
+        const second = evSlot(2, "09:00:00", "11:00:00");
+
+        expect(overlapsOf([first, second])).toHaveLength(1);
+    });
+
+    it("leaves a slot with an unreadable time out of every overlap", () => {
+        const first = slotOf({ number: 1, start: "08:00:00", end: "10:00:00" });
+        const unreadable = slotOf({
+            number: 2,
+            start: "unavailable",
+            end: "11:00:00",
+        });
+
+        expect(overlapsOf([first, unreadable])).toEqual([]);
     });
 });
 

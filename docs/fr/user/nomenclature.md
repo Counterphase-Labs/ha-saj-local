@@ -84,7 +84,7 @@ Les termes que SAJ Local, les cartes du tableau de bord et la documentation util
 | Carte des défauts | La carte qui liste les défauts actifs. |
 | Carte de batterie | La carte qui affiche les mesures de la batterie et une ligne par module. |
 | Carte de contrôle | La carte qui affiche les commandes communes du système. |
-| Carte de programme | La carte qui affiche les plages horaires avec une chronologie de la semaine. |
+| Cartes de programme | Les trois cartes qui affichent les plages de charge, de décharge ou de chargeur de VE avec une chronologie de la semaine. |
 | Fonctionnalité de carte tuile Jours de la semaine | Les sept boutons de jour qui peuvent être ajoutés à une carte tuile. |
 | Badge d'état | Le badge qui affiche l'état de fonctionnement et le nombre de défauts actifs. |
 

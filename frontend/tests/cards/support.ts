@@ -163,7 +163,8 @@ export const describeCardPicker = ({
 }): void => {
     const registrations = vi
         .mocked(registerCard)
-        .mock.calls.map(([entry]) => entry);
+        .mock.calls.map(([entry]) => entry)
+        .filter((entry) => entry.type === tag);
 
     describe(`${tag} picker contract`, () => {
         it("starts from the common starting configuration", () => {

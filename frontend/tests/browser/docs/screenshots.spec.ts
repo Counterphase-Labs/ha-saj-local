@@ -698,7 +698,9 @@ const addDashboard = async (
                             "faults",
                             "battery",
                             "controls",
-                            "schedule",
+                            "charge-schedule",
+                            "discharge-schedule",
+                            "ev-charger-schedule",
                         ].map((card) => ({
                             type: `custom:saj-local-${card}-card`,
                             device,
@@ -897,6 +899,92 @@ const setNumber = async (
         service_data: { entity_id: entity, value },
     });
     await expect.poll(() => hassState(page, entity)).toBe(String(value));
+};
+
+const setTime = async (
+    page: Page,
+    entity: string,
+    value: string,
+): Promise<void> => {
+    await hassWebSocket(page, {
+        type: "call_service",
+        domain: "time",
+        service: "set_value",
+        service_data: { entity_id: entity, time: value },
+    });
+    await expect.poll(() => hassState(page, entity)).toBe(value);
+};
+
+const setSwitch = async (
+    page: Page,
+    entity: string,
+    on: boolean,
+): Promise<void> => {
+    await hassWebSocket(page, {
+        type: "call_service",
+        domain: "switch",
+        service: on ? "turn_on" : "turn_off",
+        service_data: { entity_id: entity },
+    });
+    await expect.poll(() => hassState(page, entity)).toBe(on ? "on" : "off");
+};
+
+interface ScheduleSlot {
+    prefix: string;
+    number: number;
+    start: string;
+    end: string;
+    days: number;
+    enabled: boolean | null;
+}
+
+const ALL_WEEK = 127;
+const WORKDAYS = 31;
+const WEEKEND = 96;
+
+const slot = (
+    prefix: string,
+    number: number,
+    start: string,
+    end: string,
+    days: number,
+    enabled: boolean | null = true,
+): ScheduleSlot => ({ prefix, number, start, end, days, enabled });
+
+const SCHEDULE_SLOTS: readonly ScheduleSlot[] = [
+    slot("charge_slot", 1, "06:00:00", "10:00:00", WORKDAYS),
+    slot("charge_slot", 2, "08:00:00", "12:00:00", WORKDAYS),
+    slot("charge_slot", 3, "13:00:00", "17:00:00", WEEKEND),
+    slot("charge_slot", 4, "11:00:00", "15:00:00", ALL_WEEK, false),
+    slot("discharge_slot", 1, "17:00:00", "21:00:00", ALL_WEEK),
+    slot("discharge_slot", 2, "19:00:00", "23:00:00", WORKDAYS),
+    slot("discharge_slot", 3, "15:00:00", "19:30:00", ALL_WEEK, false),
+    slot("ev_slot", 1, "09:00:00", "13:00:00", ALL_WEEK, null),
+    slot("ev_slot", 2, "11:00:00", "15:00:00", WORKDAYS, null),
+    slot("ev_slot", 3, "18:00:00", "22:00:00", WEEKEND, null),
+];
+
+const fillSchedules = async (page: Page): Promise<void> => {
+    for (const {
+        prefix,
+        number,
+        start,
+        end,
+        days,
+        enabled,
+    } of SCHEDULE_SLOTS) {
+        const key = `${prefix}_${String(number)}`;
+        await setTime(page, entityId("time", `${key}_start`), start);
+        await setTime(page, entityId("time", `${key}_end`), end);
+        await setNumber(page, entityId("number", `${key}_days`), days);
+        if (enabled !== null) {
+            await setSwitch(
+                page,
+                entityId("switch", `${key}_enabled`),
+                enabled,
+            );
+        }
+    }
 };
 
 const waitForControlEntities = async (page: Page): Promise<void> => {
@@ -1144,6 +1232,29 @@ const simulatorGet = async <T>(
     return (await response.json()) as T;
 };
 
+const simulatorTrafficSince = async (
+    request: APIRequestContext,
+    panel: string,
+): Promise<SimulatorTraffic> => {
+    let traffic = await simulatorGet<SimulatorTraffic>(
+        request,
+        panel,
+        "/api/traffic?after=0",
+    );
+    const entries = [...traffic.entries];
+    let last = entries.at(-1)?.sequence ?? traffic.latest;
+    while (traffic.latest > last) {
+        traffic = await simulatorGet<SimulatorTraffic>(
+            request,
+            panel,
+            `/api/traffic?after=${String(last)}`,
+        );
+        entries.push(...traffic.entries);
+        last = entries.at(-1)?.sequence ?? traffic.latest;
+    }
+    return { ...traffic, entries };
+};
+
 const fixedClientCounters = (
     entries: TrafficEntry[],
     now: number,
@@ -1345,11 +1456,7 @@ const freezeSimulatorPage = async (
         panel,
         "/api/state",
     );
-    const traffic = await simulatorGet<SimulatorTraffic>(
-        request,
-        panel,
-        "/api/traffic?after=0",
-    );
+    const traffic = await simulatorTrafficSince(request, panel);
     const registers = await simulatorGet<SimulatorRegisters>(
         request,
         panel,
@@ -1541,7 +1648,12 @@ test("takes every documentation screenshot", async ({
         "cards-faults-card": "saj-local-faults-card",
         "cards-battery-card": "saj-local-battery-card",
         "cards-controls-card": "saj-local-controls-card",
-        "cards-schedule-card": "saj-local-schedule-card",
+    });
+    await fillSchedules(page);
+    await captureCards(page, "hs3", {
+        "cards-charge-schedule-card": "saj-local-charge-schedule-card",
+        "cards-discharge-schedule-card": "saj-local-discharge-schedule-card",
+        "cards-ev-charger-schedule-card": "saj-local-ev-charger-schedule-card",
         "cards-status-badge": "saj-local-status-badge",
         "cards-weekdays-feature": tile.tag,
     });
@@ -1549,7 +1661,6 @@ test("takes every documentation screenshot", async ({
         "cards-power-flow-card-h2": "saj-local-power-flow-card",
         "cards-battery-card-h2": "saj-local-battery-card",
         "cards-controls-card-h2": "saj-local-controls-card",
-        "cards-schedule-card-h2": "saj-local-schedule-card",
     });
     await capturePowerSchedule(page);
     await captureDiagnostics(page);

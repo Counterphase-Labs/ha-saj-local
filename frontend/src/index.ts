@@ -8,7 +8,9 @@ void whenHomeAssistantIsReady().then(() =>
         import("./cards/power-flow-card"),
         import("./cards/status-card"),
         import("./cards/controls-card"),
-        import("./cards/schedule-card"),
+        import("./cards/charge-schedule-card"),
+        import("./cards/discharge-schedule-card"),
+        import("./cards/ev-charger-schedule-card"),
         import("./features/weekdays-feature"),
     ]),
 );

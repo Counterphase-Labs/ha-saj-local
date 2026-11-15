@@ -84,7 +84,7 @@ I termini che SAJ Local, le schede della plancia e la documentazione usano, cias
 | Scheda guasti | La scheda che elenca i guasti attivi. |
 | Scheda batteria | La scheda che mostra le letture della batteria e una riga per ogni modulo. |
 | Scheda controlli | La scheda che mostra i controlli condivisi del sistema. |
-| Scheda pianificazione | La scheda che mostra le fasce con una linea temporale settimanale. |
+| Schede pianificazione | Le tre schede che mostrano le fasce di carica, di scarica o del caricatore EV con una linea temporale settimanale. |
 | Funzione giorni della settimana per la scheda tile | I sette pulsanti dei giorni che si possono aggiungere a una scheda tile. |
 | Badge di stato | Il badge che mostra lo stato di funzionamento e il numero di guasti attivi. |
 

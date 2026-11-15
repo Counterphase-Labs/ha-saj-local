@@ -66,7 +66,6 @@
   "option_show_groups_without_faults": "Gruppen ohne Fehler anzeigen",
   "option_show_packs": "Batteriepacks anzeigen",
   "option_sections": "Abschnitte",
-  "option_slot_kinds": "Zeitfensterarten",
   "option_kind_charge": "Laden",
   "option_kind_discharge": "Entladen",
   "option_kind_ev_charger": "Wallbox",
@@ -81,7 +80,11 @@
   "battery_card_description": "Ladezustand mit Reserve und Grenzwerten, Batteriewerte und eine Zeile pro Pack",
   "controls_card_name": "SAJ-Local-Steuerung",
   "controls_card_description": "Die gemeinsamen Bedienelemente des Systems",
-  "schedule_card_name": "SAJ-Local-Zeitplan",
-  "schedule_card_description": "Lade-, Entlade- und Wallbox-Zeitfenster mit einer Wochenzeitleiste",
+  "charge_schedule_card_name": "SAJ-Local-Ladezeitplan",
+  "charge_schedule_card_description": "Ladezeitfenster mit einer Wochenzeitleiste",
+  "discharge_schedule_card_name": "SAJ-Local-Entladezeitplan",
+  "discharge_schedule_card_description": "Entladezeitfenster mit einer Wochenzeitleiste",
+  "ev_charger_schedule_card_name": "SAJ-Local-Wallbox-Zeitplan",
+  "ev_charger_schedule_card_description": "Wallbox-Zeitfenster mit einer Wochenzeitleiste",
   "weekdays_feature_name": "SAJ-Local-Wochentage"
 }

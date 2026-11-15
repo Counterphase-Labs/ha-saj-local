@@ -84,7 +84,7 @@ Terminy, których używają SAJ Local, karty pulpitu i dokumentacja, każdy z je
 | Karta usterek | Karta, która wymienia aktywne usterki. |
 | Karta baterii | Karta, która pokazuje odczyty baterii i jeden wiersz dla każdego modułu. |
 | Karta sterowania | Karta, która pokazuje wspólne elementy sterowania systemu. |
-| Karta harmonogramu | Karta, która pokazuje przedziały z osią czasu tygodnia. |
+| Karty harmonogramu | Trzy karty, które pokazują przedziały ładowania, rozładowania lub ładowarki EV z osią czasu tygodnia. |
 | Funkcja kafelka dni tygodnia | Siedem przycisków dni, które można dodać do karty kafelka. |
 | Odznaka stanu | Odznaka, która pokazuje stan pracy i liczbę aktywnych usterek. |
 

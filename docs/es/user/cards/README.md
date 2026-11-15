@@ -15,14 +15,16 @@ SAJ Local ofrece las tarjetas y las registra en Home Assistant cuando Home Assis
 | [Tarjeta de fallos](faults-card.md) | Los fallos activos de cada equipo, y un botón Borrar fallo. |
 | [Tarjeta de batería](battery-card.md) | El estado de carga con los límites marcados, las lecturas de la batería y un grupo de filas por cada módulo. |
 | [Tarjeta de controles](controls-card.md) | Los ajustes del sistema en secciones. |
-| [Tarjeta de programación](schedule-card.md) | Las franjas de carga, de descarga y del cargador de VE, una línea de tiempo semanal y un editor de franjas. |
+| [Tarjeta de programación de carga](schedule-cards.md#tarjeta-de-programación-de-carga) | Las franjas de carga, una línea de tiempo semanal y un editor de franjas. |
+| [Tarjeta de programación de descarga](schedule-cards.md#tarjeta-de-programación-de-descarga) | Las franjas de descarga, una línea de tiempo semanal y un editor de franjas. |
+| [Tarjeta de programación del cargador de VE](schedule-cards.md#tarjeta-de-programación-del-cargador-de-ve) | Las franjas del cargador de VE, una línea de tiempo semanal y un editor de franjas. |
 | [Función de tarjeta mosaico de días de la semana](weekdays-feature.md) | Siete botones de días en una tarjeta mosaico, para los días de una franja. |
 | [Insignia de estado](status-badge.md) | Una insignia con el estado de funcionamiento y el número de equipos con un fallo activo. |
 
 ## Añadir un elemento
 
 1. Edita un panel y elige Añadir tarjeta. Para la función de días de la semana, añade una tarjeta mosaico y abre las funciones de la tarjeta mosaico. Para la insignia, edita las insignias del panel.
-2. Elige el elemento de SAJ Local en el selector. Las seis tarjetas muestran una vista previa en vivo.
+2. Elige el elemento de SAJ Local en el selector. Las ocho tarjetas muestran una vista previa en vivo.
 3. Elige el sistema en el campo Sistema del editor visual. Una tarjeta o insignia nueva empieza con el primer sistema. La función de días de la semana no tiene editor, porque la función usa la entidad de la tarjeta mosaico.
 
 Una casa con dos sistemas añade una tarjeta una vez por sistema. El título de una tarjeta es el nombre del dispositivo del sistema seguido del modelo, por ejemplo SAJ HS3 (12000 W). SAJ Local añade el número de serie solo cuando dos sistemas tendrían de otro modo un título idéntico. Cambia el nombre de cada dispositivo en Home Assistant si quieres otros títulos.

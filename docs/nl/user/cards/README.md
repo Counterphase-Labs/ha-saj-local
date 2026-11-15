@@ -15,14 +15,16 @@ SAJ Local levert de kaarten en registreert de kaarten bij Home Assistant wanneer
 | [Storingenkaart](faults-card.md) | De actieve storingen van elk onderdeel van de apparatuur, en een knop Storing wissen. |
 | [Batterijkaart](battery-card.md) | Het laadniveau met de limieten gemarkeerd, de batterijmetingen en één rijgroep per pack. |
 | [Bedieningskaart](controls-card.md) | De instellingen van het systeem in secties. |
-| [Schemakaart](schedule-card.md) | De oplaad-, ontlaad- en EV-laadtijdvakken, een weektijdlijn en een tijdvakeditor. |
+| [Schemakaart opladen](schedule-cards.md#schemakaart-opladen) | De oplaadtijdvakken, een weektijdlijn en een tijdvakeditor. |
+| [Schemakaart ontladen](schedule-cards.md#schemakaart-ontladen) | De ontlaadtijdvakken, een weektijdlijn en een tijdvakeditor. |
+| [Schemakaart EV-lader](schedule-cards.md#schemakaart-ev-lader) | De EV-laadtijdvakken, een weektijdlijn en een tijdvakeditor. |
 | [Weekdagen-tegelkaartfunctie](weekdays-feature.md) | Zeven dagknoppen op een tegelkaart, voor de dagen van een tijdvak. |
 | [Statusbadge](status-badge.md) | Een badge met de bedrijfstoestand en het aantal onderdelen van de apparatuur met een actieve storing. |
 
 ## Een element toevoegen
 
 1. Bewerk een dashboard en kies Kaart toevoegen. Voeg voor de weekdagenfunctie een tegelkaart toe en open de functies van de tegelkaart. Bewerk voor de badge de badges van het dashboard.
-2. Kies het SAJ Local-element in de kiezer. De zes kaarten tonen een live voorbeeld.
+2. Kies het SAJ Local-element in de kiezer. De acht kaarten tonen een live voorbeeld.
 3. Kies het systeem in het veld Systeem van de visuele editor. Een nieuwe kaart of badge begint met het eerste systeem. De weekdagenfunctie heeft geen editor, omdat de functie de entiteit van de tegelkaart gebruikt.
 
 Een huis met twee systemen voegt een kaart één keer per systeem toe. De titel van een kaart is de apparaatnaam van het systeem gevolgd door het model, bijvoorbeeld SAJ HS3 (12000 W). SAJ Local voegt het serienummer alleen toe wanneer twee systemen anders een identieke titel zouden hebben. Hernoem elk apparaat in Home Assistant als u andere titels wilt.

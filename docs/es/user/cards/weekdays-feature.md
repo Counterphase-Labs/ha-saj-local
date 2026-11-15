@@ -29,7 +29,7 @@ El ID de entidad del ejemplo no tiene prefijo. Si fijas un [prefijo](../entities
 - El inversor guarda los días como un solo número que no se mueve con tu primer día de la semana. El lunes es el bit más bajo y el domingo el más alto en todos los modelos, así que de lunes a viernes es 31, como en la captura de pantalla, y lunes, miércoles y viernes es 21.
 - Los botones están deshabilitados mientras [Permitir control](../changing-settings.md#permitir-control) está desactivado para el sistema.
 
-La [tarjeta de programación](schedule-card.md) usa los botones en el editor de franjas.
+Las [tarjetas de programación](schedule-cards.md) usan los botones en el editor de franjas.
 
 ## Aún no compatible
 

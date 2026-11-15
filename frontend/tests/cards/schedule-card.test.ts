@@ -11,14 +11,19 @@ import {
     weekdaysModule,
 } from "../fakes/modules";
 
-import { SajScheduleCard } from "../../src/cards/schedule-card";
+import { SajChargeScheduleCard } from "../../src/cards/charge-schedule-card";
+import { SajDischargeScheduleCard } from "../../src/cards/discharge-schedule-card";
+import { SajEvChargerScheduleCard } from "../../src/cards/ev-charger-schedule-card";
+import type { SajScheduleCard } from "../../src/cards/schedule-card";
 import { setNumberRequest } from "../../src/system/control";
 import { isUnavailable, systemEntities } from "../../src/system/entities";
 import {
     scheduleOf,
-    SLOT_KINDS,
     timelineBars,
+    timelineOverlaps,
     timeOfUseNoticeRequired,
+    type OverlapPart,
+    type SlotKind,
     type TimelineBar,
 } from "../../src/system/schedule";
 import { weekOrder } from "../../src/system/weekdays";
@@ -47,12 +52,62 @@ vi.mock("../../src/ui/styles", () => stylesModule());
 vi.mock("../../src/cards/editor", () => editorModule());
 vi.mock("../../src/cards/system-card", () => systemCardModule());
 
-const TAG = "saj-local-schedule-card";
+const TAG = "saj-local-charge-schedule-card";
 
-describeCardPicker({
-    tag: TAG,
-    card: SajScheduleCard,
-    startingOptions: { slot_kinds: SLOT_KINDS },
+const CARDS: {
+    kind: SlotKind;
+    tag: string;
+    card: Pick<typeof SajScheduleCard, "getConfigForm" | "getStubConfig">;
+}[] = [
+    { kind: "charge", tag: TAG, card: SajChargeScheduleCard },
+    {
+        kind: "discharge",
+        tag: "saj-local-discharge-schedule-card",
+        card: SajDischargeScheduleCard,
+    },
+    {
+        kind: "ev_charger",
+        tag: "saj-local-ev-charger-schedule-card",
+        card: SajEvChargerScheduleCard,
+    },
+];
+
+for (const { tag, card } of CARDS) {
+    describeCardPicker({ tag, card });
+}
+
+describe("schedule card types", () => {
+    it("does not register the removed schedule card type", () => {
+        expect(customElements.get("saj-local-schedule-card")).toBeUndefined();
+    });
+
+    it.each(CARDS)(
+        "$tag asks for the slots of its own kind only and heads them with the kind name",
+        async ({ kind, tag }) => {
+            plan([fakeSlot({ kind, number: 1 })]);
+
+            const card = await mountCard({
+                tag,
+                entities: [entity("buzzer", "switch", "on")],
+            });
+
+            expect(vi.mocked(scheduleOf).mock.calls.at(-1)?.[0].kinds).toEqual([
+                kind,
+            ]);
+            expect(firstIn(card, "h3").textContent).toBe(`option_kind_${kind}`);
+        },
+    );
+
+    it.each(CARDS)(
+        "$tag offers the system and the timeline switch, with no slot kinds option",
+        ({ card }) => {
+            expect(card.getConfigForm()).toEqual({
+                fields: [
+                    { kind: "boolean", name: "show_timeline", fallback: true },
+                ],
+            });
+        },
+    );
 });
 
 const charge = fakeSlot({ kind: "charge", number: 1 });
@@ -96,9 +151,21 @@ const barOf = (overrides: Partial<TimelineBar> = {}): TimelineBar => ({
     ...overrides,
 });
 
+const overlapOf = (overrides: Partial<OverlapPart> = {}): OverlapPart => ({
+    day: 0,
+    startMinute: 360,
+    endMinute: 720,
+    slots: [
+        fakeSlot({ kind: "charge", number: 1 }),
+        fakeSlot({ kind: "charge", number: 2 }),
+    ],
+    ...overrides,
+});
+
 beforeEach(() => {
     plan([charge]);
     vi.mocked(timelineBars).mockReturnValue([]);
+    vi.mocked(timelineOverlaps).mockReturnValue([]);
     vi.mocked(timeOfUseNoticeRequired).mockReturnValue(false);
 });
 
@@ -106,7 +173,7 @@ afterEach(() => {
     document.body.replaceChildren();
 });
 
-describe("saj-local-schedule-card slots", () => {
+describe("schedule cards slots", () => {
     it("draws one row per slot with its number, times, days and power", async () => {
         plan([
             fakeSlot({ kind: "charge", number: 1, days: "5" }),
@@ -155,22 +222,61 @@ describe("saj-local-schedule-card slots", () => {
         expect(switches[0]?.labelHidden).toBe(true);
     });
 
-    it("groups the slots under a heading for each kind that has slots", async () => {
-        plan([charge, ev]);
+    it("gives a colour mark to each slot row, a different one for each slot number", async () => {
+        plan([
+            fakeSlot({ kind: "charge", number: 1 }),
+            fakeSlot({ kind: "charge", number: 2 }),
+        ]);
+
+        const card = await mountSchedule();
+        const colours = elementsIn(card, ".summary .colour-mark").map((mark) =>
+            mark.style.getPropertyValue("--mark-colour"),
+        );
+
+        expect(colours).toEqual(["colour-1", "colour-2"]);
+        expect(
+            elementsIn(card, ".colour-mark").every(
+                (mark) => mark.getAttribute("aria-hidden") === "true",
+            ),
+        ).toBe(true);
+    });
+
+    it("keeps the colour of a slot number whatever the other slots are", async () => {
+        const colourOfSlotTwo = async (
+            slots: ReturnType<typeof fakeSlot>[],
+        ) => {
+            plan(slots);
+            const card = await mountSchedule();
+            return elementsIn(card, ".colour-mark")
+                .find((mark) =>
+                    mark
+                        .closest(".summary")
+                        ?.textContent.includes('"number":2'),
+                )
+                ?.style.getPropertyValue("--mark-colour");
+        };
+        const two = fakeSlot({ kind: "charge", number: 2 });
+
+        expect(await colourOfSlotTwo([two])).toBe(
+            await colourOfSlotTwo([
+                fakeSlot({ kind: "charge", number: 1 }),
+                two,
+                fakeSlot({ kind: "charge", number: 5 }),
+            ]),
+        );
+    });
+
+    it("shows the colour mark of a slot that has no bars", async () => {
+        plan([fakeSlot({ kind: "charge", number: 3, start: "unavailable" })]);
 
         const card = await mountSchedule();
 
         expect(
-            elementsIn(card, "h3").map((heading) => heading.textContent),
-        ).toEqual(["option_kind_charge", "option_kind_ev_charger"]);
-    });
-
-    it("asks for the slots of the chosen kinds only", async () => {
-        await mountSchedule({ config: { slot_kinds: ["ev_charger"] } });
-
-        const options = vi.mocked(scheduleOf).mock.calls[0]?.[0];
-        expect(options?.kinds).toEqual(["ev_charger"]);
-        expect(options?.entities).toBeInstanceOf(Map);
+            firstIn(card, ".colour-mark").style.getPropertyValue(
+                "--mark-colour",
+            ),
+        ).toBe("colour-3");
+        expect(elementsIn(card, ".bar")).toHaveLength(0);
     });
 
     it("counts the slots left out under the list", async () => {
@@ -197,21 +303,14 @@ describe("saj-local-schedule-card slots", () => {
         expect(scheduleOf).toHaveBeenCalledTimes(1);
     });
 
-    it("works the schedule out again only when the chosen kinds change", async () => {
+    it("does not work the schedule out again for a redraw with the same entities", async () => {
         plan([charge]);
         const card = await mountSchedule();
         vi.mocked(scheduleOf).mockClear();
 
         await expandAll(card);
-        expect(scheduleOf).not.toHaveBeenCalled();
 
-        card.setConfig({
-            type: TAG,
-            device: "saj_1",
-            slot_kinds: ["ev_charger"],
-        } as never);
-        await card.updateComplete;
-        expect(scheduleOf).toHaveBeenCalledTimes(1);
+        expect(scheduleOf).not.toHaveBeenCalled();
     });
 
     it("works the schedule out again for new entities", async () => {
@@ -229,7 +328,7 @@ describe("saj-local-schedule-card slots", () => {
     });
 });
 
-describe("saj-local-schedule-card empty and locked states", () => {
+describe("schedule cards empty and locked states", () => {
     it("says how many slots were left out when none is drawn", async () => {
         plan([], 1);
 
@@ -279,7 +378,7 @@ describe("saj-local-schedule-card empty and locked states", () => {
     });
 });
 
-describe("saj-local-schedule-card timeline", () => {
+describe("schedule cards timeline", () => {
     it("draws seven days in the order of the user's week with a bar for each bar it is given", async () => {
         vi.mocked(weekOrder).mockReturnValue([6, 0, 1, 2, 3, 4, 5]);
         vi.mocked(timelineBars).mockReturnValue([
@@ -318,15 +417,40 @@ describe("saj-local-schedule-card timeline", () => {
         expect(timelineBars).toHaveBeenCalledWith([charge]);
     });
 
-    it("hatches a disabled slot's bars", async () => {
+    it("draws the bar of a switched-off slot as an outline in the colour of the slot", async () => {
         vi.mocked(timelineBars).mockReturnValue([
-            barOf({ disabled: true }),
+            barOf({
+                disabled: true,
+                slot: fakeSlot({ kind: "charge", number: 2 }),
+            }),
             barOf({ day: 1 }),
         ]);
 
         const card = await mountSchedule();
 
-        expect(elementsIn(card, ".bar.disabled")).toHaveLength(1);
+        const outlines = elementsIn(card, ".bar.disabled");
+        expect(outlines).toHaveLength(1);
+        expect(outlines[0]?.style.getPropertyValue("--bar-colour")).toBe(
+            "colour-2",
+        );
+    });
+
+    it("draws switched-on bars after outlines so that the bars hide the outlines", async () => {
+        vi.mocked(timelineBars).mockReturnValue([
+            barOf({ slot: fakeSlot({ kind: "charge", number: 1 }) }),
+            barOf({
+                disabled: true,
+                slot: fakeSlot({ kind: "charge", number: 2 }),
+            }),
+        ]);
+
+        const card = await mountSchedule();
+
+        expect(
+            elementsIn(card, ".bar").map((bar) =>
+                bar.classList.contains("disabled"),
+            ),
+        ).toEqual([true, false]);
     });
 
     it("names each bar for assistive technology", async () => {
@@ -352,6 +476,79 @@ describe("saj-local-schedule-card timeline", () => {
         expect(elementsIn(card, ".editor")).toHaveLength(1);
     });
 
+    it("draws each bar in the colour of its slot number", async () => {
+        vi.mocked(timelineBars).mockReturnValue([
+            barOf({ slot: fakeSlot({ kind: "charge", number: 1 }) }),
+            barOf({
+                day: 1,
+                slot: fakeSlot({ kind: "charge", number: 2 }),
+            }),
+        ]);
+
+        const card = await mountSchedule();
+
+        expect(
+            elementsIn(card, ".bar").map((bar) =>
+                bar.style.getPropertyValue("--bar-colour"),
+            ),
+        ).toEqual(["colour-1", "colour-2"]);
+    });
+
+    it("draws each overlap above the bars, in its own day, hidden from assistive technology", async () => {
+        const bars = [barOf()];
+        vi.mocked(timelineBars).mockReturnValue(bars);
+        vi.mocked(timelineOverlaps).mockReturnValue([
+            overlapOf({ day: 2, startMinute: 360, endMinute: 720 }),
+        ]);
+
+        const card = await mountSchedule();
+        const overlap = firstIn(card, ".overlap");
+
+        expect(timelineOverlaps).toHaveBeenCalledWith(bars);
+        expect(
+            overlap.closest(".day")?.querySelector(".day-name")?.textContent,
+        ).toBe("short:2:en");
+        expect(overlap.getAttribute("aria-hidden")).toBe("true");
+        expect(overlap.getAttribute("style")).toContain("left:25%");
+        expect(overlap.getAttribute("style")).toContain("width:25%");
+    });
+
+    it("stripes an overlap with the colours of its slots in slot number order", async () => {
+        vi.mocked(timelineOverlaps).mockReturnValue([overlapOf({})]);
+
+        const card = await mountSchedule();
+        const style = firstIn(card, ".overlap").getAttribute("style") ?? "";
+
+        expect(style.indexOf("colour-1")).toBeGreaterThan(-1);
+        expect(style.indexOf("colour-2")).toBeGreaterThan(
+            style.indexOf("colour-1"),
+        );
+    });
+
+    it("opens the overlapping slot with the lowest slot number when an overlap is tapped", async () => {
+        plan([
+            fakeSlot({ kind: "charge", number: 1 }),
+            fakeSlot({ kind: "charge", number: 2 }),
+        ]);
+        vi.mocked(timelineOverlaps).mockReturnValue([overlapOf({})]);
+        const card = await mountSchedule();
+
+        firstIn(card, ".overlap").click();
+        await card.updateComplete;
+
+        expect(
+            summaries(card).map((button) =>
+                button.getAttribute("aria-expanded"),
+            ),
+        ).toEqual(["true", "false"]);
+    });
+
+    it("draws no overlap without overlap parts", async () => {
+        const card = await mountSchedule();
+
+        expect(elementsIn(card, ".overlap")).toHaveLength(0);
+    });
+
     it("leaves the timeline out when switched off", async () => {
         const card = await mountSchedule({ config: { show_timeline: false } });
 
@@ -360,7 +557,7 @@ describe("saj-local-schedule-card timeline", () => {
     });
 });
 
-describe("saj-local-schedule-card editor", () => {
+describe("schedule cards editor", () => {
     it("reveals the editor on expand and hides it again", async () => {
         const card = await mountSchedule();
 
@@ -475,7 +672,7 @@ describe("saj-local-schedule-card editor", () => {
     });
 });
 
-describe("saj-local-schedule-card time-of-use notice", () => {
+describe("schedule cards time-of-use notice", () => {
     const mode = entity("application_mode", "select", "backup");
 
     const mountWithMode = (required: boolean) => {
@@ -520,27 +717,7 @@ describe("saj-local-schedule-card time-of-use notice", () => {
     });
 });
 
-describe("saj-local-schedule-card contracts", () => {
-    it("offers the slot kinds and the timeline switch", () => {
-        expect(SajScheduleCard.getConfigForm()).toEqual({
-            fields: [
-                {
-                    kind: "multi",
-                    name: "slot_kinds",
-                    options: [
-                        { value: "charge", label: "option_kind_charge" },
-                        { value: "discharge", label: "option_kind_discharge" },
-                        {
-                            value: "ev_charger",
-                            label: "option_kind_ev_charger",
-                        },
-                    ],
-                },
-                { kind: "boolean", name: "show_timeline", fallback: true },
-            ],
-        });
-    });
-
+describe("schedule cards contracts", () => {
     it("shows the entities of every slot", async () => {
         plan([charge, ev]);
         const card = await mountSchedule();
@@ -562,7 +739,7 @@ describe("saj-local-schedule-card contracts", () => {
     });
 });
 
-describe("saj-local-schedule-card size", () => {
+describe("schedule cards size", () => {
     beforeEach(() => {
         vi.mocked(systemEntities).mockReturnValue(entityMap([]));
     });

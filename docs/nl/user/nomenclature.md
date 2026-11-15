@@ -84,7 +84,7 @@ De termen die SAJ Local, de dashboardkaarten en de documentatie gebruiken, elk m
 | Storingenkaart | De kaart die de actieve storingen opsomt. |
 | Batterijkaart | De kaart die de batterijmetingen en één rij per pack toont. |
 | Bedieningskaart | De kaart die de gedeelde bediening van het systeem toont. |
-| Schemakaart | De kaart die de tijdvakken met een weektijdlijn toont. |
+| Schemakaarten | De drie kaarten die de oplaad-, ontlaad- of EV-laadtijdvakken met een weektijdlijn tonen. |
 | Weekdagen-tegelkaartfunctie | De zeven dagknoppen die aan een tegelkaart kunnen worden toegevoegd. |
 | Statusbadge | De badge die de bedrijfstoestand en het aantal actieve storingen toont. |
 

@@ -7,7 +7,9 @@ const MODULES = [
     "../src/cards/power-flow-card",
     "../src/cards/status-card",
     "../src/cards/controls-card",
-    "../src/cards/schedule-card",
+    "../src/cards/charge-schedule-card",
+    "../src/cards/discharge-schedule-card",
+    "../src/cards/ev-charger-schedule-card",
     "../src/features/weekdays-feature",
 ];
 

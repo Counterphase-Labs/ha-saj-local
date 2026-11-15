@@ -15,14 +15,16 @@ SAJ Local udostępnia karty i rejestruje karty w Home Assistancie przy jego star
 | [Karta usterek](faults-card.md) | Aktywne usterki każdego elementu wyposażenia i przycisk Wyczyść usterkę. |
 | [Karta baterii](battery-card.md) | Stan naładowania z zaznaczonymi limitami, odczyty baterii i jedna grupa wierszy dla każdego modułu. |
 | [Karta sterowania](controls-card.md) | Ustawienia systemu w sekcjach. |
-| [Karta harmonogramu](schedule-card.md) | Przedziały ładowania, rozładowania i ładowarki EV, oś czasu tygodnia i edytor przedziału. |
+| [Karta harmonogramu ładowania](schedule-cards.md#karta-harmonogramu-ładowania) | Przedziały ładowania, oś czasu tygodnia i edytor przedziału. |
+| [Karta harmonogramu rozładowania](schedule-cards.md#karta-harmonogramu-rozładowania) | Przedziały rozładowania, oś czasu tygodnia i edytor przedziału. |
+| [Karta harmonogramu ładowarki EV](schedule-cards.md#karta-harmonogramu-ładowarki-ev) | Przedziały ładowarki EV, oś czasu tygodnia i edytor przedziału. |
 | [Funkcja kafelka dni tygodnia](weekdays-feature.md) | Siedem przycisków dni na karcie kafelka, dla dni przedziału. |
 | [Odznaka stanu](status-badge.md) | Odznaka ze stanem pracy i liczbą elementów wyposażenia z aktywną usterką. |
 
 ## Dodaj element
 
 1. Edytuj pulpit i wybierz Dodaj kartę. Dla funkcji dni tygodnia dodaj kartę kafelka i otwórz funkcje karty kafelka. Dla odznaki edytuj odznaki pulpitu.
-2. Wybierz element SAJ Local w wyborze. Sześć kart pokazuje podgląd na żywo.
+2. Wybierz element SAJ Local w wyborze. Osiem kart pokazuje podgląd na żywo.
 3. Wybierz system w polu System edytora wizualnego. Nowa karta lub odznaka zaczyna od pierwszego systemu. Funkcja dni tygodnia nie ma edytora, bo funkcja używa encji karty kafelka.
 
 Dom z dwoma systemami dodaje kartę raz dla każdego systemu. Tytuł karty to nazwa urządzenia systemu, a po niej model, na przykład SAJ HS3 (12000 W). SAJ Local dodaje numer seryjny tylko wtedy, gdy dwa systemy miałyby w przeciwnym razie identyczny tytuł. Zmień nazwę każdego urządzenia w Home Assistancie, jeśli chcesz innych tytułów.

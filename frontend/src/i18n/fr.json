@@ -68,7 +68,6 @@
   "option_show_groups_without_faults": "Afficher les groupes sans défaut",
   "option_show_packs": "Afficher les modules de batterie",
   "option_sections": "Sections",
-  "option_slot_kinds": "Types de plages",
   "option_kind_charge": "Charge",
   "option_kind_discharge": "Décharge",
   "option_kind_ev_charger": "Chargeur de VE",
@@ -83,7 +82,11 @@
   "battery_card_description": "État de charge avec réserve et limites, mesures de la batterie et une ligne par module",
   "controls_card_name": "Contrôle de SAJ Local",
   "controls_card_description": "Les commandes communes que le système propose",
-  "schedule_card_name": "Programme de SAJ Local",
-  "schedule_card_description": "Plages de charge, de décharge et du chargeur de VE avec une chronologie de la semaine",
+  "charge_schedule_card_name": "Programme de charge de SAJ Local",
+  "charge_schedule_card_description": "Plages de charge avec une chronologie de la semaine",
+  "discharge_schedule_card_name": "Programme de décharge de SAJ Local",
+  "discharge_schedule_card_description": "Plages de décharge avec une chronologie de la semaine",
+  "ev_charger_schedule_card_name": "Programme du chargeur de VE de SAJ Local",
+  "ev_charger_schedule_card_description": "Plages du chargeur de VE avec une chronologie de la semaine",
   "weekdays_feature_name": "Jours de la semaine de SAJ Local"
 }

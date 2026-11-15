@@ -64,7 +64,6 @@
   "option_show_groups_without_faults": "显示无故障的分组",
   "option_show_packs": "显示电池包",
   "option_sections": "分区",
-  "option_slot_kinds": "时段类型",
   "option_kind_charge": "充电",
   "option_kind_discharge": "放电",
   "option_kind_ev_charger": "充电桩",
@@ -79,7 +78,11 @@
   "battery_card_description": "荷电状态、备用电量和限制、电池读数，以及每个电池包一行",
   "controls_card_name": "SAJ Local 控制",
   "controls_card_description": "系统提供的共用控制项",
-  "schedule_card_name": "SAJ Local 计划",
-  "schedule_card_description": "充电、放电和充电桩时段，附一周时间线",
+  "charge_schedule_card_name": "SAJ Local 充电计划",
+  "charge_schedule_card_description": "充电时段，附一周时间线",
+  "discharge_schedule_card_name": "SAJ Local 放电计划",
+  "discharge_schedule_card_description": "放电时段，附一周时间线",
+  "ev_charger_schedule_card_name": "SAJ Local 充电桩计划",
+  "ev_charger_schedule_card_description": "充电桩时段，附一周时间线",
   "weekdays_feature_name": "SAJ Local 星期"
 }

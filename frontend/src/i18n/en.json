@@ -66,7 +66,6 @@
   "option_show_groups_without_faults": "Show groups without faults",
   "option_show_packs": "Show battery packs",
   "option_sections": "Sections",
-  "option_slot_kinds": "Slot kinds",
   "option_kind_charge": "Charge",
   "option_kind_discharge": "Discharge",
   "option_kind_ev_charger": "EV charger",
@@ -81,7 +80,11 @@
   "battery_card_description": "State of charge with reserve and limits, battery readings and one row per pack",
   "controls_card_name": "SAJ Local controls",
   "controls_card_description": "The shared controls the system offers",
-  "schedule_card_name": "SAJ Local schedule",
-  "schedule_card_description": "Charge, discharge and EV charger slots with a week timeline",
+  "charge_schedule_card_name": "SAJ Local charge schedule",
+  "charge_schedule_card_description": "Charge slots with a week timeline",
+  "discharge_schedule_card_name": "SAJ Local discharge schedule",
+  "discharge_schedule_card_description": "Discharge slots with a week timeline",
+  "ev_charger_schedule_card_name": "SAJ Local EV charger schedule",
+  "ev_charger_schedule_card_description": "EV charger slots with a week timeline",
   "weekdays_feature_name": "SAJ Local weekdays"
 }

@@ -29,7 +29,7 @@ L'ID d'entité de l'exemple n'a pas de préfixe. Si vous définissez un [préfix
 - L'onduleur stocke les jours sous la forme d'un seul nombre qui ne suit pas votre premier jour de la semaine. Le lundi est le bit le plus bas et le dimanche le plus haut sur chaque modèle, donc du lundi au vendredi vaut 31, comme sur la capture d'écran, et lundi, mercredi et vendredi vaut 21.
 - Les boutons sont désactivés tant qu'[Autoriser le contrôle](../changing-settings.md#autoriser-le-contrôle) est désactivé pour le système.
 
-La [carte de programme](schedule-card.md) utilise les boutons dans l'éditeur de plage.
+Les [cartes de programme](schedule-cards.md) utilisent les boutons dans l'éditeur de plage.
 
 ## Pas encore pris en charge
 

@@ -15,14 +15,16 @@ SAJ Local levererar korten och registrerar korten hos Home Assistant när Home A
 | [Felkort](faults-card.md) | De aktiva felen för varje del av utrustningen, och en knapp Rensa fel. |
 | [Batterikort](battery-card.md) | Laddningsnivån med gränserna markerade, batteriavläsningarna och en radgrupp för varje pack. |
 | [Styrkort](controls-card.md) | Systemets inställningar i sektioner. |
-| [Schemakort](schedule-card.md) | Tidsluckorna för laddning, urladdning och elbilsladdare, en veckotidslinje och en tidsluckeditor. |
+| [Schemakort för laddning](schedule-cards.md#schemakort-för-laddning) | Tidsluckorna för laddning, en veckotidslinje och en tidsluckeditor. |
+| [Schemakort för urladdning](schedule-cards.md#schemakort-för-urladdning) | Tidsluckorna för urladdning, en veckotidslinje och en tidsluckeditor. |
+| [Schemakort för elbilsladdare](schedule-cards.md#schemakort-för-elbilsladdare) | Tidsluckorna för elbilsladdare, en veckotidslinje och en tidsluckeditor. |
 | [Veckodagar som funktion för bricka](weekdays-feature.md) | Sju dagknappar på ett brickkort, för en tidsluckas dagar. |
 | [Statusmärke](status-badge.md) | Ett märke med driftläget och antalet delar av utrustningen med ett aktivt fel. |
 
 ## Lägg till ett element
 
 1. Redigera en instrumentpanel och välj Lägg till kort. För funktionen veckodagar lägger du till ett brickkort och öppnar brickkortets funktioner. För märket redigerar du instrumentpanelens märken.
-2. Välj SAJ Local-elementet i väljaren. De sex korten visar en live-förhandsvisning.
+2. Välj SAJ Local-elementet i väljaren. De åtta korten visar en live-förhandsvisning.
 3. Välj systemet i fältet System i det visuella redigeringsverktyget. Ett nytt kort eller märke börjar med det första systemet. Funktionen veckodagar har inget redigeringsverktyg, eftersom funktionen använder brickkortets entitet.
 
 Ett hem med två system lägger till ett kort per system. Ett korts titel är systemets enhetsnamn följt av modellen, till exempel SAJ HS3 (12000 W). SAJ Local lägger till serienumret bara när två system annars skulle få identiska titlar. Byt namn på varje enhet i Home Assistant om du vill ha andra titlar.

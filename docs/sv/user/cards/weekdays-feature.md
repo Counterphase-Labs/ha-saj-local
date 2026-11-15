@@ -29,7 +29,7 @@ Entitets-ID:t i exemplet har inget prefix. Om du anger ett [prefix](../entities-
 - Växelriktaren lagrar dagarna som ett tal som inte flyttar sig med din första dag i veckan. Måndag är den lägsta biten och söndag den högsta på varje modell, så måndag till fredag är 31, som i skärmbilden, och måndag, onsdag och fredag är 21.
 - Knapparna är inaktiverade medan [Tillåt styrning](../changing-settings.md#tillåt-styrning) är av för systemet.
 
-[Schemakortet](schedule-card.md) använder knapparna i tidsluckeditorn.
+[Schemakorten](schedule-cards.md) använder knapparna i tidsluckeditorn.
 
 ## Stöds inte ännu
 

@@ -15,14 +15,16 @@ SAJ Local fornisce le schede e le registra in Home Assistant all'avvio di Home A
 | [Scheda guasti](faults-card.md) | I guasti attivi di ogni apparecchiatura e un pulsante Cancella guasto. |
 | [Scheda batteria](battery-card.md) | Lo stato di carica con i limiti segnati, le letture della batteria e un gruppo di righe per ogni modulo. |
 | [Scheda controlli](controls-card.md) | Le impostazioni del sistema in sezioni. |
-| [Scheda pianificazione](schedule-card.md) | Le fasce di carica, di scarica e del caricatore EV, una linea temporale settimanale e un editor di fasce. |
+| [Scheda pianificazione di carica](schedule-cards.md#scheda-pianificazione-di-carica) | Le fasce di carica, una linea temporale settimanale e un editor di fasce. |
+| [Scheda pianificazione di scarica](schedule-cards.md#scheda-pianificazione-di-scarica) | Le fasce di scarica, una linea temporale settimanale e un editor di fasce. |
+| [Scheda pianificazione del caricatore EV](schedule-cards.md#scheda-pianificazione-del-caricatore-ev) | Le fasce del caricatore EV, una linea temporale settimanale e un editor di fasce. |
 | [Funzione giorni della settimana per la scheda tile](weekdays-feature.md) | Sette pulsanti dei giorni su una scheda tile, per i giorni di una fascia. |
 | [Badge di stato](status-badge.md) | Un badge con lo stato di funzionamento e il numero di apparecchiature con un guasto attivo. |
 
 ## Aggiungere un elemento
 
 1. Modifica una plancia e scegli Aggiungi scheda. Per la funzione giorni della settimana, aggiungi una scheda tile e apri le funzioni della scheda tile. Per il badge, modifica i badge della plancia.
-2. Scegli l'elemento SAJ Local nel selettore. Le sei schede mostrano un'anteprima in tempo reale.
+2. Scegli l'elemento SAJ Local nel selettore. Le otto schede mostrano un'anteprima in tempo reale.
 3. Scegli il sistema nel campo Sistema dell'editor visuale. Una nuova scheda o un nuovo badge parte con il primo sistema. La funzione giorni della settimana non ha un editor, perché la funzione usa l'entità della scheda tile.
 
 Una casa con due sistemi aggiunge una scheda una volta per sistema. Il titolo di una scheda è il nome del dispositivo del sistema seguito dal modello, per esempio SAJ HS3 (12000 W). SAJ Local aggiunge il numero di serie solo quando altrimenti due sistemi avrebbero un titolo identico. Rinomina ogni dispositivo in Home Assistant se vuoi altri titoli.

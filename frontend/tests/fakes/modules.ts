@@ -406,7 +406,9 @@ export const scheduleModule = () => ({
     MINUTES_PER_DAY: 1440,
     SLOT_KINDS: ["charge", "discharge", "ev_charger"],
     scheduleOf: vi.fn(() => ({ slots: [], leftOut: 0 })),
+    slotColour: (number: number) => `colour-${String(number)}`,
     timelineBars: vi.fn(() => []),
+    timelineOverlaps: vi.fn(() => []),
     timeOfUseNoticeRequired: vi.fn(() => false),
 });
 

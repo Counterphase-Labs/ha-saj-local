@@ -61,13 +61,14 @@ views:
           - type: heading
             heading: "Schedules"
           - type: heading
-            heading: "saj-local-schedule-card slot_kinds: [charge, discharge, ev_charger], show_timeline: true"
-          - type: custom:saj-local-schedule-card
+            heading: "saj-local-charge-schedule-card show_timeline: true"
+          - type: custom:saj-local-charge-schedule-card
             device: 835d1844b6a1712fa1753308d3dbbf84
-            slot_kinds:
-              - charge
-              - discharge
-              - ev_charger
+            show_timeline: true
+          - type: heading
+            heading: "saj-local-discharge-schedule-card show_timeline: true"
+          - type: custom:saj-local-discharge-schedule-card
+            device: 835d1844b6a1712fa1753308d3dbbf84
             show_timeline: true
   - title: Cards
     path: cards
@@ -219,64 +220,34 @@ views:
       - type: grid
         cards:
           - type: heading
-            heading: "saj-local-schedule-card slot_kinds: [charge, discharge, ev_charger], show_timeline: true"
-          - type: custom:saj-local-schedule-card
+            heading: "saj-local-charge-schedule-card show_timeline: true"
+          - type: custom:saj-local-charge-schedule-card
             device: 835d1844b6a1712fa1753308d3dbbf84
-            slot_kinds:
-              - charge
-              - discharge
-              - ev_charger
             show_timeline: true
           - type: heading
-            heading: "saj-local-schedule-card slot_kinds: [charge, discharge, ev_charger], show_timeline: false"
-          - type: custom:saj-local-schedule-card
+            heading: "saj-local-charge-schedule-card show_timeline: false"
+          - type: custom:saj-local-charge-schedule-card
             device: 835d1844b6a1712fa1753308d3dbbf84
-            slot_kinds:
-              - charge
-              - discharge
-              - ev_charger
             show_timeline: false
           - type: heading
-            heading: "saj-local-schedule-card slot_kinds: [charge], show_timeline: true"
-          - type: custom:saj-local-schedule-card
+            heading: "saj-local-discharge-schedule-card show_timeline: true"
+          - type: custom:saj-local-discharge-schedule-card
             device: 835d1844b6a1712fa1753308d3dbbf84
-            slot_kinds:
-              - charge
             show_timeline: true
           - type: heading
-            heading: "saj-local-schedule-card slot_kinds: [charge], show_timeline: false"
-          - type: custom:saj-local-schedule-card
+            heading: "saj-local-discharge-schedule-card show_timeline: false"
+          - type: custom:saj-local-discharge-schedule-card
             device: 835d1844b6a1712fa1753308d3dbbf84
-            slot_kinds:
-              - charge
             show_timeline: false
           - type: heading
-            heading: "saj-local-schedule-card slot_kinds: [discharge], show_timeline: true"
-          - type: custom:saj-local-schedule-card
+            heading: "saj-local-ev-charger-schedule-card show_timeline: true"
+          - type: custom:saj-local-ev-charger-schedule-card
             device: 835d1844b6a1712fa1753308d3dbbf84
-            slot_kinds:
-              - discharge
             show_timeline: true
           - type: heading
-            heading: "saj-local-schedule-card slot_kinds: [discharge], show_timeline: false"
-          - type: custom:saj-local-schedule-card
+            heading: "saj-local-ev-charger-schedule-card show_timeline: false"
+          - type: custom:saj-local-ev-charger-schedule-card
             device: 835d1844b6a1712fa1753308d3dbbf84
-            slot_kinds:
-              - discharge
-            show_timeline: false
-          - type: heading
-            heading: "saj-local-schedule-card slot_kinds: [ev_charger], show_timeline: true"
-          - type: custom:saj-local-schedule-card
-            device: 835d1844b6a1712fa1753308d3dbbf84
-            slot_kinds:
-              - ev_charger
-            show_timeline: true
-          - type: heading
-            heading: "saj-local-schedule-card slot_kinds: [ev_charger], show_timeline: false"
-          - type: custom:saj-local-schedule-card
-            device: 835d1844b6a1712fa1753308d3dbbf84
-            slot_kinds:
-              - ev_charger
             show_timeline: false
   - title: Features and badges
     path: features-and-badges
@@ -407,11 +378,33 @@ views:
       - type: grid
         cards:
           - type: heading
-            heading: "saj-local-schedule-card"
+            heading: "saj-local-charge-schedule-card"
           - type: heading
             heading: "No device"
-          - type: custom:saj-local-schedule-card
+          - type: custom:saj-local-charge-schedule-card
           - type: heading
             heading: "Not a SAJ Local system: device is the Sun device"
-          - type: custom:saj-local-schedule-card
+          - type: custom:saj-local-charge-schedule-card
+            device: 1491264f4dba2ee1eca64179e7c5dfb0
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-discharge-schedule-card"
+          - type: heading
+            heading: "No device"
+          - type: custom:saj-local-discharge-schedule-card
+          - type: heading
+            heading: "Not a SAJ Local system: device is the Sun device"
+          - type: custom:saj-local-discharge-schedule-card
+            device: 1491264f4dba2ee1eca64179e7c5dfb0
+      - type: grid
+        cards:
+          - type: heading
+            heading: "saj-local-ev-charger-schedule-card"
+          - type: heading
+            heading: "No device"
+          - type: custom:saj-local-ev-charger-schedule-card
+          - type: heading
+            heading: "Not a SAJ Local system: device is the Sun device"
+          - type: custom:saj-local-ev-charger-schedule-card
             device: 1491264f4dba2ee1eca64179e7c5dfb0
