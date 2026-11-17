@@ -38,7 +38,7 @@ Los elementos encuentran las entidades de un sistema mediante el registro de ent
 - **Un sistema que no responde.** Una tarjeta lo indica y atenúa los valores.
 - **Pulsa un valor.** Al pulsar un valor se abren los detalles de la entidad en Home Assistant.
 - **Controles bloqueados.** Mientras [Permitir control](../changing-settings.md#permitir-control) está desactivado para el sistema, todos los controles están deshabilitados y un candado enlaza con los ajustes de la integración. Activar Permitir control también habilita las entidades que necesitan las tarjetas, consulta [el conjunto de control](../changing-settings.md#el-conjunto-de-control).
-- **Un cambio por decisión.** Un control deslizante cambia el inversor cuando lo sueltas. Un campo numérico cambia el inversor al pulsar Intro o al salir del campo. Una lista, un interruptor o un campo de hora cambia el inversor al cambiar. El control muestra entonces el valor que tiene el inversor, y un rechazo aparece bajo el control con las palabras de la integración.
+- **Un cambio por decisión.** Un control deslizante cambia el inversor cuando lo sueltas. Un campo numérico o un campo de hora cambia el inversor al pulsar Intro o al salir del campo. Una lista o un interruptor cambia el inversor al cambiar. El control muestra entonces el valor que tiene el inversor, y un rechazo aparece bajo el control con las palabras de la integración.
 
 ## Tema e idioma
 

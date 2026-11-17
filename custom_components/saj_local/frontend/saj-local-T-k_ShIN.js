@@ -3626,26 +3626,42 @@ var ve, ye, be, xe, Se, h, Ce, we, g, _, v, Te, Ee, De, y, Oe, ke, b, Ae, je, Me
 		static {
 			this.properties = {
 				...Q.properties,
-				value: { type: String }
+				value: { type: String },
+				draft: { state: !0 }
 			};
 		}
 		constructor() {
-			super(), this.value = "";
+			super(), this.onChange = (e) => {
+				this.draft = e.target.value;
+			}, this.onKeyDown = (e) => {
+				e.key === "Enter" && this.finish();
+			}, this.onBlur = () => {
+				this.finish();
+			}, this.value = "", this.draft = null;
+		}
+		disconnectedCallback() {
+			super.disconnectedCallback(), this.finish();
 		}
 		get shownText() {
 			return this.value.slice(0, Gy);
+		}
+		willUpdate(e) {
+			this.disabled && this.draft !== null && (this.draft = null), super.willUpdate(e);
 		}
 		render() {
 			return this.renderFrame(x`<input
                 type="time"
                 aria-label=${this.label}
-                .value=${this.shownText}
+                .value=${this.draft ?? this.shownText}
                 ?disabled=${this.inactive}
-                @change=${(e) => {
-				let t = e.target, n = t.value;
-				t.value = this.shownText, n !== "" && this.commit(n);
-			}}
+                @change=${this.onChange}
+                @keydown=${this.onKeyDown}
+                @blur=${this.onBlur}
             />`);
+		}
+		finish() {
+			let e = this.draft;
+			this.draft = null, e !== null && e !== "" && e !== this.shownText && this.commit(e);
 		}
 	}, customElements.define("saj-time-control", Ky);
 })), Jy, Yy, Xy, Zy = t((() => {
@@ -4149,7 +4165,7 @@ var ve, ye, be, xe, Se, h, Ce, we, g, _, v, Te, Ee, De, y, Oe, ke, b, Ae, je, Me
 			}, this.value = 0, this.draft = null;
 		}
 		disconnectedCallback() {
-			super.disconnectedCallback(), this.delayedCommit.cancel();
+			super.disconnectedCallback(), this.delayedCommit.flush();
 		}
 		render() {
 			let { hass: e } = this;

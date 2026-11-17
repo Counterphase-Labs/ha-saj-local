@@ -38,7 +38,7 @@ Elementen hittar ett systems entiteter via entitetsregistret, och inte via entit
 - **Ett system som inte svarar.** Ett kort säger det och tonar ned värdena.
 - **Tryck på ett värde.** Ett tryck på ett värde öppnar entitetens detaljer i Home Assistant.
 - **Låsta styrningar.** Medan [Tillåt styrning](../changing-settings.md#tillåt-styrning) är av för systemet är varje styrning inaktiverad och ett lås länkar till integrationens inställningar. Att slå på Tillåt styrning aktiverar också de entiteter som korten behöver, se [styrningsuppsättningen](../changing-settings.md#styrningsuppsättningen).
-- **En ändring per beslut.** Ett reglage ändrar växelriktaren när du släpper reglaget. Ett nummerfält ändrar växelriktaren vid Enter eller när du lämnar fältet. En lista, en brytare eller ett tidsfält ändrar växelriktaren vid ändring. Styrningen visar sedan det värde som växelriktaren håller, och en nekad ändring visas under styrningen med integrationens ord.
+- **En ändring per beslut.** Ett reglage ändrar växelriktaren när du släpper reglaget. Ett nummerfält eller ett tidsfält ändrar växelriktaren vid Enter eller när du lämnar fältet. En lista eller en brytare ändrar växelriktaren vid ändring. Styrningen visar sedan det värde som växelriktaren håller, och en nekad ändring visas under styrningen med integrationens ord.
 
 ## Tema och språk
 

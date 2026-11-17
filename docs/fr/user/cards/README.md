@@ -38,7 +38,7 @@ Les éléments trouvent les entités d'un système par le registre des entités,
 - **Un système qui ne répond pas.** Une carte le dit et atténue les valeurs.
 - **Appuyer sur une valeur.** Appuyer sur une valeur ouvre les détails de l'entité dans Home Assistant.
 - **Commandes verrouillées.** Tant qu'[Autoriser le contrôle](../changing-settings.md#autoriser-le-contrôle) est désactivé pour le système, chaque commande est désactivée et un cadenas renvoie vers les paramètres de l'intégration. Activer Autoriser le contrôle active aussi les entités dont les cartes ont besoin, voir [l'ensemble de contrôle](../changing-settings.md#lensemble-de-contrôle).
-- **Un changement par décision.** Un curseur modifie l'onduleur quand vous relâchez le curseur. Un champ numérique modifie l'onduleur à la touche Entrée ou quand vous quittez le champ. Une liste, un interrupteur ou un champ d'heure modifie l'onduleur au changement. La commande affiche ensuite la valeur que l'onduleur détient, et un refus apparaît sous la commande dans les mots de l'intégration.
+- **Un changement par décision.** Un curseur modifie l'onduleur quand vous relâchez le curseur. Un champ numérique ou un champ d'heure modifie l'onduleur à la touche Entrée ou quand vous quittez le champ. Une liste ou un interrupteur modifie l'onduleur au changement. La commande affiche ensuite la valeur que l'onduleur détient, et un refus apparaît sous la commande dans les mots de l'intégration.
 
 ## Thème et langue
 

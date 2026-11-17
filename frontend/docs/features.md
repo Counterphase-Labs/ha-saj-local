@@ -78,7 +78,7 @@ Files: [controls-card.ts](../src/cards/controls-card.ts), [entity-controls.ts](.
 - Mode holds the application mode and the time-of-use settings. Battery holds the backup reserve and the charge and discharge limits. Grid holds the export limit settings and the grid power limits. EV charger holds the charger's switch, mode and charge power. Device holds the buzzer, the LED mode and clock synchronisation.
 - Power control shows each power control function the system has, with the function's switch, power target and a hint on what a positive and a negative power do.
 - Each setting uses the control that fits it: a slider or number field, a list, a switch, a time field or a button.
-- A control changes the inverter once per decision: a slider when released, a number field on Enter or on leaving the field, and a list, switch or time field on change. The control then shows the value the inverter holds.
+- A control changes the inverter once per decision: a slider when released, a number field or time field on Enter or on leaving the field, and a list or switch on change. The control then shows the value the inverter holds.
 - A refused change is shown under the control in the integration's own words.
 - While control is not allowed for the system, every control is disabled and a lock above the controls links to the integration's settings, where Allow control is switched on.
 - The controls card has no restart button, so a tap on a dashboard cannot restart the inverter.
@@ -109,7 +109,7 @@ Files: [weekdays-feature.ts](../src/features/weekdays-feature.ts), [weekday-butt
 
 - The weekdays feature is offered only for a tile card whose entity is a slot's days entity.
 - Seven named day buttons start on your first day of the week, taken from Home Assistant's settings or your language.
-- The change is sent 1.5 seconds after the last press, so several days can be picked in one change.
+- The change is sent 1.5 seconds after the last press, so several days can be picked in one change. A pending change is also sent when the buttons close.
 - The buttons are disabled while control is not allowed for the system.
 
 ## Status badge

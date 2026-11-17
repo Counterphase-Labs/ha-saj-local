@@ -38,7 +38,7 @@ Die Elemente finden die Entitäten eines Systems über die Entitätsregistrierun
 - **Ein System, das nicht antwortet.** Eine Karte sagt das und blendet die Werte ab.
 - **Tippe auf einen Wert.** Das Tippen auf einen Wert öffnet die Details der Entität in Home Assistant.
 - **Gesperrte Bedienelemente.** Solange [Steuerung zulassen](../changing-settings.md#steuerung-zulassen) für das System aus ist, ist jedes Bedienelement deaktiviert, und ein Schloss verweist auf die Einstellungen der Integration. Das Einschalten von Steuerung zulassen aktiviert auch die Entitäten, die die Karten brauchen, siehe [den Steuerungssatz](../changing-settings.md#der-steuerungssatz).
-- **Eine Änderung pro Entscheidung.** Ein Schieberegler ändert den Wechselrichter, wenn du den Schieberegler loslässt. Ein Zahlenfeld ändert den Wechselrichter mit Enter oder wenn du das Feld verlässt. Eine Liste, ein Schalter oder ein Zeitfeld ändert den Wechselrichter bei der Änderung. Das Bedienelement zeigt dann den Wert, den der Wechselrichter hält, und eine Ablehnung erscheint unter dem Bedienelement in den Worten der Integration.
+- **Eine Änderung pro Entscheidung.** Ein Schieberegler ändert den Wechselrichter, wenn du den Schieberegler loslässt. Ein Zahlenfeld oder ein Zeitfeld ändert den Wechselrichter mit Enter oder wenn du das Feld verlässt. Eine Liste oder ein Schalter ändert den Wechselrichter bei der Änderung. Das Bedienelement zeigt dann den Wert, den der Wechselrichter hält, und eine Ablehnung erscheint unter dem Bedienelement in den Worten der Integration.
 
 ## Design und Sprache
 

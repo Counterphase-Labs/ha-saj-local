@@ -38,7 +38,7 @@ De elementen vinden de entiteiten van een systeem via het entiteitenregister, en
 - **Een systeem dat niet antwoordt.** Een kaart zegt dat en dimt de waarden.
 - **Tik op een waarde.** Tikken op een waarde opent de details van de entiteit in Home Assistant.
 - **Vergrendelde bediening.** Zolang [Bediening toestaan](../changing-settings.md#bediening-toestaan) uit staat voor het systeem, is elke bediening uitgeschakeld en verwijst een slot naar de instellingen van de integratie. Bediening toestaan inschakelen schakelt ook de entiteiten in die de kaarten nodig hebben, zie [de bedieningsset](../changing-settings.md#de-bedieningsset).
-- **Eén wijziging per beslissing.** Een schuifregelaar wijzigt de omvormer wanneer u de schuifregelaar loslaat. Een getalveld wijzigt de omvormer bij Enter of wanneer u het veld verlaat. Een lijst, een schakelaar of een tijdveld wijzigt de omvormer bij de wijziging. De bediening toont daarna de waarde die de omvormer bevat, en een weigering verschijnt onder de bediening in de woorden van de integratie.
+- **Eén wijziging per beslissing.** Een schuifregelaar wijzigt de omvormer wanneer u de schuifregelaar loslaat. Een getalveld of een tijdveld wijzigt de omvormer bij Enter of wanneer u het veld verlaat. Een lijst of een schakelaar wijzigt de omvormer bij de wijziging. De bediening toont daarna de waarde die de omvormer bevat, en een weigering verschijnt onder de bediening in de woorden van de integratie.
 
 ## Thema en taal
 

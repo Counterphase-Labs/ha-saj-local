@@ -38,7 +38,7 @@ Gli elementi trovano le entità di un sistema tramite il registro delle entità,
 - **Un sistema che non risponde.** Una scheda lo dice e attenua i valori.
 - **Tocca un valore.** Toccare un valore apre i dettagli dell'entità in Home Assistant.
 - **Controlli bloccati.** Finché [Consenti controllo](../changing-settings.md#consentire-il-controllo) è disattivato per il sistema, ogni controllo è disabilitato e un lucchetto rimanda alle impostazioni dell'integrazione. Attivare Consenti controllo abilita anche le entità di cui le schede hanno bisogno, vedi [l'insieme dei controlli](../changing-settings.md#linsieme-dei-controlli).
-- **Una modifica per decisione.** Un cursore modifica l'inverter quando lo rilasci. Un campo numerico modifica l'inverter con Invio o quando lasci il campo. Un elenco, un interruttore o un campo dell'ora modifica l'inverter al cambiamento. Il controllo mostra poi il valore che l'inverter contiene, e un rifiuto compare sotto il controllo con le parole dell'integrazione.
+- **Una modifica per decisione.** Un cursore modifica l'inverter quando lo rilasci. Un campo numerico o un campo dell'ora modifica l'inverter con Invio o quando lasci il campo. Un elenco o un interruttore modifica l'inverter al cambiamento. Il controllo mostra poi il valore che l'inverter contiene, e un rifiuto compare sotto il controllo con le parole dell'integrazione.
 
 ## Tema e lingua
 

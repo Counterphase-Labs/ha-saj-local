@@ -88,7 +88,7 @@ export class SajWeekdayButtons extends ControlElement<number> {
 
     override disconnectedCallback(): void {
         super.disconnectedCallback();
-        this.delayedCommit.cancel();
+        this.delayedCommit.flush();
     }
 
     protected override render(): TemplateResult {

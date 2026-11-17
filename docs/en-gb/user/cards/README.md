@@ -38,7 +38,7 @@ The elements find the entities of a system through the entity registry, and not 
 - **A system that does not answer.** A card says so and dims the values.
 - **Tap a value.** Tapping a value opens the details of the entity in Home Assistant.
 - **Locked controls.** While [Allow control](../changing-settings.md#allow-control) is off for the system, every control is disabled and a lock links to the settings of the integration. Switching Allow control on also enables the entities that the cards need, see [the control set](../changing-settings.md#the-control-set).
-- **One change per decision.** A slider changes the inverter when you release the slider. A number field changes the inverter on Enter or when you leave the field. A list, a switch or a time field changes the inverter on change. The control then shows the value that the inverter holds, and a refusal appears under the control in the words of the integration.
+- **One change per decision.** A slider changes the inverter when you release the slider. A number field or a time field changes the inverter on Enter or when you leave the field. A list or a switch changes the inverter on change. The control then shows the value that the inverter holds, and a refusal appears under the control in the words of the integration.
 
 ## Theme and language
 

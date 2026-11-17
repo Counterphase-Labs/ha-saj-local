@@ -38,7 +38,7 @@ Elementy znajdują encje systemu przez rejestr encji, a nie po ID encji, więc e
 - **System, który nie odpowiada.** Karta mówi o tym i przyciemnia wartości.
 - **Dotknij wartości.** Dotknięcie wartości otwiera szczegóły encji w Home Assistancie.
 - **Zablokowane elementy sterowania.** Gdy [Zezwól na sterowanie](../changing-settings.md#zezwól-na-sterowanie) jest wyłączone dla systemu, każdy element sterowania jest wyłączony, a kłódka prowadzi do ustawień integracji. Włączenie Zezwól na sterowanie włącza też encje potrzebne kartom, zobacz [zestaw sterowania](../changing-settings.md#zestaw-sterowania).
-- **Jedna zmiana na decyzję.** Suwak zmienia falownik, gdy puścisz suwak. Pole liczbowe zmienia falownik po Enter lub po opuszczeniu pola. Lista, przełącznik lub pole czasu zmienia falownik przy zmianie. Element sterowania pokazuje wtedy wartość, którą przechowuje falownik, a odmowa pojawia się pod elementem słowami integracji.
+- **Jedna zmiana na decyzję.** Suwak zmienia falownik, gdy puścisz suwak. Pole liczbowe lub pole czasu zmienia falownik po Enter lub po opuszczeniu pola. Lista lub przełącznik zmienia falownik przy zmianie. Element sterowania pokazuje wtedy wartość, którą przechowuje falownik, a odmowa pojawia się pod elementem słowami integracji.
 
 ## Motyw i język
 

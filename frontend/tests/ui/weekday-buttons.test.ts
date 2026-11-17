@@ -185,14 +185,29 @@ describe("saj-weekday-buttons", () => {
         expect(delayedCommitOf().flush).not.toHaveBeenCalled();
     });
 
-    it("drops a pending decision when removed", async () => {
+    it("commits a pending decision once when removed", async () => {
+        const control = await mount<WeekdayButtons>("saj-weekday-buttons", {
+            hass: createFakeHass(),
+        });
+        buttonsOf(control)[MONDAY]?.click();
+        delayedCommitOf().flush.mockImplementation(() => {
+            delayedCommitOf().options.commit(1);
+        });
+
+        control.remove();
+
+        expect(delayedCommitOf().flush).toHaveBeenCalledTimes(1);
+        expect(commitsOf(control)).toEqual([1]);
+    });
+
+    it("commits nothing when removed with no pending decision", async () => {
         const control = await mount<WeekdayButtons>("saj-weekday-buttons", {
             hass: createFakeHass(),
         });
 
         control.remove();
 
-        expect(delayedCommitOf().cancel).toHaveBeenCalledTimes(1);
+        expect(commitsOf(control)).toEqual([]);
     });
 
     it("disables every button while busy", async () => {
